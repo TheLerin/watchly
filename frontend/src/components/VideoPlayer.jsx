@@ -164,14 +164,15 @@ const VideoPlayer = () => {
         const stateTime    = videoState.playedSeconds || 0;
         const internalTime = playerRef.current.getCurrentTime() || 0;
         const seekVer      = videoState.seekVersion ?? 0;
-        // BUG-05: use the ReactPlayer-specific ref
         const isForcedSeek = seekVer !== prevSeekVersionReactPlayerRef.current;
         prevSeekVersionReactPlayerRef.current = seekVer;
+        
+        // Prevent auto-correction if explicitly forced seek isn't happening and we are drastically out of sync 
+        // due to buffering loops. 
         if (isForcedSeek || Math.abs(internalTime - stateTime) > DRIFT_THRESHOLD) {
             playerRef.current.seekTo(stateTime, 'seconds');
         }
-    }, [videoState.playedSeconds, videoState.updatedAt, videoState.seekVersion,
-        isPlayerReady, isPrivileged, isGDriveProxy]);
+    }, [videoState.playedSeconds, videoState.seekVersion, isPlayerReady, isPrivileged, isGDriveProxy]);
 
     // ── 3. Drift correction – GDrive native video viewers ────────────────────
     useEffect(() => {
@@ -179,14 +180,16 @@ const VideoPlayer = () => {
         const stateTime   = videoState.playedSeconds || 0;
         const currentTime = nativeVideoRef.current.currentTime || 0;
         const seekVer     = videoState.seekVersion ?? 0;
-        // BUG-05: use the GDrive-specific ref
         const isForcedSeek = seekVer !== prevSeekVersionGDriveRef.current;
         prevSeekVersionGDriveRef.current = seekVer;
-        if (isForcedSeek || Math.abs(currentTime - stateTime) > DRIFT_THRESHOLD) {
+        
+        // If it's a forced seek (host clicked timeline), always seek.
+        // If it's just drift, ONLY correct if the video has actually buffered enough data to play (readyState >= 3).
+        // If readyState < 3, it's buffering. Seeking now will abort the download and cause frame-by-frame stuttering.
+        if (isForcedSeek || (nativeVideoRef.current.readyState >= 3 && Math.abs(currentTime - stateTime) > DRIFT_THRESHOLD)) {
             nativeVideoRef.current.currentTime = stateTime;
         }
-    }, [videoState.playedSeconds, videoState.updatedAt, videoState.seekVersion,
-        isGDriveProxy, isPrivileged]);
+    }, [videoState.playedSeconds, videoState.seekVersion, isGDriveProxy, isPrivileged]);
 
     // ── 4. GDrive play / pause control ────────────────────────────────────────
     useEffect(() => {
