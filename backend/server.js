@@ -153,29 +153,11 @@ app.get('/api/proxy/gdrive', async (req, res) => {
             if (ct.includes('text/html')) {
                 const html = await readBodyText(hop.data);
 
-                // Try 1: grab the form action URL directly (most reliable)
-                let m = html.match(/action="(https?:\/\/[^"]*download[^"]*)"/i)
-                      || html.match(/action="([^"]*\/download[^"]*)"/i);
-                if (m) {
-                    url = m[1].replace(/&amp;/g, '&');
-                    if (!url.startsWith('http')) url = 'https://drive.google.com' + url;
-                    console.log(`GDrive: form action → ${url.slice(0, 100)}`);
-                    continue;
-                }
-
-                // Try 2: extract confirm + uuid hidden fields
+                // Try 1: extract confirm + uuid hidden fields or URL params (most reliable now)
                 const cm = html.match(/[?&]confirm=([0-9A-Za-z_-]+)/)
                          || html.match(/name=["']confirm["'][^>]*value=["']([^"']+)["']/i);
                 const um = html.match(/name=["']uuid["'][^>]*value=["']([^"']+)["']/i)
                          || html.match(/[?&]uuid=([0-9A-Za-z_-]+)/);
-
-                // Try 3: look for any direct usercontent download link in the HTML
-                const lm = html.match(/href="(https:\/\/drive\.usercontent\.google\.com\/download[^"]+)"/i);
-                if (lm) {
-                    url = lm[1].replace(/&amp;/g, '&');
-                    console.log(`GDrive: usercontent link in HTML → ${url.slice(0, 100)}`);
-                    continue;
-                }
 
                 if (cm) {
                     const confirm = cm[1];
@@ -183,6 +165,24 @@ app.get('/api/proxy/gdrive', async (req, res) => {
                     url = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=${confirm}`;
                     if (uuid) url += `&uuid=${uuid}`;
                     console.log(`GDrive: confirm retry (confirm=${confirm}, uuid=${uuid || 'none'})`);
+                    continue;
+                }
+
+                // Try 2: look for any direct usercontent download link in the HTML
+                const lm = html.match(/href="(https:\/\/drive\.usercontent\.google\.com\/download[^"]+)"/i);
+                if (lm) {
+                    url = lm[1].replace(/&amp;/g, '&');
+                    console.log(`GDrive: usercontent link in HTML → ${url.slice(0, 100)}`);
+                    continue;
+                }
+
+                // Try 3: grab the form action URL directly (only if it has confirm params natively)
+                let m = html.match(/action="(https?:\/\/[^"]*download[^"]*confirm=[^"]*)"/i)
+                      || html.match(/action="([^"]*\/download[^"]*confirm=[^"]*)"/i);
+                if (m) {
+                    url = m[1].replace(/&amp;/g, '&');
+                    if (!url.startsWith('http')) url = 'https://drive.google.com' + url;
+                    console.log(`GDrive: form action fallback → ${url.slice(0, 100)}`);
                     continue;
                 }
 
