@@ -1,50 +1,136 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import ReactPlayer from 'react-player/lazy';
 import { useRoom } from '../context/RoomContext';
-import { Play, Link as LinkIcon, Lock, Upload, AlertCircle, Plus, ChevronDown, Mic, Subtitles as SubtitlesIcon } from 'lucide-react';
-import { getTorrentClient } from '../torrentClient';
+import { Play, Link as LinkIcon, Lock, AlertCircle, Plus, ChevronDown, Mic, Subtitles as SubtitlesIcon, FolderOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
-// How often the host reports playback position to the server (ms)
-const SYNC_INTERVAL_MS = 4000;
-// Maximum drift allowed before viewers auto-seek (seconds)
-const DRIFT_THRESHOLD = 3;
-// BitTorrent tracker - same server as backend (tracker is attached to main HTTP server)
-const _backendUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000')
-    .replace(/^http/, 'ws'); // http→ws, https→wss
-const LOCAL_TRACKER = _backendUrl;
+// How often the host reports playback position (ms)
+const SYNC_INTERVAL_MS = 2000;
+// Max drift before a viewer auto-corrects during normal playback
+const DRIFT_THRESHOLD = 2;
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+function rewriteGDriveUrl(url) {
+    if (!url || !url.includes('drive.google.com')) return url;
+    let fileId = null;
+    const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m1) fileId = m1[1];
+    if (!fileId) {
+        const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (m2) fileId = m2[1];
+    }
+    if (!fileId) return url;
+    return `${BACKEND_URL}/api/proxy/gdrive?id=${fileId}`;
+}
+
+// ── BUG-23: Sub-components defined OUTSIDE VideoPlayer so they never remount ──
+
+const SubtitleMenu = ({ activeSubtitle, setActiveSubtitle, subtitleTracks, showSubMenu, setShowSubMenu, setShowAudioMenu }) => (
+    <div className="relative">
+        <button onClick={() => { setShowSubMenu(p => !p); setShowAudioMenu(false); }}
+            className="flex items-center gap-1.5 px-3 py-1 text-xs text-purple-300 bg-purple-500/10 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-colors">
+            <SubtitlesIcon size={13} />
+            {activeSubtitle === -1 ? 'Subs Off' : (subtitleTracks.find(t => t.index === activeSubtitle)?.label || `Track ${activeSubtitle + 1}`)}
+            <ChevronDown size={11} />
+        </button>
+        <AnimatePresence>
+            {showSubMenu && (
+                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                    className="absolute top-full left-0 mt-1 bg-zinc-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40">
+                    <button onClick={() => { setActiveSubtitle(-1); setShowSubMenu(false); }}
+                        className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === -1 ? 'text-purple-400' : 'text-gray-300'}`}>Off</button>
+                    {subtitleTracks.map(t => (
+                        <button key={t.index} onClick={() => { setActiveSubtitle(t.index); setShowSubMenu(false); }}
+                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === t.index ? 'text-purple-400' : 'text-gray-300'}`}>
+                            {t.label}{t.language ? ` (${t.language})` : ''}
+                        </button>
+                    ))}
+                </motion.div>
+            )}
+        </AnimatePresence>
+    </div>
+);
+
+const AudioMenu = ({ activeAudio, setActiveAudio, audioTracks, showAudioMenu, setShowAudioMenu, setShowSubMenu }) => (
+    <div className="relative">
+        <button onClick={() => { setShowAudioMenu(p => !p); setShowSubMenu(false); }}
+            className="flex items-center gap-1.5 px-3 py-1 text-xs text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors">
+            <Mic size={13} />
+            {audioTracks.find(t => t.index === activeAudio)?.label || `Audio ${activeAudio + 1}`}
+            <ChevronDown size={11} />
+        </button>
+        <AnimatePresence>
+            {showAudioMenu && (
+                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                    className="absolute top-full left-0 mt-1 bg-zinc-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40">
+                    {audioTracks.map(t => (
+                        <button key={t.index} onClick={() => { setActiveAudio(t.index); setShowAudioMenu(false); }}
+                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeAudio === t.index ? 'text-blue-400' : 'text-gray-300'}`}>
+                            {t.label}{t.language ? ` (${t.language})` : ''}
+                        </button>
+                    ))}
+                </motion.div>
+            )}
+        </AnimatePresence>
+    </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const VideoPlayer = () => {
-    const { videoState, currentUser, loadVideo, addToQueue, playVideo, pauseVideo, syncProgress } = useRoom();
+    const {
+        videoState, currentUser,
+        loadVideo, addToQueue,
+        playVideo, pauseVideo, syncProgress, seekVideo
+    } = useRoom();
 
-    // Refs
-    const playerRef = useRef(null);
-    const p2pVideoRef = useRef(null); // Used only for P2P viewers (renderTo target)
-    const fileInputRef = useRef(null);
+    // ── Refs ─────────────────────────────────────────────────────────────────
+    const playerRef        = useRef(null);   // ReactPlayer ref
+    const nativeVideoRef   = useRef(null);   // <video> ref for GDrive
     const subtitleInputRef = useRef(null);
-    const syncIntervalRef = useRef(null);
+    const syncIntervalRef  = useRef(null);
 
-    // State
+    // Seek guard: block play/pause emission while user is scrubbing
+    const isSeekingRef     = useRef(false);
+    const seekEndTimerRef  = useRef(null);
+    // Debounce play/pause so scrubbing doesn't fire rapid events
+    const playDebounceRef  = useRef(null);
+    const pauseDebounceRef = useRef(null);
+    // Track last synced position to avoid spamming syncProgress
+    const lastSyncedPosRef = useRef(0);
+
+    // BUG-05: Two separate seek-version trackers — one per player type (ReactPlayer vs GDrive)
+    const prevSeekVersionReactPlayerRef = useRef(0);
+    const prevSeekVersionGDriveRef      = useRef(0);
+
+    // BUG-04: Instead of capturing videoState.playedSeconds in handleReady's closure,
+    // keep a ref that is always current — makes handleReady stable (no dep array churn)
+    const videoStateRef = useRef(videoState);
+    useEffect(() => { videoStateRef.current = videoState; }, [videoState]);
+
+    // ── State ─────────────────────────────────────────────────────────────────
     const [inputUrl, setInputUrl] = useState('');
     const [isPlayerReady, setIsPlayerReady] = useState(false);
-    const [localStreamUrl, setLocalStreamUrl] = useState('');     // Object URL for host uploaded file
-    const p2pFileRef = useRef(null);       // WebTorrent file ref for Viewer (NOT in state — state strips prototype!)
-    const [p2pVideoFile, setP2pVideoFile] = useState(null);       // Boolean flag — true when P2P file is ready
-    const [torrentProgress, setTorrentProgress] = useState(0);
     const [playerError, setPlayerError] = useState(null);
+    const [subtitleTracks, setSubtitleTracks] = useState([]);
+    const [audioTracks, setAudioTracks]       = useState([]);
+    const [activeSubtitle, setActiveSubtitle] = useState(-1);
+    const [activeAudio, setActiveAudio]       = useState(0);
+    const [showSubMenu, setShowSubMenu]       = useState(false);
+    const [showAudioMenu, setShowAudioMenu]   = useState(false);
 
-    // Tracks
-    const [subtitleTracks, setSubtitleTracks] = useState([]); // [{label, kind, srcLang, src}]
-    const [audioTracks, setAudioTracks] = useState([]);       // [{label, index}]
-    const [activeSubtitle, setActiveSubtitle] = useState(-1); // -1 = off
-    const [activeAudio, setActiveAudio] = useState(0);
-    const [showSubMenu, setShowSubMenu] = useState(false);
-    const [showAudioMenu, setShowAudioMenu] = useState(false);
-
+    // ── Derived values ────────────────────────────────────────────────────────
     const isPrivileged = currentUser?.role === 'Host' || currentUser?.role === 'Moderator';
+    const rawUrl       = videoState.url || null;
+    const playerUrl    = rewriteGDriveUrl(rawUrl);
+    const isGDriveProxy = !!(playerUrl && playerUrl.includes('/api/proxy/gdrive'));
+    const hasContent   = !!(videoState.url || videoState.magnetURI);
 
-    // ─── 1. Reset state on URL change ────────────────────────────────────────
+    // Detect YouTube URLs to conditionally apply controls
+    const isYouTube = !!(playerUrl && (playerUrl.includes('youtube.com') || playerUrl.includes('youtu.be')));
+
+    // ── 1. Reset on URL change ────────────────────────────────────────────────
     useEffect(() => {
         setIsPlayerReady(false);
         setPlayerError(null);
@@ -52,334 +138,176 @@ const VideoPlayer = () => {
         setAudioTracks([]);
         setActiveSubtitle(-1);
         setActiveAudio(0);
-
-        // If we switched off a local file/P2P
-        if (videoState.url && !videoState.magnetURI) {
-            setLocalStreamUrl('');
-            setP2pVideoFile(null);
-            setTorrentProgress(0);
-        }
-        if (!videoState.url && !videoState.magnetURI) {
-            setLocalStreamUrl('');
-            setP2pVideoFile(null);
-            setTorrentProgress(0);
-        }
+        lastSyncedPosRef.current = 0;
+        // BUG-05: Reset both seek-version refs when URL changes
+        prevSeekVersionReactPlayerRef.current = videoState.seekVersion ?? 0;
+        prevSeekVersionGDriveRef.current      = videoState.seekVersion ?? 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [videoState.url, videoState.magnetURI]);
 
-    // ─── 2. Viewer P2P: Stream torrent instantly via renderTo ─────────────────
+    // ISSUE-30: Revoke uploaded subtitle Object URLs when tracks change or unmount
+    // to prevent memory leaks on long watch sessions.
     useEffect(() => {
-        if (!videoState.magnetURI || isPrivileged) return;
-        setPlayerError(null);
-        p2pFileRef.current = null;
-        setP2pVideoFile(false); // reset flag
-
-        const client = getTorrentClient();
-        let addedByUs = false;
-
-        const onReady = (t) => {
-            if (typeof t.on === 'function') {
-                t.on('download', () => setTorrentProgress(t.progress));
-            }
-            setTorrentProgress(t.progress);
-
-            if (t.files?.length > 0) {
-                console.log('P2P file detected:', t.files[0].name);
-                // Store the real object in a ref, NOT in state (state serialization strips methods)
-                p2pFileRef.current = t.files[0];
-                setP2pVideoFile(true); // trigger re-render so the useEffect below can run renderTo
-            }
-        };
-
-        const existing = client.get(videoState.magnetURI);
-        if (!existing) {
-            addedByUs = true;
-            client.add(videoState.magnetURI, { announce: [LOCAL_TRACKER] }, onReady);
-        } else if (existing.ready) {
-            onReady(existing);
-        } else if (typeof existing.on === 'function') {
-            existing.on('ready', () => onReady(existing));
-        } else {
-            // Stale stub — destroy and re-add
-            try { client.remove(videoState.magnetURI); } catch (_) { }
-            addedByUs = true;
-            client.add(videoState.magnetURI, { announce: [LOCAL_TRACKER] }, onReady);
-        }
-
         return () => {
-            // Cleanup: Remove only if WE added it
-            if (addedByUs) {
-                try { client.remove(videoState.magnetURI); } catch (_) { }
-            }
-        };
-    }, [videoState.magnetURI, isPrivileged]);
-
-    // Stream P2P file using WebTorrent v2 blob() API (renderTo was removed in v2)
-    useEffect(() => {
-        if (!p2pVideoFile || !p2pFileRef.current || !p2pVideoRef.current || isPlayerReady) return;
-
-        const file = p2pFileRef.current;
-        let blobUrl = null;
-        let cancelled = false;
-
-        // WebTorrent v2: use file.blob() which returns a Promise<Blob>
-        if (typeof file.blob === 'function') {
-            console.log('P2P: Using WebTorrent v2 blob() API for streaming...');
-            file.blob()
-                .then(blob => {
-                    if (cancelled) return;
-                    blobUrl = URL.createObjectURL(blob);
-                    if (p2pVideoRef.current) {
-                        p2pVideoRef.current.src = blobUrl;
-                        p2pVideoRef.current.autoplay = videoState.isPlaying;
-                        p2pVideoRef.current.muted = false;
-                        p2pVideoRef.current.load();
-                        console.log('P2P: blob URL set, src =', blobUrl);
-                        setIsPlayerReady(true);
-                    }
-                })
-                .catch(err => {
-                    if (cancelled) return;
-                    console.error('P2P blob() error:', err);
-                    setPlayerError('Failed to load P2P stream.');
-                });
-        } else if (typeof file.renderTo === 'function') {
-            // Fallback for potential v1 builds
-            const container = p2pVideoRef.current;
-            container.innerHTML = '';
-            file.renderTo(container, { autoplay: videoState.isPlaying, muted: false }, (err) => {
-                if (cancelled) return;
-                if (err) { setPlayerError('Failed to render P2P stream.'); }
-                else { setIsPlayerReady(true); }
+            subtitleTracks.forEach(t => {
+                if (t.src && !t.isNative) {
+                    try { URL.revokeObjectURL(t.src); } catch (_) { /* ignore */ }
+                }
             });
-        } else {
-            console.error('WebTorrent File has neither blob() nor renderTo(). File:', file);
-            setPlayerError('Unsupported WebTorrent version — cannot stream P2P.');
-        }
-
-        return () => {
-            cancelled = true;
-            // NOTE: Do NOT revoke blobUrl here — the video element still needs it.
-            // It will be garbage-collected when the component fully unmounts via the cleanup below.
         };
-        // IMPORTANT: Do NOT include videoState.isPlaying in this dep array!
-        // If it's included, every play/pause toggle would revoke and recreate the
-        // blob URL, causing ERR_FILE_NOT_FOUND after every single pause/play.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [p2pVideoFile, isPlayerReady]);
+    }, [subtitleTracks]);
 
-    // Sync P2P native video Play/Pause — only once the element is ready with a valid src
+
+    // ── 2. Drift correction – ReactPlayer viewers ─────────────────────────────
     useEffect(() => {
-        if (!p2pVideoFile || !p2pVideoRef.current || !isPlayerReady) return;
+        if (isPrivileged || !isPlayerReady || !playerRef.current || isGDriveProxy) return;
+        const stateTime    = videoState.playedSeconds || 0;
+        const internalTime = playerRef.current.getCurrentTime() || 0;
+        const seekVer      = videoState.seekVersion ?? 0;
+        // BUG-05: use the ReactPlayer-specific ref
+        const isForcedSeek = seekVer !== prevSeekVersionReactPlayerRef.current;
+        prevSeekVersionReactPlayerRef.current = seekVer;
+        if (isForcedSeek || Math.abs(internalTime - stateTime) > DRIFT_THRESHOLD) {
+            playerRef.current.seekTo(stateTime, 'seconds');
+        }
+    }, [videoState.playedSeconds, videoState.updatedAt, videoState.seekVersion,
+        isPlayerReady, isPrivileged, isGDriveProxy]);
 
-        const video = p2pVideoRef.current;
+    // ── 3. Drift correction – GDrive native video viewers ────────────────────
+    useEffect(() => {
+        if (!isGDriveProxy || isPrivileged || !nativeVideoRef.current) return;
+        const stateTime   = videoState.playedSeconds || 0;
+        const currentTime = nativeVideoRef.current.currentTime || 0;
+        const seekVer     = videoState.seekVersion ?? 0;
+        // BUG-05: use the GDrive-specific ref
+        const isForcedSeek = seekVer !== prevSeekVersionGDriveRef.current;
+        prevSeekVersionGDriveRef.current = seekVer;
+        if (isForcedSeek || Math.abs(currentTime - stateTime) > DRIFT_THRESHOLD) {
+            nativeVideoRef.current.currentTime = stateTime;
+        }
+    }, [videoState.playedSeconds, videoState.updatedAt, videoState.seekVersion,
+        isGDriveProxy, isPrivileged]);
+
+    // ── 4. GDrive play / pause control ────────────────────────────────────────
+    useEffect(() => {
+        if (!isGDriveProxy || !nativeVideoRef.current || !isPlayerReady) return;
         if (videoState.isPlaying) {
-            // Guard against AbortError: check readyState before calling play()
-            if (video.readyState >= 2) { // HAVE_CURRENT_DATA or better
-                video.play().catch(e => console.warn('P2P play blocked:', e));
-            }
+            nativeVideoRef.current.play().catch(() => {});
         } else {
-            video.pause();
+            nativeVideoRef.current.pause();
         }
-    }, [videoState.isPlaying, p2pVideoFile, isPlayerReady]);
+    }, [videoState.isPlaying, isGDriveProxy, isPlayerReady]);
 
-    // ─── 3. Drift correction (sync progress to viewers) ───────────────────────
-    useEffect(() => {
-        if (!isPlayerReady || isPrivileged) return;
-        const stateTime = videoState.playedSeconds || 0;
-
-        let internalTime = 0;
-        if (p2pFileRef.current && p2pVideoRef.current) {
-            internalTime = p2pVideoRef.current.currentTime || 0;
-        } else if (playerRef.current) {
-            internalTime = playerRef.current.getCurrentTime() || 0;
-        } else {
-            return;
-        }
-
-        if (Math.abs(internalTime - stateTime) > DRIFT_THRESHOLD) {
-            if (p2pFileRef.current && p2pVideoRef.current) {
-                p2pVideoRef.current.currentTime = stateTime;
-            } else if (playerRef.current) {
-                playerRef.current.seekTo(stateTime, 'seconds');
-            }
-        }
-    }, [videoState.playedSeconds, videoState.updatedAt, isPlayerReady, isPrivileged, p2pVideoFile]);
-
-    // ─── 4. ReactPlayer Events (Host & URL Viewers) ───────────────────────────
+    // ── 5. ReactPlayer onReady ────────────────────────────────────────────────
+    // BUG-04: Stable callback — reads from videoStateRef instead of closing over videoState
     const handleReady = useCallback(() => {
         setIsPlayerReady(true);
         setPlayerError(null);
-
-        // Late-join seeker
-        const stateTime = videoState.playedSeconds || 0;
+        const stateTime = videoStateRef.current.playedSeconds || 0;
         if (stateTime > 2 && playerRef.current) {
             playerRef.current.seekTo(stateTime, 'seconds');
         }
-
-        // Native track detection
+        // Detect embedded subtitle / audio tracks (file player only)
         const internal = playerRef.current?.getInternalPlayer?.();
         if (internal instanceof HTMLVideoElement) {
             const tTracks = [...(internal.textTracks || [])].map((t, i) => ({
                 label: t.label || t.language || `Track ${i + 1}`,
-                language: t.language,
-                kind: t.kind,
-                index: i,
-                isNative: true // Flag to distinguish from manually uploaded
+                language: t.language, kind: t.kind, index: i, isNative: true,
             }));
-
             const aTracks = [...(internal.audioTracks || [])].map((t, i) => ({
                 label: t.label || t.language || `Audio ${i + 1}`,
-                language: t.language,
-                index: i,
+                language: t.language, index: i,
             }));
-
-            // Only overwrite if we haven't manually uploaded subtitles
             setSubtitleTracks(prev => prev.some(t => !t.isNative) ? prev : tTracks);
             if (aTracks.length > 0) setAudioTracks(aTracks);
         }
-    }, [videoState.playedSeconds]);
+    }, []); // BUG-04: no deps — reads state via ref
 
-    // Host reports progress
+    // ── 6. Host progress sync interval (ReactPlayer only) ────────────────────
     useEffect(() => {
-        if (!isPrivileged) return;
-        if (!playerRef.current && !p2pVideoRef.current) return;
-
+        if (!isPrivileged || isGDriveProxy) return;
         syncIntervalRef.current = setInterval(() => {
-            const t = p2pFileRef.current
-                ? (p2pVideoRef.current?.currentTime || 0)
-                : (playerRef.current?.getCurrentTime?.() || 0);
-
+            if (isSeekingRef.current || !playerRef.current) return;
+            const t = playerRef.current.getCurrentTime?.() || 0;
             if (t > 0) syncProgress(t);
         }, SYNC_INTERVAL_MS);
-
         return () => clearInterval(syncIntervalRef.current);
-    }, [isPrivileged, syncProgress, p2pVideoFile]);
+    }, [isPrivileged, syncProgress, isGDriveProxy]);
 
-    // Apply active tracks
+    // ── 7. Apply subtitle / audio tracks ─────────────────────────────────────
     useEffect(() => {
-        const internal = p2pFileRef.current ? p2pVideoRef.current : playerRef.current?.getInternalPlayer?.();
+        const internal = playerRef.current?.getInternalPlayer?.();
         if (!(internal instanceof HTMLVideoElement) || !internal.textTracks) return;
-        [...internal.textTracks].forEach((track, i) => {
-            track.mode = i === activeSubtitle ? 'showing' : 'hidden';
-        });
-    }, [activeSubtitle, p2pVideoFile]);
+        [...internal.textTracks].forEach((t, i) => { t.mode = i === activeSubtitle ? 'showing' : 'hidden'; });
+    }, [activeSubtitle]);
 
     useEffect(() => {
-        const internal = p2pFileRef.current ? p2pVideoRef.current : playerRef.current?.getInternalPlayer?.();
+        const internal = playerRef.current?.getInternalPlayer?.();
         if (!(internal instanceof HTMLVideoElement) || !internal.audioTracks) return;
-        [...internal.audioTracks].forEach((track, i) => {
-            track.enabled = i === activeAudio;
-        });
-    }, [activeAudio, p2pVideoFile]);
+        [...internal.audioTracks].forEach((t, i) => { t.enabled = i === activeAudio; });
+    }, [activeAudio]);
 
-    // ─── 5. Uploads & Controls ────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    const debouncePlay = () => {
+        clearTimeout(pauseDebounceRef.current);
+        clearTimeout(playDebounceRef.current);
+        playDebounceRef.current = setTimeout(() => {
+            if (!isSeekingRef.current) playVideo();
+        }, 200);
+    };
+
+    const debouncePause = (getTime) => {
+        clearTimeout(playDebounceRef.current);
+        clearTimeout(pauseDebounceRef.current);
+        pauseDebounceRef.current = setTimeout(() => {
+            if (!isSeekingRef.current) pauseVideo(getTime());
+        }, 200);
+    };
+
+    const startSeekGuard = () => {
+        clearTimeout(playDebounceRef.current);
+        clearTimeout(pauseDebounceRef.current);
+        isSeekingRef.current = true;
+    };
+
+    const endSeekGuard = (getTime) => {
+        clearTimeout(seekEndTimerRef.current);
+        seekEndTimerRef.current = setTimeout(() => {
+            isSeekingRef.current = false;
+            const t = getTime();
+            lastSyncedPosRef.current = t;
+            seekVideo(t);
+        }, 300);
+    };
+
     const handleLoad = (e) => {
         e.preventDefault();
         if (!isPrivileged || !inputUrl.trim()) return;
-        setLocalStreamUrl('');
         setPlayerError(null);
         loadVideo(inputUrl.trim());
         setInputUrl('');
-    };
-
-    const handleFileUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file || !isPrivileged) return;
-        e.target.value = '';
-        setPlayerError(null);
-
-        const blobUrl = URL.createObjectURL(file);
-        setLocalStreamUrl(blobUrl);
-        setTorrentProgress(1);
-
-        toast.loading('Seeding video for viewers...', { id: 'seed-toast' });
-        const client = getTorrentClient();
-        client.seed(file, { announce: [LOCAL_TRACKER] }, (torrent) => {
-            toast.success('Viewers can now stream!', { id: 'seed-toast' });
-            console.log('Seeding via local tracker. Magnet:', torrent.magnetURI);
-            loadVideo('', torrent.magnetURI);
-        });
     };
 
     const handleSubtitleUpload = (e) => {
         const files = [...e.target.files];
         if (!files.length) return;
         e.target.value = '';
-
+        // BUG-24: Use Date.now() + index for stable unique index to avoid collisions
+        const baseIndex = Date.now();
         const tracks = files.map((file, i) => ({
-            kind: 'subtitles',
-            src: URL.createObjectURL(file),
-            srcLang: `track${i}`,
-            label: file.name.replace(/\.[^.]+$/, ''),
-            default: i === 0,
-            isNative: false,
-            index: subtitleTracks.length + i // append to existing
+            kind: 'subtitles', src: URL.createObjectURL(file),
+            srcLang: `track${i}`, label: file.name.replace(/\.[^.]+$/, ''),
+            default: i === 0, isNative: false, index: baseIndex + i,
         }));
-
         setSubtitleTracks(prev => [...prev.filter(t => t.isNative), ...tracks]);
         setActiveSubtitle(tracks[0].index);
         toast.success(`Loaded ${files.length} subtitle track(s)`, { icon: '🗒️' });
     };
 
-    // Render helpers
-    const playerUrl = localStreamUrl || videoState.url || null;
-    const hasContent = !!(videoState.url || videoState.magnetURI || localStreamUrl);
-    const isP2PViewer = videoState.magnetURI && !isPrivileged && !localStreamUrl;
-
-    const SubtitleMenu = () => (
-        <div className="relative">
-            <button onClick={() => { setShowSubMenu(p => !p); setShowAudioMenu(false); }}
-                className="flex items-center gap-1.5 px-3 py-1 text-xs text-purple-300 bg-purple-500/10 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-colors">
-                <SubtitlesIcon size={13} />
-                {activeSubtitle === -1 ? 'Subs Off' : (subtitleTracks.find(t => t.index === activeSubtitle)?.label || `Track ${activeSubtitle + 1}`)}
-                <ChevronDown size={11} />
-            </button>
-            <AnimatePresence>
-                {showSubMenu && (
-                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                        className="absolute top-full left-0 mt-1 bg-zinc-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40">
-                        <button onClick={() => { setActiveSubtitle(-1); setShowSubMenu(false); }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === -1 ? 'text-purple-400' : 'text-gray-300'}`}>
-                            Off
-                        </button>
-                        {subtitleTracks.map(t => (
-                            <button key={t.index} onClick={() => { setActiveSubtitle(t.index); setShowSubMenu(false); }}
-                                className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === t.index ? 'text-purple-400' : 'text-gray-300'}`}>
-                                {t.label}{t.language ? ` (${t.language})` : ''}
-                            </button>
-                        ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-
-    const AudioMenu = () => (
-        <div className="relative">
-            <button onClick={() => { setShowAudioMenu(p => !p); setShowSubMenu(false); }}
-                className="flex items-center gap-1.5 px-3 py-1 text-xs text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors">
-                <Mic size={13} />
-                {audioTracks.find(t => t.index === activeAudio)?.label || `Audio ${activeAudio + 1}`}
-                <ChevronDown size={11} />
-            </button>
-            <AnimatePresence>
-                {showAudioMenu && (
-                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                        className="absolute top-full left-0 mt-1 bg-zinc-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40">
-                        {audioTracks.map(t => (
-                            <button key={t.index} onClick={() => { setActiveAudio(t.index); setShowAudioMenu(false); }}
-                                className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeAudio === t.index ? 'text-blue-400' : 'text-gray-300'}`}>
-                                {t.label}{t.language ? ` (${t.language})` : ''}
-                            </button>
-                        ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div className="flex flex-col h-full w-full gap-2">
+
             {/* ── Control Bar (Host/Mod only) ─────────────────────────── */}
             {isPrivileged && (
                 <div className="flex gap-2 flex-shrink-0">
@@ -390,117 +318,229 @@ const VideoPlayer = () => {
                                 type="text"
                                 value={inputUrl}
                                 onChange={e => setInputUrl(e.target.value)}
-                                placeholder="Enter YouTube, Vimeo, or direct video URL..."
-                                className="w-full bg-zinc-900/50 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/50 transition-all"
+                                placeholder="YouTube, Vimeo, Google Drive link, or direct video URL..."
+                                className="w-full rounded-xl py-2 pl-10 pr-4 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+                                style={{ background: 'var(--panel-bg)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
                             />
                         </div>
-                        <button type="submit" disabled={!inputUrl.trim()} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-xl text-sm font-medium transition-colors">Load</button>
-                        <button type="button" disabled={!inputUrl.trim()} onClick={() => { addToQueue(inputUrl.trim(), '', inputUrl.trim()); toast.success('Added to queue'); setInputUrl(''); }} className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-gray-300 border border-white/10 rounded-xl text-sm font-medium flex items-center gap-1.5"><Plus size={14} /> Queue</button>
+                        <button type="submit" disabled={!inputUrl.trim()}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-xl text-sm font-medium transition-colors">
+                            Load
+                        </button>
+                        <button type="button" disabled={!inputUrl.trim()}
+                            onClick={() => { addToQueue(inputUrl.trim(), '', inputUrl.trim()); toast.success('Added to queue'); setInputUrl(''); }}
+                            className="px-3 py-2 text-gray-300 border border-white/10 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-white/5 transition-colors"
+                            style={{ background: 'var(--panel-bg)' }}>
+                            <Plus size={14} /> Queue
+                        </button>
                     </form>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-gray-300 border border-white/10 rounded-xl text-sm font-medium flex items-center gap-1.5"><Upload size={16} /> File</button>
-                    <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileUpload} />
+                    {/* Dynamic source badge — shows what type of content is active */}
+                    {(() => {
+                        if (isGDriveProxy) return (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-blue-500/30 bg-blue-500/10 rounded-xl text-xs text-blue-300 shrink-0" title="Streaming via Google Drive proxy">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-blue-400 animate-pulse' : 'bg-blue-600'}`} />
+                                <FolderOpen size={13} />
+                                <span className="hidden sm:inline font-medium">{isPlayerReady ? 'G-Drive · Live' : 'G-Drive · Loading'}</span>
+                            </div>
+                        );
+                        if (isYouTube) return (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-red-500/30 bg-red-500/10 rounded-xl text-xs text-red-300 shrink-0" title="Playing YouTube video">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-red-400 animate-pulse' : 'bg-red-700'}`} />
+                                <span className="hidden sm:inline font-medium">{isPlayerReady ? 'YouTube · Live' : 'YouTube · Loading'}</span>
+                            </div>
+                        );
+                        if (hasContent) return (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-green-500/30 bg-green-500/10 rounded-xl text-xs text-green-300 shrink-0" title="Streaming direct file">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-green-400 animate-pulse' : 'bg-green-700'}`} />
+                                <span className="hidden sm:inline font-medium">{isPlayerReady ? 'Direct · Live' : 'Direct · Loading'}</span>
+                            </div>
+                        );
+                        return (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-white/10 bg-white/5 rounded-xl text-xs text-gray-500 shrink-0" title="No video loaded">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0" />
+                                <span className="hidden sm:inline">No source</span>
+                            </div>
+                        );
+                    })()}
                 </div>
             )}
 
-            {/* ── Track toolbar ─────────────────────────────────────── */}
-            {hasContent && (
-                <div className="flex gap-3 items-center flex-shrink-0 flex-wrap bg-zinc-900/50 p-2 rounded-xl border border-white/10">
+            {/* ── Track toolbar ─────────────────────────────────────────── */}
+            {hasContent && (subtitleTracks.length > 0 || audioTracks.length > 0 || isPrivileged) && (
+                <div className="flex gap-3 items-center flex-shrink-0 flex-wrap p-2 rounded-xl"
+                    style={{ background: 'var(--panel-bg)', border: '1px solid var(--border-color)' }}>
                     <span className="text-xs font-semibold text-gray-400">Tracks:</span>
-                    {subtitleTracks.length > 0 && <SubtitleMenu />}
-                    {audioTracks.length > 0 && <AudioMenu />}
-
-                    {/* Manual subtitle upload button always available for privileged */}
+                    {subtitleTracks.length > 0 && (
+                        <SubtitleMenu
+                            activeSubtitle={activeSubtitle}
+                            setActiveSubtitle={setActiveSubtitle}
+                            subtitleTracks={subtitleTracks}
+                            showSubMenu={showSubMenu}
+                            setShowSubMenu={setShowSubMenu}
+                            setShowAudioMenu={setShowAudioMenu}
+                        />
+                    )}
+                    {audioTracks.length > 0 && (
+                        <AudioMenu
+                            activeAudio={activeAudio}
+                            setActiveAudio={setActiveAudio}
+                            audioTracks={audioTracks}
+                            showAudioMenu={showAudioMenu}
+                            setShowAudioMenu={setShowAudioMenu}
+                            setShowSubMenu={setShowSubMenu}
+                        />
+                    )}
                     {isPrivileged && (
                         <>
                             <div className="w-px h-4 bg-white/10 mx-1" />
-                            <button onClick={() => subtitleInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1 text-xs text-gray-300 bg-zinc-800 hover:bg-zinc-700 border border-white/10 rounded-lg transition-colors">
+                            <button onClick={() => subtitleInputRef.current?.click()}
+                                className="flex items-center gap-1.5 px-3 py-1 text-xs text-gray-300 border border-white/10 rounded-lg transition-colors hover:bg-white/5"
+                                style={{ background: 'var(--panel-bg)' }}>
                                 <Plus size={12} /> Add Subs (.vtt, .srt)
                             </button>
-                            <input type="file" ref={subtitleInputRef} className="hidden" accept=".vtt,.srt,.ass,.ssa" multiple onChange={handleSubtitleUpload} />
+                            <input type="file" ref={subtitleInputRef} className="hidden"
+                                accept=".vtt,.srt,.ass,.ssa" multiple onChange={handleSubtitleUpload} />
                         </>
-                    )}
-
-                    {/* Warning if no tracks found for local files */}
-                    {(videoState.magnetURI || localStreamUrl) && subtitleTracks.length === 0 && audioTracks.length === 0 && isPlayerReady && (
-                        <span className="text-xs text-yellow-500/80 italic hidden sm:block">
-                            (Note: Browsers cannot read MKV embedded tracks natively. Please upload subtitles manually).
-                        </span>
                     )}
                 </div>
             )}
 
-            {/* ── Player ───────────────────────────────────────────── */}
-            <div className="flex-1 bg-black rounded-2xl overflow-hidden border border-white/10 relative group min-h-0">
+            {/* ── Player ────────────────────────────────────────────────── */}
+            <div className="flex-1 rounded-2xl overflow-hidden border border-white/10 relative group min-h-0" style={{ background: '#000' }}>
                 <AnimatePresence mode="wait">
                     {!hasContent ? (
-                        <motion.div key="empty" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse"><Play size={32} className="text-gray-400 ml-2" /></div>
+                        <motion.div key="empty"
+                            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                            className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse">
+                                <Play size={32} className="text-gray-400 ml-2" />
+                            </div>
                             <h2 className="text-xl font-semibold mb-2 text-gray-200">No Video Playing</h2>
-                            <p className="text-gray-400 max-w-sm text-sm">{isPrivileged ? 'Paste a URL and click Load, or upload a local file.' : 'Waiting for the host to start a video.'}</p>
+                            <p className="text-gray-400 max-w-sm text-sm">
+                                {isPrivileged
+                                    ? 'Paste a YouTube, Vimeo, or Google Drive link and click Load.'
+                                    : 'Waiting for the host to start a video.'}
+                            </p>
                         </motion.div>
                     ) : (
-                        <motion.div key="player" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 w-full h-full">
+                        <motion.div key="player"
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="absolute inset-0 w-full h-full">
 
-                            {/* Viewer P2P Loading Spinner */}
-                            {videoState.magnetURI && !localStreamUrl && !playerError && !isPlayerReady && (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/90 text-center p-6">
-                                    <div className="w-16 h-16 rounded-full border-4 border-purple-500 border-t-transparent animate-spin mb-6" />
-                                    <h2 className="text-lg font-semibold mb-1 text-gray-200">Connecting to P2P Swarm</h2>
-                                    <p className="text-gray-400 text-sm mb-4">Buffering stream from host...</p>
-                                    <div className="w-48 h-2 bg-white/10 rounded-full overflow-hidden">
-                                        <div className="h-full bg-purple-500 transition-all" style={{ width: `${Math.max(torrentProgress * 100, 5)}%` }} />
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-2">{Math.round(torrentProgress * 100)}% active</p>
-                                </div>
+                            {/* ── Google Drive: native <video> ───────────────────── */}
+                            {isGDriveProxy && (
+                                <video
+                                    ref={nativeVideoRef}
+                                    key={playerUrl}
+                                    src={playerUrl}
+                                    controls={isPrivileged}
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+                                    crossOrigin="anonymous"
+                                    onCanPlay={() => {
+                                        setIsPlayerReady(true);
+                                        setPlayerError(null);
+                                        const stateTime = videoStateRef.current.playedSeconds || 0;
+                                        if (stateTime > 2 && nativeVideoRef.current) {
+                                            nativeVideoRef.current.currentTime = stateTime;
+                                        }
+                                        if (videoStateRef.current.isPlaying && nativeVideoRef.current) {
+                                            nativeVideoRef.current.play().catch(() => {});
+                                        }
+                                    }}
+                                    onPlay={() => {
+                                        if (!isPrivileged) return;
+                                        debouncePlay();
+                                    }}
+                                    onPause={() => {
+                                        if (!isPrivileged) return;
+                                        debouncePause(() => nativeVideoRef.current?.currentTime || 0);
+                                    }}
+                                    onSeeking={() => {
+                                        if (!isPrivileged) return;
+                                        startSeekGuard();
+                                    }}
+                                    onSeeked={() => {
+                                        if (!isPrivileged) return;
+                                        endSeekGuard(() => nativeVideoRef.current?.currentTime || 0);
+                                    }}
+                                    // BUG-19: Fixed threshold: compare elapsed since last sync using SYNC_INTERVAL_MS in seconds
+                                    onTimeUpdate={() => {
+                                        if (!isPrivileged || !nativeVideoRef.current || isSeekingRef.current) return;
+                                        const t = nativeVideoRef.current.currentTime || 0;
+                                        if (t > 0 && Math.abs(t - lastSyncedPosRef.current) >= SYNC_INTERVAL_MS / 1000) {
+                                            lastSyncedPosRef.current = t;
+                                            syncProgress(t);
+                                        }
+                                    }}
+                                    onError={() => setPlayerError('Could not load Google Drive video. Ensure the file is shared as "Anyone with the link".')}
+                                />
                             )}
 
-                            {/* Viewer P2P Native Streaming Player */}
-                            {isP2PViewer && (
-                                <div className={`absolute inset-0 bg-black flex flex-col justify-center items-center ${isPlayerReady ? 'opacity-100' : 'opacity-0'}`}>
-                                    <video
-                                        ref={p2pVideoRef}
-                                        className="w-full h-full object-contain z-0"
-                                        controls={false} // Viewers get no native controls
-                                        playsInline
-                                    >
-                                        {/* Subtitle tracks for manual uploads */}
-                                        {subtitleTracks.filter(t => !t.isNative).map(t => (
-                                            <track key={t.index} kind="subtitles" src={t.src} srcLang={t.srcLang} label={t.label} default={t.default} />
-                                        ))}
-                                    </video>
-                                </div>
-                            )}
-
-                            {/* ReactPlayer for everyone except P2P viewers */}
-                            {!isP2PViewer && playerUrl && (
+                            {/* ── YouTube / Vimeo / direct URL: ReactPlayer ──────── */}
+                            {!isGDriveProxy && playerUrl && (
                                 <ReactPlayer
                                     ref={playerRef}
                                     key={playerUrl}
                                     url={playerUrl}
                                     playing={videoState.isPlaying}
-                                    controls={isPrivileged}
+                                    // BUG-10: Viewers get no controls on non-YouTube players
+                                    // YouTube iframes always show their own controls regardless; for
+                                    // direct files/Vimeo we hide controls for viewers to prevent
+                                    // unauthorized seeking.
+                                    controls={isPrivileged || isYouTube}
                                     width="100%"
                                     height="100%"
                                     onReady={handleReady}
-                                    onPlay={() => { if (isPrivileged) playVideo(); }}
-                                    onPause={() => { if (isPrivileged) pauseVideo(playerRef.current?.getCurrentTime() || 0); }}
+                                    onPlay={() => {
+                                        if (!isPrivileged) return;
+                                        debouncePlay();
+                                    }}
+                                    onPause={() => {
+                                        if (!isPrivileged) return;
+                                        debouncePause(() => playerRef.current?.getCurrentTime() || 0);
+                                    }}
+                                    onSeek={() => {
+                                        if (!isPrivileged) {
+                                            // Snap viewer back to host position immediately
+                                            playerRef.current?.seekTo(videoState.playedSeconds, 'seconds');
+                                            return;
+                                        }
+                                        startSeekGuard();
+                                        endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
+                                    }}
                                     onError={() => setPlayerError('Could not load video.')}
+                                    progressInterval={1000}
+                                    onProgress={(p) => {
+                                        if (!isPrivileged || isSeekingRef.current) return;
+                                        // BUG-19: Use >= instead of > and correct threshold (SYNC_INTERVAL_MS/1000)
+                                        if (Math.abs(p.playedSeconds - lastSyncedPosRef.current) >= SYNC_INTERVAL_MS / 1000) {
+                                            lastSyncedPosRef.current = p.playedSeconds;
+                                            syncProgress(p.playedSeconds);
+                                        }
+                                    }}
                                     config={{
-                                        youtube: { playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1, autoplay: 1, mute: isPrivileged ? 0 : 0 } },
-                                        file: { attributes: { preload: 'auto', crossOrigin: 'anonymous' }, tracks: subtitleTracks.filter(t => !t.isNative).map(t => ({ kind: 'subtitles', src: t.src, srcLang: t.srcLang, label: t.label, default: t.default })) }
+                                        youtube: {
+                                            playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 }
+                                        },
+                                        file: {
+                                            attributes: { preload: 'auto', crossOrigin: 'anonymous' },
+                                            tracks: subtitleTracks
+                                                .filter(t => !t.isNative)
+                                                .map(t => ({ kind: 'subtitles', src: t.src, srcLang: t.srcLang, label: t.label, default: t.default }))
+                                        }
                                     }}
                                 />
                             )}
 
-                            {/* Error Overlay */}
+                            {/* ── Error overlay ───────────────────────────────────── */}
                             {playerError && (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/90">
+                                <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/90">
                                     <AlertCircle size={40} className="text-red-400 mb-4" />
-                                    <p className="text-gray-300 text-sm">{playerError}</p>
+                                    <p className="text-gray-300 text-sm text-center px-6">{playerError}</p>
                                 </div>
                             )}
 
-                            {/* Viewer Lock Info */}
+                            {/* ── Viewer indicator ────────────────────────────────── */}
                             {!isPrivileged && (
                                 <div className="absolute top-3 right-3 bg-black/70 backdrop-blur px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none">
                                     <Lock size={12} className="text-gray-400" />

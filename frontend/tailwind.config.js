@@ -7,29 +7,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#0a0a0a',
-        surface: '#111111',
+        background: 'var(--bg-color)',
+        surface: 'var(--panel-bg)',
+        bordercolor: 'var(--border-color)',
+        textcolor: 'var(--text-color)',
       },
-      animation: {
-        'gradient-x': 'gradient-x 15s ease infinite',
-        'float': 'float 6s ease-in-out infinite',
-      },
-      keyframes: {
-        'gradient-x': {
-          '0%, 100%': {
-            'background-size': '200% 200%',
-            'background-position': 'left center'
-          },
-          '50%': {
-            'background-size': '200% 200%',
-            'background-position': 'right center'
-          }
-        },
-        'float': {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-10px)' },
-        }
-      }
+      animation: {},
+      keyframes: {}
     },
   },
   plugins: [],

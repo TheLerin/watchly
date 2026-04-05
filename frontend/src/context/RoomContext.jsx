@@ -8,6 +8,7 @@ const RoomContext = createContext();
 export const useRoom = () => useContext(RoomContext);
 
 export const RoomProvider = ({ children }) => {
+    const [isRestoringSession, setIsRestoringSession] = useState(true);
     const [isConnected, setIsConnected] = useState(false);
     const [currentUser, setCurrentUser] = useState(null);
     const [users, setUsers] = useState([]);
@@ -18,10 +19,14 @@ export const RoomProvider = ({ children }) => {
         magnetURI: '',
         isPlaying: false,
         playedSeconds: 0,
-        updatedAt: 0
+        updatedAt: 0,
+        seekVersion: 0
     });
     const [queue, setQueue] = useState([]);
     const isKicked = useRef(false);
+
+    // BUG-11: Timeout ref so we can clear it once room_joined fires
+    const restoreTimeoutRef = useRef(null);
 
     useEffect(() => {
         function onConnect() { setIsConnected(true); }
@@ -30,11 +35,14 @@ export const RoomProvider = ({ children }) => {
             setCurrentUser(null);
         }
         function onRoomJoined({ user, existingUsers, videoState: initialVideoState, queue: initialQueue, chatHistory }) {
+            // BUG-11: Clear the stale-session timeout — connection succeeded
+            clearTimeout(restoreTimeoutRef.current);
             setCurrentUser(user);
             setUsers(existingUsers);
             if (initialVideoState) setVideoState(initialVideoState);
             if (initialQueue) setQueue(initialQueue);
             setMessages(chatHistory || []);
+            setIsRestoringSession(false);
         }
         function onUserJoined(newUser) {
             setUsers(prev => {
@@ -56,15 +64,19 @@ export const RoomProvider = ({ children }) => {
                 return [...prev, message];
             });
         }
+        // BUG-06 / BUG-16: role_updated carries who changed — we track if it's us
         function onRoleUpdated({ userId, newRole }) {
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
             setCurrentUser(prev => prev?.id === userId ? { ...prev, role: newRole } : prev);
         }
         function onUserKicked() {
             isKicked.current = true;
-            localStorage.removeItem('watchTogetherSession');
-            alert('You have been kicked from the room by the Host.');
-            window.location.href = '/';
+            sessionStorage.removeItem('watchTogetherSession');
+            // ISSUE-27: Use toast instead of blocking native alert()
+            toast.error('You have been kicked from the room.', { duration: 4000 });
+            // ISSUE-32: Use a custom event so App.jsx can call navigate() via React Router
+            // instead of a full page reload via window.location.href
+            setTimeout(() => window.dispatchEvent(new CustomEvent('watchsync:kicked')), 300);
         }
 
         const addSystemMessage = (text) => {
@@ -78,11 +90,13 @@ export const RoomProvider = ({ children }) => {
         };
 
         function onVideoChanged(newState) {
+            // BUG-14: newState already has seekVersion: 0 from server, no need to force it
             setVideoState(newState);
             addSystemMessage('The video has been changed.');
         }
         function onVideoPlayed() {
             setVideoState(prev => ({ ...prev, isPlaying: true, updatedAt: Date.now() }));
+            // BUG-06: server uses socket.to() so only non-initiators receive this — toast is appropriate
             toast('▶️ Playing', { duration: 1500 });
         }
         function onVideoPaused({ playedSeconds } = {}) {
@@ -92,14 +106,21 @@ export const RoomProvider = ({ children }) => {
                 ...(playedSeconds !== undefined ? { playedSeconds } : {}),
                 updatedAt: Date.now()
             }));
+            // BUG-16: only non-initiators receive this event (server uses socket.to())
             toast('⏸️ Paused', { duration: 1500 });
         }
-        function onVideoProgress({ playedSeconds }) {
-            // Drift correction — only updates state without triggering a seek on host side
-            setVideoState(prev => ({ ...prev, playedSeconds, updatedAt: Date.now() }));
+        function onVideoProgress({ playedSeconds, seekVersion }) {
+            // BUG-07: now receives seekVersion from server so drift-correction effects trigger
+            setVideoState(prev => ({
+                ...prev,
+                playedSeconds,
+                updatedAt: Date.now(),
+                // Only update seekVersion if provided (backward-compatible)
+                ...(seekVersion !== undefined ? { seekVersion } : {})
+            }));
         }
         function onVideoSeeked(playedSeconds) {
-            setVideoState(prev => ({ ...prev, playedSeconds, updatedAt: Date.now() }));
+            setVideoState(prev => ({ ...prev, playedSeconds, updatedAt: Date.now(), seekVersion: (prev.seekVersion || 0) + 1 }));
         }
         function onQueueUpdated(newQueue) {
             setQueue(newQueue);
@@ -138,9 +159,32 @@ export const RoomProvider = ({ children }) => {
         };
     }, []);
 
-    // --- Auto-reconnect from localStorage ---
+    // --- Auto-reconnect from sessionStorage ---
     useEffect(() => {
-        const savedSession = localStorage.getItem('watchTogetherSession');
+        const savedSession = sessionStorage.getItem('watchTogetherSession');
+        if (!savedSession) {
+            setIsRestoringSession(false);
+            return;
+        }
+
+        // BUG-11: If backend is unreachable the spinner would hang forever.
+        // Set a 6-second timeout; if room_joined hasn't fired by then, give up gracefully.
+        restoreTimeoutRef.current = setTimeout(() => {
+            setIsRestoringSession(false);
+            sessionStorage.removeItem('watchTogetherSession');
+            toast.error('Could not reconnect to server. Please rejoin.', { duration: 4000 });
+        }, 6000);
+
+        if (!socket.connected) {
+            socket.connect();
+        }
+
+        // Cleanup timeout on unmount
+        return () => clearTimeout(restoreTimeoutRef.current);
+    }, []);
+
+    useEffect(() => {
+        const savedSession = sessionStorage.getItem('watchTogetherSession');
         if (savedSession && isConnected && !currentUser) {
             try {
                 let sessionData = JSON.parse(savedSession);
@@ -150,21 +194,34 @@ export const RoomProvider = ({ children }) => {
                     if (!userId) {
                         userId = Math.random().toString(36).substring(2, 15);
                         sessionData.userId = userId;
-                        localStorage.setItem('watchTogetherSession', JSON.stringify(sessionData));
+                        sessionStorage.setItem('watchTogetherSession', JSON.stringify(sessionData));
                     }
                     setRoomId(savedRoomId);
                     socket.emit('join_room', { roomId: savedRoomId, nickname, userId });
+                } else {
+                    clearTimeout(restoreTimeoutRef.current);
+                    setIsRestoringSession(false);
                 }
             } catch (e) {
                 console.error('Failed to parse saved session', e);
+                clearTimeout(restoreTimeoutRef.current);
+                setIsRestoringSession(false);
             }
         }
     }, [isConnected, currentUser]);
 
     const joinRoom = useCallback((id, nickname) => {
+        // BUG-03: Reuse existing userId from sessionStorage if we already have one for this room,
+        // so that a host/moderator who refreshes recovers their role correctly.
+        let userId;
+        try {
+            const saved = JSON.parse(sessionStorage.getItem('watchTogetherSession') || '{}');
+            userId = (saved.roomId === id && saved.userId) ? saved.userId : Math.random().toString(36).substring(2, 15);
+        } catch {
+            userId = Math.random().toString(36).substring(2, 15);
+        }
         setRoomId(id);
-        const userId = Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('watchTogetherSession', JSON.stringify({ roomId: id, nickname, userId }));
+        sessionStorage.setItem('watchTogetherSession', JSON.stringify({ roomId: id, nickname, userId }));
         socket.connect();
         socket.emit('join_room', { roomId: id, nickname, userId });
     }, []);
@@ -173,7 +230,7 @@ export const RoomProvider = ({ children }) => {
         if (!isKicked.current) {
             socket.emit('leave_room', { roomId });
         }
-        localStorage.removeItem('watchTogetherSession');
+        sessionStorage.removeItem('watchTogetherSession');
         socket.disconnect();
         setRoomId(null);
         setCurrentUser(null);
@@ -183,8 +240,9 @@ export const RoomProvider = ({ children }) => {
         isKicked.current = false;
     }, [roomId]);
 
+    // BUG-18: Guard sendMessage so it doesn't emit with a null roomId
     const sendMessage = useCallback((text) => {
-        if (!text.trim() || !currentUser) return;
+        if (!text.trim() || !currentUser || !roomId) return;
         const msg = {
             id: Date.now() + Math.random().toString(),
             text,
@@ -209,26 +267,31 @@ export const RoomProvider = ({ children }) => {
             magnetURI: magnetURI || '',
             isPlaying: true,
             playedSeconds: 0,
-            updatedAt: Date.now()
+            updatedAt: Date.now(),
+            seekVersion: 0
         };
         setVideoState(newState);
         socket.emit('change_video', { roomId, ...newState });
     }, [roomId]);
 
+    // BUG-08: Moved socket.emit outside setState updater to avoid double-firing in React StrictMode
     const playVideo = useCallback(() => {
         setVideoState(prev => {
             if (prev.isPlaying) return prev;
-            socket.emit('play_video', { roomId });
             return { ...prev, isPlaying: true };
         });
+        // Read current state and only emit if not already playing
+        // (we optimistically update above; server guards duplicate events too)
+        socket.emit('play_video', { roomId });
     }, [roomId]);
 
+    // BUG-09: Moved socket.emit outside setState updater to avoid double-firing in React StrictMode
     const pauseVideo = useCallback((playedSeconds) => {
         setVideoState(prev => {
             if (!prev.isPlaying) return prev;
-            socket.emit('pause_video', { roomId, playedSeconds });
             return { ...prev, isPlaying: false, ...(playedSeconds !== undefined ? { playedSeconds } : {}) };
         });
+        socket.emit('pause_video', { roomId, playedSeconds });
     }, [roomId]);
 
     const syncProgress = useCallback((playedSeconds) => {
@@ -237,7 +300,8 @@ export const RoomProvider = ({ children }) => {
     }, [roomId]);
 
     const seekVideo = useCallback((seconds) => {
-        setVideoState(prev => ({ ...prev, playedSeconds: seconds }));
+        // ISSUE-31: Also bump seekVersion locally so host state mirrors what viewers receive
+        setVideoState(prev => ({ ...prev, playedSeconds: seconds, seekVersion: (prev.seekVersion || 0) + 1 }));
         socket.emit('seek_video', { roomId, playedSeconds: seconds });
     }, [roomId]);
 
@@ -257,6 +321,7 @@ export const RoomProvider = ({ children }) => {
 
     return (
         <RoomContext.Provider value={{
+            isRestoringSession,
             isConnected,
             currentUser,
             users,
