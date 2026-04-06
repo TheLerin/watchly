@@ -24,6 +24,48 @@ function rewriteGDriveUrl(url) {
     return `${BACKEND_URL}/api/proxy/gdrive?id=${fileId}`;
 }
 
+// Resolves an archive.org/details/ page URL into a direct streamable .mp4 URL
+// by fetching the item's metadata from the archive.org API.
+async function resolveArchiveUrl(url) {
+    if (!url || !url.includes('archive.org')) return url;
+
+    // Already a direct download file URL — use as-is
+    const directMatch = url.match(/archive\.org\/download\/([^/?#]+)\/(.+)/);
+    if (directMatch && directMatch[2]) return url;
+
+    // Extract identifier from a details page URL
+    const detailsMatch = url.match(/archive\.org\/details\/([^/?#]+)/);
+    if (!detailsMatch) return url;
+
+    const identifier = detailsMatch[1];
+    try {
+        const res  = await fetch(`https://archive.org/metadata/${identifier}`);
+        const data = await res.json();
+        const files = data.files || [];
+
+        // Find best video file. Priority order — browser-friendly formats first.
+        const priorityFormats = ['MPEG4', 'h.264', 'H.264 IA', '512Kb MPEG4', 'Ogg Video'];
+        let videoFile = null;
+        for (const fmt of priorityFormats) {
+            videoFile = files.find(f => f.format === fmt && !f.name.includes('_thumb') && !f.name.includes('.thumbs'));
+            if (videoFile) break;
+        }
+        // Fallback: any .mp4 file
+        if (!videoFile) {
+            videoFile = files.find(f => f.name.endsWith('.mp4') && !f.name.includes('_thumb'));
+        }
+
+        if (videoFile) {
+            const directUrl = `https://archive.org/download/${identifier}/${videoFile.name}`;
+            console.log(`Archive.org resolved: ${url} → ${directUrl}`);
+            return directUrl;
+        }
+    } catch (e) {
+        console.warn('Archive.org metadata fetch failed:', e);
+    }
+    return url; // Fall back to original URL if resolution fails
+}
+
 // Sub-components defined OUTSIDE VideoPlayer so they never remount on re-render
 
 const SubtitleMenu = ({ activeSubtitle, setActiveSubtitle, subtitleTracks, showSubMenu, setShowSubMenu, setShowAudioMenu }) => (
@@ -138,6 +180,7 @@ const VideoPlayer = () => {
     const isGDriveProxy = !!(playerUrl && playerUrl.includes('/api/proxy/gdrive'));
     const hasContent    = !!(videoState.url || videoState.magnetURI);
     const isYouTube     = !!(playerUrl && (playerUrl.includes('youtube.com') || playerUrl.includes('youtu.be')));
+    const isArchive     = !!(playerUrl && playerUrl.includes('archive.org'));
 
     // ── 1. Reset on URL change ────────────────────────────────────────────────
     useEffect(() => {
@@ -288,11 +331,23 @@ const VideoPlayer = () => {
         }, 300);
     };
 
-    const handleLoad = (e) => {
+    const handleLoad = async (e) => {
         e.preventDefault();
         if (!isPrivileged || !inputUrl.trim()) return;
         setPlayerError(null);
-        loadVideo(inputUrl.trim());
+        let url = inputUrl.trim();
+        // Auto-resolve archive.org details page URLs to direct streamable links
+        if (url.includes('archive.org/details/')) {
+            toast.loading('Resolving archive.org link...', { id: 'archive-resolve' });
+            url = await resolveArchiveUrl(url);
+            toast.dismiss('archive-resolve');
+            if (url === inputUrl.trim()) {
+                toast.error('Could not find a video file at that archive.org link.');
+                return;
+            }
+            toast.success('Archive.org link resolved!', { icon: '📼' });
+        }
+        loadVideo(url);
         setInputUrl('');
     };
 
@@ -348,6 +403,12 @@ const VideoPlayer = () => {
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-blue-400 animate-pulse' : 'bg-blue-600'}`} />
                                 <FolderOpen size={13} />
                                 <span className="hidden sm:inline font-medium">{isPlayerReady ? 'G-Drive · Live' : 'G-Drive · Loading'}</span>
+                            </div>
+                        );
+                        if (isArchive) return (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-orange-500/30 bg-orange-500/10 rounded-xl text-xs text-orange-300 shrink-0" title="Streaming from archive.org">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-orange-400 animate-pulse' : 'bg-orange-600'}`} />
+                                <span className="hidden sm:inline font-medium">{isPlayerReady ? 'Archive · Live' : 'Archive · Loading'}</span>
                             </div>
                         );
                         if (isYouTube) return (
