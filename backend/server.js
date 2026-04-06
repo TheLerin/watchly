@@ -377,9 +377,8 @@ io.on('connection', (socket) => {
             if (rooms[roomId]) {
                 rooms[roomId].videoState.playedSeconds = playedSeconds;
                 rooms[roomId].videoState.updatedAt = Date.now();
-                // BUG-07: Increment seekVersion so viewer drift-correction effects fire
-                rooms[roomId].videoState.seekVersion = (rooms[roomId].videoState.seekVersion || 0) + 1;
-                // Broadcast drift correction to viewers (they only act if drift > threshold)
+                // Broadcast drift correction to viewers (they only act if drift > threshold).
+                // SeekVersion is NOT incremented here, to prevent viewers from reloading chunks continuously.
                 socket.to(roomId).emit('video_progress', { playedSeconds, seekVersion: rooms[roomId].videoState.seekVersion });
             }
         }

@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import ReactPlayer from 'react-player/lazy';
 import { useRoom } from '../context/RoomContext';
-import { Play, Link as LinkIcon, Lock, AlertCircle, Plus, ChevronDown, Mic, Subtitles as SubtitlesIcon, FolderOpen } from 'lucide-react';
+import { Play, Link as LinkIcon, Lock, AlertCircle, Plus, ChevronDown, Mic, Subtitles as SubtitlesIcon, FolderOpen, Maximize, Minimize } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -88,6 +88,7 @@ const VideoPlayer = () => {
     // ── Refs ─────────────────────────────────────────────────────────────────
     const playerRef        = useRef(null);   // ReactPlayer ref
     const nativeVideoRef   = useRef(null);   // <video> ref for GDrive
+    const playerContainerRef = useRef(null); // wrapper div for fullscreen
     const subtitleInputRef = useRef(null);
     const syncIntervalRef  = useRef(null);
 
@@ -119,6 +120,24 @@ const VideoPlayer = () => {
     const [activeAudio, setActiveAudio]       = useState(0);
     const [showSubMenu, setShowSubMenu]       = useState(false);
     const [showAudioMenu, setShowAudioMenu]   = useState(false);
+    const [isFullscreen, setIsFullscreen]     = useState(false);
+
+    // ── Fullscreen Listeners ──────────────────────────────────────────────────
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    }, []);
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            playerContainerRef.current?.requestFullscreen?.().catch(() => {});
+        } else {
+            document.exitFullscreen?.().catch(() => {});
+        }
+    };
 
     // ── Derived values ────────────────────────────────────────────────────────
     const isPrivileged = currentUser?.role === 'Host' || currentUser?.role === 'Moderator';
@@ -409,7 +428,7 @@ const VideoPlayer = () => {
             )}
 
             {/* ── Player ────────────────────────────────────────────────── */}
-            <div className="flex-1 rounded-2xl overflow-hidden border border-white/10 relative group min-h-0" style={{ background: '#000' }}>
+            <div ref={playerContainerRef} className="flex-1 rounded-2xl overflow-hidden border border-white/10 relative group min-h-0" style={{ background: '#000' }}>
                 <AnimatePresence mode="wait">
                     {!hasContent ? (
                         <motion.div key="empty"
@@ -572,6 +591,17 @@ const VideoPlayer = () => {
                                     <Lock size={12} className="text-gray-400" />
                                     <span className="text-xs text-gray-300">Synced to host</span>
                                 </div>
+                            )}
+
+                            {/* ── Fullscreen Button (For Viewers) ─────────────────── */}
+                            {!isPrivileged && (
+                                <button
+                                    onClick={toggleFullscreen}
+                                    className="absolute bottom-4 right-4 bg-black/70 hover:bg-black/90 backdrop-blur p-2 rounded-xl border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
+                                    title="Toggle Fullscreen"
+                                >
+                                    {isFullscreen ? <Minimize size={18} className="text-white" /> : <Maximize size={18} className="text-white" />}
+                                </button>
                             )}
                         </motion.div>
                     )}

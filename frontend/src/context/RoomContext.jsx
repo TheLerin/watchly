@@ -61,7 +61,7 @@ export const RoomProvider = ({ children }) => {
         function onReceiveMessage(message) {
             setMessages(prev => {
                 if (prev.some(m => m.id === message.id)) return prev;
-                return [...prev, message];
+                return [...prev, message].slice(-200);
             });
         }
         // BUG-06 / BUG-16: role_updated carries who changed — we track if it's us
@@ -86,7 +86,7 @@ export const RoomProvider = ({ children }) => {
                 text,
                 timestamp: Date.now(),
                 isSystem: true
-            }]);
+            }].slice(-200));
         };
 
         function onVideoChanged(newState) {
@@ -250,7 +250,7 @@ export const RoomProvider = ({ children }) => {
             role: currentUser.role,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
-        setMessages(prev => [...prev, msg]);
+        setMessages(prev => [...prev, msg].slice(-200));
         socket.emit('send_message', { roomId, message: msg });
     }, [roomId, currentUser]);
 
