@@ -157,6 +157,7 @@ const VideoPlayer = () => {
     const [showSubMenu, setShowSubMenu]   = useState(false);
     const [showAudioMenu, setShowAudioMenu] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
     // ── Fullscreen Listeners ──────────────────────────────────────────────────
     useEffect(() => {
@@ -186,6 +187,7 @@ const VideoPlayer = () => {
     useEffect(() => {
         setIsPlayerReady(false);
         setPlayerError(null);
+        setAutoplayBlocked(false);
         setSubtitleTracks([]);
         setAudioTracks([]);
         setActiveSubtitle(-1);
@@ -229,8 +231,28 @@ const VideoPlayer = () => {
         const seekVer     = videoState.seekVersion ?? 0;
         const isForcedSeek = seekVer !== prevSeekVersionGDriveRef.current;
         prevSeekVersionGDriveRef.current = seekVer;
-        if (isForcedSeek || (nativeVideoRef.current.readyState >= 3 && Math.abs(currentTime - stateTime) > DRIFT_THRESHOLD)) {
+        
+        if (isForcedSeek) {
             nativeVideoRef.current.currentTime = stateTime;
+            nativeVideoRef.current.playbackRate = 1.0;
+        } else if (nativeVideoRef.current.readyState >= 3 && !nativeVideoRef.current.paused) {
+            // Use playbackRate to smoothly catch up instead of hard seeking which drops HTTP requests
+            const diff = stateTime - currentTime; // Positive means host is ahead
+            
+            if (Math.abs(diff) > 10) {
+                // Way out of sync (or joined late), force jump
+                nativeVideoRef.current.currentTime = stateTime;
+                nativeVideoRef.current.playbackRate = 1.0;
+            } else if (diff > 2) {
+                // Viewer is lagging behind -> speed up
+                nativeVideoRef.current.playbackRate = 1.25;
+            } else if (diff < -2) {
+                // Viewer is ahead -> slow down
+                nativeVideoRef.current.playbackRate = 0.75;
+            } else {
+                // Normal sync
+                nativeVideoRef.current.playbackRate = 1.0;
+            }
         }
     }, [videoState.playedSeconds, videoState.seekVersion, isGDriveProxy, isPrivileged, isPlayerReady]);
 
@@ -238,7 +260,11 @@ const VideoPlayer = () => {
     useEffect(() => {
         if (!isGDriveProxy || !nativeVideoRef.current || !isPlayerReady) return;
         if (videoState.isPlaying) {
-            nativeVideoRef.current.play().catch(() => {});
+            nativeVideoRef.current.play().catch((err) => {
+                if (err.name === 'NotAllowedError') {
+                    setAutoplayBlocked(true);
+                }
+            });
         } else {
             nativeVideoRef.current.pause();
         }
@@ -511,10 +537,12 @@ const VideoPlayer = () => {
                                             setIsPlayerReady(true);
                                             setPlayerError(null);
                                             if (videoStateRef.current.isPlaying && nativeVideoRef.current) {
-                                                nativeVideoRef.current.play().catch(() => {});
+                                                nativeVideoRef.current.play().catch((err) => {
+                                                    if (err.name === 'NotAllowedError') setAutoplayBlocked(true);
+                                                });
                                             }
                                         }}
-                                        onPlay={() => { if (!isPrivileged) return; debouncePlay(); }}
+                                        onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged) return; debouncePlay(); }}
                                         onPause={() => { if (!isPrivileged) return; debouncePause(() => nativeVideoRef.current?.currentTime || 0); }}
                                         onSeeking={() => { if (!isPrivileged) return; startSeekGuard(); }}
                                         onSeeked={() => { if (!isPrivileged) return; endSeekGuard(() => nativeVideoRef.current?.currentTime || 0); }}
@@ -529,6 +557,25 @@ const VideoPlayer = () => {
                                             position: 'absolute', bottom: 0, left: 0, right: 0, height: '48px',
                                             zIndex: 10, cursor: 'not-allowed'
                                         }} />
+                                    )}
+                                    {/* Autoplay Blocked Overlay */}
+                                    {autoplayBlocked && (
+                                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+                                            <div className="flex flex-col items-center p-6 border border-white/20 bg-zinc-900/90 rounded-2xl shadow-2xl">
+                                                <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4 cursor-pointer hover:bg-purple-500/40 hover:scale-105 transition-all"
+                                                    onClick={() => {
+                                                        if (nativeVideoRef.current) {
+                                                            nativeVideoRef.current.play().then(() => setAutoplayBlocked(false)).catch(console.error);
+                                                        }
+                                                    }}>
+                                                    <Play size={32} className="text-purple-400 ml-1" />
+                                                </div>
+                                                <h3 className="text-xl font-bold text-white mb-2">Autoplay Blocked</h3>
+                                                <p className="text-gray-400 text-sm text-center max-w-xs">
+                                                    Your browser paused the video. Click play to sync with the host.
+                                                </p>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                             )}

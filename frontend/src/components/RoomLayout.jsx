@@ -179,140 +179,7 @@ const RoomLayout = () => {
 
     const videoHeightPct = showMobileChat ? 100 - heightPct : 100;
 
-    // ── DESKTOP layout ────────────────────────────────────────────────────────
-    const desktopLayout = (
-        <main className="flex-1 min-h-0 flex">
-            <section className="flex-1 min-h-0 min-w-0 flex flex-col p-3">
-                <div className="flex-1 min-h-0 rounded-2xl overflow-hidden border border-zinc-800 bg-black">
-                    <VideoPlayer />
-                </div>
-            </section>
-            <aside className="w-80 xl:w-96 flex-col gap-0 shrink-0 flex p-3 pl-0">
-                <div className="mb-2 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/60">
-                    <button onClick={() => setShowUsersPanel(v => !v)}
-                        className="flex items-center justify-between w-full px-4 py-3 hover:bg-white/5 transition-colors">
-                        <span className="flex items-center gap-2 text-sm font-semibold text-white">
-                            <Users size={15} className="text-purple-400" />
-                            Users &amp; Queue
-                            <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">{users.length}</span>
-                        </span>
-                        {showUsersPanel ? <ChevronUp size={15} className="text-zinc-400" /> : <ChevronDown size={15} className="text-zinc-400" />}
-                    </button>
-                    <AnimatePresence initial={false}>
-                        {showUsersPanel && (
-                            <motion.div key="p" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden border-t border-zinc-800">
-                                <div className="max-h-64 overflow-y-auto"><UserQueueSidebar compact /></div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
-                <div className="flex-1 min-h-0"><ChatUI /></div>
-            </aside>
-        </main>
-    );
-
-    // ── MOBILE PORTRAIT layout ────────────────────────────────────────────────
-    const mobilePortraitLayout = (
-        <div className="flex-1 min-h-0 relative flex flex-col bg-black overflow-hidden">
-            <div className="relative bg-black flex-shrink-0 transition-all duration-300" style={{ height: `${videoHeightPct}%` }}>
-                <VideoPlayer />
-                {/* Right-side action rail */}
-                <div className="absolute right-3 bottom-8 flex flex-col items-center gap-4 z-20">
-                    <button onClick={() => setShowUsersPanel(true)} className="flex flex-col items-center gap-1">
-                        <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center border border-white/20">
-                            <Menu size={22} className="text-white" />
-                        </div>
-                        <span className="text-white text-[10px] font-medium" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>Members</span>
-                    </button>
-                    <button onClick={() => setShowMobileChat(true)} className="flex flex-col items-center gap-1">
-                        <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center border border-white/20">
-                            <MessageSquare size={22} className="text-white" />
-                        </div>
-                        <span className="text-white text-[10px] font-medium" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>Chat</span>
-                    </button>
-                </div>
-            </div>
-
-            {/* Resizable Chat sheet */}
-            <AnimatePresence>
-                {showMobileChat && (
-                    <motion.div
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="flex-1 min-h-0 flex flex-col bg-zinc-950 border-t border-zinc-700"
-                        style={{ height: `${heightPct}%` }}
-                    >
-                        <div className="flex items-center justify-between px-4 py-2 cursor-row-resize select-none shrink-0 bg-zinc-900 border-b border-zinc-800"
-                            onMouseDown={onDragStart} onTouchStart={onDragStart}>
-                            <div className="flex items-center gap-2">
-                                <GripHorizontal size={16} className="text-zinc-500" />
-                                <span className="text-sm font-semibold text-white">Live Chat</span>
-                            </div>
-                            <button onClick={() => setShowMobileChat(false)} className="p-1.5 text-zinc-400 hover:text-white">
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <div className="flex-1 min-h-0"><ChatUI hideHeader /></div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Members bottom sheet */}
-            <AnimatePresence>
-                {showUsersPanel && (
-                    <>
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="absolute inset-0 bg-black/60 z-30"
-                            onClick={() => setShowUsersPanel(false)} />
-                        <motion.div
-                            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-                            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-                            className="absolute inset-x-0 bottom-0 z-40 rounded-t-3xl bg-zinc-900 border-t border-zinc-700 flex flex-col"
-                            style={{ maxHeight: '70vh' }}
-                        >
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
-                                <h2 className="font-bold text-white flex items-center gap-2">
-                                    <Users size={16} className="text-purple-400" />
-                                    Members &amp; Queue
-                                    <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">{users.length}</span>
-                                </h2>
-                                <button onClick={() => setShowUsersPanel(false)} className="p-1.5 text-zinc-400 hover:text-white"><X size={20} /></button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto"><UserQueueSidebar compact /></div>
-                        </motion.div>
-                    </>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-
-    // ── MOBILE LANDSCAPE layout ───────────────────────────────────────────────
-    const mobileLandscapeLayout = (
-        <main className="flex-1 min-h-0 flex flex-col">
-            <div className="w-full bg-black shrink-0" style={{ height: '55vw', maxHeight: '60vh' }}>
-                <VideoPlayer />
-            </div>
-            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border-b border-zinc-800 shrink-0">
-                    <button onClick={() => setShowUsersPanel(v => !v)}
-                        className="flex items-center gap-2 text-xs text-zinc-300 hover:text-white transition-colors">
-                        <Users size={13} className="text-purple-400" />
-                        <span className="font-medium">{users.length} Members</span>
-                        {showUsersPanel ? <ChevronUp size={12} className="text-zinc-400" /> : <ChevronDown size={12} className="text-zinc-400" />}
-                    </button>
-                </div>
-                <AnimatePresence initial={false}>
-                    {showUsersPanel && (
-                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden shrink-0 border-b border-zinc-800">
-                            <div className="max-h-28 overflow-y-auto"><UserQueueSidebar compact /></div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-                <div className="flex-1 min-h-0"><ChatUI /></div>
-            </div>
-        </main>
-    );
-
-    // ── Render — only ONE VideoPlayer is ever mounted at a time ───────────────
+    // ── Render — unified layout to ensure VideoPlayer NEVER unmounts on resize ──
     return (
         <div className="h-screen w-full flex flex-col bg-zinc-950 text-white overflow-hidden">
             {/* Background blobs */}
@@ -330,14 +197,149 @@ const RoomLayout = () => {
                 navigate={navigate}
             />
 
-            {/* ── Single layout branch — only ONE VideoPlayer mounts ── */}
-            <div className="flex-1 min-h-0 flex flex-col">
-                {isDesktop
-                    ? desktopLayout
-                    : isPortrait
-                        ? mobilePortraitLayout
-                        : mobileLandscapeLayout
-                }
+            {/* ── Single unified layout matrix to prevent VideoPlayer unmount ── */}
+            <div className={`flex-1 min-h-0 ${isDesktop ? 'flex' : isPortrait ? 'relative flex flex-col bg-black overflow-hidden' : 'flex flex-col'}`}>
+                
+                {/* ── Fixed DOM Path to Video ── */}
+                <div 
+                    className={
+                        isDesktop ? "flex-1 min-h-0 min-w-0 flex flex-col p-3" :
+                        isPortrait ? "relative bg-black flex-shrink-0 transition-all duration-300" :
+                        "w-full bg-black shrink-0"
+                    }
+                    style={
+                        isDesktop ? {} :
+                        isPortrait ? { height: `${videoHeightPct}%` } :
+                        { height: '55vw', maxHeight: '60vh' }
+                    }
+                >
+                    <div className={
+                        isDesktop ? "flex-1 min-h-0 rounded-2xl overflow-hidden border border-zinc-800 bg-black relative" :
+                        "absolute inset-0 w-full h-full"
+                    }>
+                        <VideoPlayer />
+                        
+                        {/* Mobile Portrait Action Rail */}
+                        {!isDesktop && isPortrait && (
+                            <div className="absolute right-3 bottom-8 flex flex-col items-center gap-4 z-20">
+                                <button onClick={() => setShowUsersPanel(true)} className="flex flex-col items-center gap-1">
+                                    <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center border border-white/20">
+                                        <Menu size={22} className="text-white" />
+                                    </div>
+                                    <span className="text-white text-[10px] font-medium" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>Members</span>
+                                </button>
+                                <button onClick={() => setShowMobileChat(true)} className="flex flex-col items-center gap-1">
+                                    <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center border border-white/20">
+                                        <MessageSquare size={22} className="text-white" />
+                                    </div>
+                                    <span className="text-white text-[10px] font-medium" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>Chat</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── Desktop Sidebar ── */}
+                {isDesktop && (
+                    <aside className="w-80 xl:w-96 flex-col gap-0 shrink-0 flex p-3 pl-0">
+                        <div className="mb-2 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/60">
+                            <button onClick={() => setShowUsersPanel(v => !v)}
+                                className="flex items-center justify-between w-full px-4 py-3 hover:bg-white/5 transition-colors">
+                                <span className="flex items-center gap-2 text-sm font-semibold text-white">
+                                    <Users size={15} className="text-purple-400" />
+                                    Users &amp; Queue
+                                    <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">{users.length}</span>
+                                </span>
+                                {showUsersPanel ? <ChevronUp size={15} className="text-zinc-400" /> : <ChevronDown size={15} className="text-zinc-400" />}
+                            </button>
+                            <AnimatePresence initial={false}>
+                                {showUsersPanel && (
+                                    <motion.div key="p" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden border-t border-zinc-800">
+                                        <div className="max-h-64 overflow-y-auto"><UserQueueSidebar compact /></div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                        <div className="flex-1 min-h-0"><ChatUI /></div>
+                    </aside>
+                )}
+
+                {/* ── Mobile Portrait Overlays ── */}
+                {!isDesktop && isPortrait && (
+                    <>
+                        {/* Resizable Chat sheet */}
+                        <AnimatePresence>
+                            {showMobileChat && (
+                                <motion.div
+                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                    className="absolute bottom-0 inset-x-0 flex flex-col bg-zinc-950 border-t border-zinc-700 z-30"
+                                    style={{ height: `${heightPct}%` }}
+                                >
+                                    <div className="flex items-center justify-between px-4 py-2 cursor-row-resize select-none shrink-0 bg-zinc-900 border-b border-zinc-800"
+                                        onMouseDown={onDragStart} onTouchStart={onDragStart}>
+                                        <div className="flex items-center gap-2">
+                                            <GripHorizontal size={16} className="text-zinc-500" />
+                                            <span className="text-sm font-semibold text-white">Live Chat</span>
+                                        </div>
+                                        <button onClick={() => setShowMobileChat(false)} className="p-1.5 text-zinc-400 hover:text-white">
+                                            <X size={18} />
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 min-h-0"><ChatUI hideHeader /></div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {/* Members bottom sheet */}
+                        <AnimatePresence>
+                            {showUsersPanel && (
+                                <>
+                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                        className="absolute inset-0 bg-black/60 z-30"
+                                        onClick={() => setShowUsersPanel(false)} />
+                                    <motion.div
+                                        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+                                        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                                        className="absolute inset-x-0 bottom-0 z-40 rounded-t-3xl bg-zinc-900 border-t border-zinc-700 flex flex-col"
+                                        style={{ maxHeight: '70vh' }}
+                                    >
+                                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+                                            <h2 className="font-bold text-white flex items-center gap-2">
+                                                <Users size={16} className="text-purple-400" />
+                                                Members &amp; Queue
+                                                <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">{users.length}</span>
+                                            </h2>
+                                            <button onClick={() => setShowUsersPanel(false)} className="p-1.5 text-zinc-400 hover:text-white"><X size={20} /></button>
+                                        </div>
+                                        <div className="flex-1 min-h-0 overflow-y-auto"><UserQueueSidebar compact /></div>
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
+                    </>
+                )}
+
+                {/* ── Mobile Landscape Lower Half ── */}
+                {!isDesktop && !isPortrait && (
+                    <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border-b border-zinc-800 shrink-0">
+                            <button onClick={() => setShowUsersPanel(v => !v)}
+                                className="flex items-center gap-2 text-xs text-zinc-300 hover:text-white transition-colors">
+                                <Users size={13} className="text-purple-400" />
+                                <span className="font-medium">{users.length} Members</span>
+                                {showUsersPanel ? <ChevronUp size={12} className="text-zinc-400" /> : <ChevronDown size={12} className="text-zinc-400" />}
+                            </button>
+                        </div>
+                        <AnimatePresence initial={false}>
+                            {showUsersPanel && (
+                                <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden shrink-0 border-b border-zinc-800">
+                                    <div className="max-h-28 overflow-y-auto"><UserQueueSidebar compact /></div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                        <div className="flex-1 min-h-0"><ChatUI /></div>
+                    </div>
+                )}
             </div>
         </div>
     );
