@@ -568,7 +568,11 @@ const VideoPlayer = () => {
                                             playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 }
                                         },
                                         file: {
-                                            attributes: { preload: 'auto', crossOrigin: 'anonymous' },
+                                            // crossOrigin: 'anonymous' breaks archive.org CDN servers
+                                            // — only apply it for non-archive URLs (needed for subtitles)
+                                            attributes: isArchive
+                                                ? { preload: 'auto' }
+                                                : { preload: 'auto', crossOrigin: 'anonymous' },
                                             tracks: subtitleTracks
                                                 .filter(t => !t.isNative)
                                                 .map(t => ({ kind: 'subtitles', src: t.src, srcLang: t.srcLang, label: t.label, default: t.default }))
@@ -589,6 +593,13 @@ const VideoPlayer = () => {
                                             <p>2. Click <strong>Share</strong> → change to <strong>Anyone with the link</strong></p>
                                             <p>3. Set role to <strong>Viewer</strong></p>
                                             <p>4. Copy the share link and paste it again here</p>
+                                        </div>
+                                    )}
+                                    {isArchive && (
+                                        <div className="border border-orange-500/30 bg-orange-500/10 rounded-xl p-4 text-xs text-orange-200 max-w-sm text-left space-y-1">
+                                            <p className="font-semibold text-orange-300 mb-2">Archive.org tips:</p>
+                                            <p>⏳ If you <strong>just uploaded</strong> the file, wait <strong>5–15 minutes</strong> for archive.org to finish processing it, then try again.</p>
+                                            <p>🔒 Make sure the item is set to <strong>Public</strong> in archive.org settings.</p>
                                         </div>
                                     )}
                                 </div>
