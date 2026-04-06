@@ -195,18 +195,43 @@ const VideoPlayer = () => {
 
     // ── 3. Drift correction – GDrive native video viewers ────────────────────
     useEffect(() => {
-        if (!isGDriveProxy || isPrivileged || !nativeVideoRef.current) return;
+        if (!isGDriveProxy || !nativeVideoRef.current) return;
+        if (isPrivileged) {
+             nativeVideoRef.current.playbackRate = 1.0;
+             return;
+        }
         const stateTime   = videoState.playedSeconds || 0;
         const currentTime = nativeVideoRef.current.currentTime || 0;
         const seekVer     = videoState.seekVersion ?? 0;
         const isForcedSeek = seekVer !== prevSeekVersionGDriveRef.current;
         prevSeekVersionGDriveRef.current = seekVer;
         
+        const drift = currentTime - stateTime;
+
         // If it's a forced seek (host clicked timeline), always seek.
-        // If it's just drift, ONLY correct if the video has actually buffered enough data to play (readyState >= 3).
-        // If readyState < 3, it's buffering. Seeking now will abort the download and cause frame-by-frame stuttering.
-        if (isForcedSeek || (nativeVideoRef.current.readyState >= 3 && Math.abs(currentTime - stateTime) > DRIFT_THRESHOLD)) {
+        if (isForcedSeek) {
             nativeVideoRef.current.currentTime = stateTime;
+            nativeVideoRef.current.playbackRate = 1.0;
+            return;
+        }
+
+        // If it's just drift, ONLY correct if the video has actually buffered enough data to play (readyState >= 3).
+        // Seeking the proxy stream aborts the download and causes frame-by-frame stuttering, so we softly adjust speed.
+        if (nativeVideoRef.current.readyState >= 3) {
+            if (Math.abs(drift) > 10) {
+                // Large drift (>10s) means we are hopelessly desynced, do a hard seek.
+                nativeVideoRef.current.currentTime = stateTime;
+                nativeVideoRef.current.playbackRate = 1.0;
+            } else if (drift < -1.5) {
+                // Viewer is >1.5s behind host, gently speed up
+                nativeVideoRef.current.playbackRate = 1.15;
+            } else if (drift > 1.5) {
+                // Viewer is >1.5s ahead of host, safely slow down
+                nativeVideoRef.current.playbackRate = 0.85;
+            } else {
+                // Within 1.5s, play normally at normal speed
+                nativeVideoRef.current.playbackRate = 1.0;
+            }
         }
     }, [videoState.playedSeconds, videoState.seekVersion, isGDriveProxy, isPrivileged]);
 
