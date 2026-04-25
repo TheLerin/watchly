@@ -192,7 +192,7 @@ const LandingPage = () => {
                             {[{ id:'create', label:'Create Room' }, { id:'join', label:'Join Room' }].map(tab => (
                                 <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                                     className="relative flex-1 py-3 sm:py-4 text-sm sm:text-base font-bold rounded-xl z-10 transition-colors"
-                                    style={{ color: activeTab === tab.id ? '#fff' : 'var(--text-sub)' }}>
+                                    style={{ color: activeTab === tab.id ? 'var(--btn-text)' : 'var(--text-sub)' }}>
                                     {activeTab === tab.id && (
                                         <motion.div layoutId="tab-pill" className="absolute inset-0 rounded-xl z-[-1]"
                                             style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent-2))', boxShadow: '0 4px 16px var(--accent-glow)' }}
