@@ -3,12 +3,12 @@ import { Send, Check } from 'lucide-react';
 import { useRoom } from '../context/RoomContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ROLE_COLOR = { Host: '#a78bfa', Moderator: '#60a5fa' };
-const ROLE_BG    = { Host: 'linear-gradient(135deg,#7c3aed,#4f46e5)', Moderator: 'linear-gradient(135deg,#2563eb,#4f46e5)' };
+const ROLE_COLOR = { Host: 'var(--text)', Moderator: 'var(--text-sub)' };
+const ROLE_BG    = { Host: 'linear-gradient(135deg,var(--accent),var(--accent-2))', Moderator: 'var(--glass-border-top)' };
 
 const Avatar = ({ nickname, role }) => (
-    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-         style={{ background: ROLE_BG[role] || 'var(--glass-border)', boxShadow: role==='Host' ? 'var(--glow-sm-purple)' : 'none' }}>
+    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+         style={{ color: role==='Host' ? 'var(--btn-text)' : 'var(--text)', background: ROLE_BG[role] || 'var(--glass-border)', boxShadow: role==='Host' ? 'var(--glow-sm)' : 'none' }}>
         {nickname?.[0]?.toUpperCase() || '?'}
     </div>
 );
@@ -90,7 +90,7 @@ const ChatUI = ({ hideHeader = false }) => {
                                         )}
                                         <div className="relative px-3 py-2 text-sm leading-relaxed"
                                              style={isMe(msg)
-                                                ? { background:'linear-gradient(135deg,rgba(124,58,237,0.40),rgba(79,70,229,0.38))', color:'var(--text)', border:'1px solid var(--accent-border)', borderBottomRightRadius:4, borderRadius:14, boxShadow:'0 4px 16px var(--accent-glow)' }
+                                                ? { background:'var(--glass-bg-strong)', color:'var(--text)', border:'1px solid var(--accent-border)', borderBottomRightRadius:4, borderRadius:14, boxShadow:'0 4px 16px var(--accent-glow)' }
                                                 : { background:'var(--glass-bg)', color:'var(--text)', border:'1px solid var(--glass-border)', borderTopColor:'var(--glass-border-top)', borderBottomLeftRadius:4, borderRadius:14 }}>
                                             {msg.text}
                                             {!isMe(msg) && msg.role && msg.role !== 'Viewer' && (
@@ -116,8 +116,8 @@ const ChatUI = ({ hideHeader = false }) => {
                         className="glass-input flex-1 py-2.5 px-4 rounded-xl text-sm" />
                     <motion.button type="submit"
                         whileTap={{ scale: 0.92 }}
-                        className="p-2.5 rounded-xl text-white shrink-0 transition-all"
-                        style={{ background:'linear-gradient(135deg,var(--accent),var(--accent-2))', boxShadow: input.trim() ? 'var(--glow-sm-purple)' : 'none' }}>
+                        className="p-2.5 rounded-xl shrink-0 transition-all"
+                        style={{ color: 'var(--btn-text)', background:'linear-gradient(135deg,var(--accent),var(--accent-2))', boxShadow: input.trim() ? 'var(--glow-sm)' : 'none' }}>
                         <AnimatePresence mode="wait">
                             {sent
                                 ? <motion.span key="c" initial={{scale:0}} animate={{scale:1}} exit={{scale:0}}><Check size={15}/></motion.span>

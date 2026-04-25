@@ -83,7 +83,7 @@ async function resolveArchiveUrl(url) {
 const SubtitleMenu = ({ activeSubtitle, setActiveSubtitle, subtitleTracks, showSubMenu, setShowSubMenu, setShowAudioMenu }) => (
     <div className="relative">
         <button onClick={() => { setShowSubMenu(p => !p); setShowAudioMenu(false); }}
-            className="flex items-center gap-1.5 px-3 py-1 text-xs text-purple-300 bg-purple-500/10 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-colors">
+            className="flex items-center gap-1.5 px-3 py-1 text-xs text-gray-300 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors" style={{ background: 'var(--panel-bg)', borderColor: 'var(--border-color)', color: 'var(--text)' }}>
             <SubtitlesIcon size={13} />
             {activeSubtitle === -1 ? 'Subs Off' : (subtitleTracks.find(t => t.index === activeSubtitle)?.label || `Track ${activeSubtitle + 1}`)}
             <ChevronDown size={11} />
@@ -91,12 +91,12 @@ const SubtitleMenu = ({ activeSubtitle, setActiveSubtitle, subtitleTracks, showS
         <AnimatePresence>
             {showSubMenu && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    className="absolute top-full left-0 mt-1 bg-zinc-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40">
+                    className="absolute top-full left-0 mt-1 bg-black/80 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40" style={{ background: 'var(--glass-bg-strong)', borderColor: 'var(--glass-border)' }}>
                     <button onClick={() => { setActiveSubtitle(-1); setShowSubMenu(false); }}
-                        className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === -1 ? 'text-purple-400' : 'text-gray-300'}`}>Off</button>
+                        className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === -1 ? 'font-bold' : ''}`} style={{ color: activeSubtitle === -1 ? 'var(--text)' : 'var(--text-sub)' }}>Off</button>
                     {subtitleTracks.map(t => (
                         <button key={t.index} onClick={() => { setActiveSubtitle(t.index); setShowSubMenu(false); }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === t.index ? 'text-purple-400' : 'text-gray-300'}`}>
+                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === t.index ? 'font-bold' : ''}`} style={{ color: activeSubtitle === t.index ? 'var(--text)' : 'var(--text-sub)' }}>
                             {t.label}{t.language ? ` (${t.language})` : ''}
                         </button>
                     ))}
@@ -109,7 +109,7 @@ const SubtitleMenu = ({ activeSubtitle, setActiveSubtitle, subtitleTracks, showS
 const AudioMenu = ({ activeAudio, setActiveAudio, audioTracks, showAudioMenu, setShowAudioMenu, setShowSubMenu }) => (
     <div className="relative">
         <button onClick={() => { setShowAudioMenu(p => !p); setShowSubMenu(false); }}
-            className="flex items-center gap-1.5 px-3 py-1 text-xs text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors">
+            className="flex items-center gap-1.5 px-3 py-1 text-xs text-gray-300 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors" style={{ background: 'var(--panel-bg)', borderColor: 'var(--border-color)', color: 'var(--text)' }}>
             <Mic size={13} />
             {audioTracks.find(t => t.index === activeAudio)?.label || `Audio ${activeAudio + 1}`}
             <ChevronDown size={11} />
@@ -117,10 +117,10 @@ const AudioMenu = ({ activeAudio, setActiveAudio, audioTracks, showAudioMenu, se
         <AnimatePresence>
             {showAudioMenu && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    className="absolute top-full left-0 mt-1 bg-zinc-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40">
+                    className="absolute top-full left-0 mt-1 bg-black/80 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40" style={{ background: 'var(--glass-bg-strong)', borderColor: 'var(--glass-border)' }}>
                     {audioTracks.map(t => (
                         <button key={t.index} onClick={() => { setActiveAudio(t.index); setShowAudioMenu(false); }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeAudio === t.index ? 'text-blue-400' : 'text-gray-300'}`}>
+                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeAudio === t.index ? 'font-bold' : ''}`} style={{ color: activeAudio === t.index ? 'var(--text)' : 'var(--text-sub)' }}>
                             {t.label}{t.language ? ` (${t.language})` : ''}
                         </button>
                     ))}
@@ -471,29 +471,30 @@ const VideoPlayer = () => {
             {/* ── Control Bar (Host/Mod only) ─────────────────────────── */}
             {isPrivileged && (
                 <div className="flex gap-2 flex-shrink-0">
-                    <form onSubmit={handleLoad} className="flex gap-2 flex-1">
-                        <div className="relative flex-1">
-                            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                    <form onSubmit={handleLoad} className="flex flex-1 items-center gap-1.5 p-1 rounded-xl transition-all" style={{ background: 'var(--glass-bg-strong)', border: '1px solid var(--glass-border-top)', boxShadow: '0 4px 20px var(--accent-glow)' }}>
+                        <div className="relative flex-1 flex items-center">
+                            <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" size={16} style={{ color: 'var(--text-sub)' }} />
                             <input
                                 type="text"
                                 value={inputUrl}
                                 onChange={e => setInputUrl(e.target.value)}
-                                placeholder="YouTube, Vimeo, Google Drive, archive.org or direct video URL..."
-                                className="w-full rounded-xl py-2 pl-10 pr-4 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
-                                style={{ background: 'var(--panel-bg)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
+                                placeholder="Paste YouTube, Vimeo, Google Drive, or direct video URL..."
+                                className="w-full bg-transparent py-2.5 pl-10 pr-4 text-sm focus:outline-none placeholder-gray-500"
+                                style={{ color: 'var(--text)' }}
                             />
                         </div>
-                        <button type="submit" disabled={!inputUrl.trim()}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-xl text-sm font-medium transition-colors">
-                            Load
-                        </button>
-                        {/* BUG-F FIX: use handleQueueAdd which resolves archive.org URLs */}
-                        <button type="button" disabled={!inputUrl.trim()}
-                            onClick={handleQueueAdd}
-                            className="px-3 py-2 text-gray-300 border border-white/10 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-white/5 transition-colors"
-                            style={{ background: 'var(--panel-bg)' }}>
-                            <Plus size={14} /> Queue
-                        </button>
+                        <div className="flex items-center gap-1.5 pr-1 shrink-0">
+                            <button type="submit" disabled={!inputUrl.trim()}
+                                className="px-4 py-2 disabled:opacity-40 rounded-lg text-xs font-bold transition-transform active:scale-95"
+                                style={{ background: 'var(--text)', color: 'var(--bg-base)' }}>
+                                Play Now
+                            </button>
+                            <button type="button" disabled={!inputUrl.trim()} onClick={handleQueueAdd}
+                                className="px-4 py-2 disabled:opacity-40 rounded-lg text-xs font-bold transition-transform active:scale-95"
+                                style={{ background: 'transparent', color: 'var(--text)', border: '1px solid var(--glass-border)' }}>
+                                Queue
+                            </button>
+                        </div>
                     </form>
                     {/* Source badge */}
                     {(() => {
@@ -573,13 +574,13 @@ const VideoPlayer = () => {
                         <motion.div key="empty"
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                             className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse">
-                                <Play size={32} className="text-gray-400 ml-2" />
+                            <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse">
+                                <img src="/logo.png" alt="WatchSync Logo" className="w-12 h-auto opacity-70" />
                             </div>
-                            <h2 className="text-xl font-semibold mb-2 text-gray-200">No Video Playing</h2>
-                            <p className="text-gray-400 max-w-sm text-sm">
+                            <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>No Video Playing</h2>
+                            <p className="text-sm max-w-sm" style={{ color: 'var(--text-sub)' }}>
                                 {isPrivileged
-                                    ? 'Paste a YouTube, Vimeo, Google Drive, or archive.org link and click Load.'
+                                    ? 'Paste a video URL in the bar above and click Play Now to begin syncing.'
                                     : 'Waiting for the host to start a video.'}
                             </p>
                         </motion.div>
@@ -587,6 +588,29 @@ const VideoPlayer = () => {
                         <motion.div key="player"
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             className="absolute inset-0 w-full h-full">
+
+                            {/* ── Loading Skeleton ─────────────────────────────── */}
+                            <AnimatePresence>
+                                {!isPlayerReady && !playerError && (
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 text-center"
+                                        style={{ background: 'var(--bg-base)' }}
+                                    >
+                                        <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse shimmer-pill">
+                                            <img src="/logo.png" alt="Loading" className="w-12 h-auto opacity-50 animate-bounce" />
+                                        </div>
+                                        <h2 className="text-xl font-bold mb-2 animate-pulse" style={{ color: 'var(--text)' }}>
+                                            Buffering stream...
+                                        </h2>
+                                        <div className="w-48 h-2 bg-white/10 rounded-full overflow-hidden mt-2">
+                                            <div className="h-full bg-emerald-400 animate-pulse w-full origin-left" style={{ animation: 'shimmer 1.5s infinite linear' }} />
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
                             {/* ── Google Drive: native <video> ─────────────────── */}
                             {isGDriveProxy && (
@@ -640,14 +664,15 @@ const VideoPlayer = () => {
                                     {/* Autoplay Blocked Overlay */}
                                     {autoplayBlocked && (
                                         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
-                                            <div className="flex flex-col items-center p-6 border border-white/20 bg-zinc-900/90 rounded-2xl shadow-2xl">
-                                                <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4 cursor-pointer hover:bg-purple-500/40 hover:scale-105 transition-all"
+                                            <div className="flex flex-col items-center p-6 border border-white/20 bg-black/90 rounded-2xl shadow-2xl">
+                                                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 cursor-pointer hover:scale-105 transition-all"
+                                                    style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}
                                                     onClick={() => {
                                                         if (nativeVideoRef.current) {
                                                             nativeVideoRef.current.play().then(() => setAutoplayBlocked(false)).catch(console.error);
                                                         }
                                                     }}>
-                                                    <Play size={32} className="text-purple-400 ml-1" />
+                                                    <Play size={32} className="ml-1" style={{ color: 'var(--text)' }} />
                                                 </div>
                                                 <h3 className="text-xl font-bold text-white mb-2">Autoplay Blocked</h3>
                                                 <p className="text-gray-400 text-sm text-center max-w-xs">
@@ -733,15 +758,16 @@ const VideoPlayer = () => {
                                         Previously only shown for the GDrive native <video> path. */}
                                     {autoplayBlocked && !isPrivileged && (
                                         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
-                                            <div className="flex flex-col items-center p-6 border border-white/20 bg-zinc-900/90 rounded-2xl shadow-2xl">
-                                                <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center mb-4 cursor-pointer hover:bg-orange-500/40 hover:scale-105 transition-all"
+                                            <div className="flex flex-col items-center p-6 border border-white/20 bg-black/90 rounded-2xl shadow-2xl">
+                                                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 cursor-pointer hover:scale-105 transition-all"
+                                                    style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}
                                                     onClick={() => {
                                                         const internal = playerRef.current?.getInternalPlayer?.();
                                                         if (internal instanceof HTMLVideoElement) {
                                                             internal.play().then(() => setAutoplayBlocked(false)).catch(console.error);
                                                         }
                                                     }}>
-                                                    <Play size={32} className="text-orange-400 ml-1" />
+                                                    <Play size={32} className="ml-1" style={{ color: 'var(--text)' }} />
                                                 </div>
                                                 <h3 className="text-xl font-bold text-white mb-2">Autoplay Blocked</h3>
                                                 <p className="text-gray-400 text-sm text-center max-w-xs">

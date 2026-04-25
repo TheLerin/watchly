@@ -99,10 +99,7 @@ const Header = ({ roomId, theme, setTheme, leaveRoom, navigate }) => {
         <header className="glass-header flex-none h-14 flex items-center justify-between px-4 sm:px-6 z-40 relative">
             <div className="flex items-center gap-3">
                 <button onClick={() => navigate('/')} className="flex items-center gap-2.5 shrink-0">
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-                         style={{ background:'linear-gradient(135deg,var(--accent),var(--accent-2))', boxShadow:'var(--glow-sm-purple)' }}>
-                        <Play fill="white" size={13} className="ml-0.5" />
-                    </div>
+                    <img src="/logo.png" alt="WatchSync Logo" className="w-8 h-auto" />
                     <span className="syne font-bold text-base hidden sm:block" style={{ color:'var(--text)' }}>WatchSync</span>
                 </button>
                 <div className="hidden sm:block w-px h-5" style={{ background:'var(--glass-border)' }} />
@@ -154,7 +151,7 @@ const RoomLayout = () => {
     if (isRestoringSession) return (
         <>
             <BackgroundLayers />
-            <div className="h-screen w-full flex items-center justify-center relative z-10">
+            <div className="h-[100dvh] w-full flex items-center justify-center relative z-10">
                 <div className="glass-card p-10 flex flex-col items-center gap-5" style={{ borderRadius:24 }}>
                     <div className="w-12 h-12 rounded-full border-4 border-t-transparent"
                          style={{ borderColor:'var(--accent-soft)', borderTopColor:'var(--accent)', animation:'spin 0.9s linear infinite' }} />
@@ -168,9 +165,9 @@ const RoomLayout = () => {
     const videoH = showMobileChat ? 100 - heightPct : 100;
 
     return (
-        <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background:'var(--bg-base)' }}>
+        <div className="h-[100dvh] w-full flex flex-col overflow-hidden" style={{ background:'var(--bg-base)' }}>
             <BackgroundLayers />
-            <div className="relative z-10 flex flex-col h-full">
+            <div className="relative z-10 flex flex-col h-full w-full max-w-[1800px] mx-auto">
                 <Header roomId={roomId} theme={theme} setTheme={setTheme} leaveRoom={leaveRoom} navigate={navigate} />
                 <div className={`flex-1 min-h-0 ${isDesktop ? 'flex' : isPortrait ? 'relative flex flex-col overflow-hidden' : 'flex flex-col'}`}>
 

@@ -3,12 +3,12 @@ import { Crown, Shield, Video, MoreVertical, UserPlus, UserMinus, UserX, ArrowRi
 import { useRoom } from '../context/RoomContext';
 import { AnimatePresence, motion } from 'framer-motion';
 
-const ROLE_BG = { Host:'linear-gradient(135deg,#7c3aed,#4f46e5)', Moderator:'linear-gradient(135deg,#2563eb,#4f46e5)' };
-const ROLE_GLOW = { Host:'var(--glow-sm-purple)', Moderator:'0 0 12px rgba(59,130,246,0.45)' };
+const ROLE_BG = { Host:'linear-gradient(135deg,var(--accent),var(--accent-2))', Moderator:'var(--glass-border-top)' };
+const ROLE_GLOW = { Host:'var(--glow-sm)', Moderator:'none' };
 
 const RoleBadge = ({ role }) => {
-    if (role === 'Host')      return <Crown  size={11} style={{ color:'#a78bfa', filter:'drop-shadow(0 0 4px rgba(167,139,250,0.7))' }} />;
-    if (role === 'Moderator') return <Shield size={11} style={{ color:'#60a5fa', filter:'drop-shadow(0 0 4px rgba(96,165,250,0.6))' }}  />;
+    if (role === 'Host')      return <Crown  size={11} style={{ color:'var(--text)', filter:'drop-shadow(0 0 4px var(--accent-glow))' }} />;
+    if (role === 'Moderator') return <Shield size={11} style={{ color:'var(--text-sub)' }}  />;
     return null;
 };
 
@@ -54,8 +54,8 @@ const UserQueueSidebar = ({ compact = false }) => {
                                      onMouseEnter={e => e.currentTarget.style.background='var(--glass-hover)'}
                                      onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                                     <div className="flex items-center gap-2.5">
-                                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                                             style={{ background: ROLE_BG[user.role] || 'var(--glass-border)', boxShadow: ROLE_GLOW[user.role] || 'none' }}>
+                                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                                             style={{ color: user.role==='Host' ? 'var(--btn-text)' : 'var(--text)', background: ROLE_BG[user.role] || 'var(--glass-border)', boxShadow: ROLE_GLOW[user.role] || 'none' }}>
                                             {user.nickname?.[0]?.toUpperCase() || '?'}
                                         </div>
                                         <div className="flex items-center gap-1.5">
@@ -79,7 +79,7 @@ const UserQueueSidebar = ({ compact = false }) => {
                                             exit={{ opacity:0, scale:0.94, y:-4 }} transition={{ duration:0.14 }}
                                             className="absolute right-8 top-8 w-44 z-50 p-1.5"
                                             style={{ borderRadius:14, background:'var(--glass-bg-strong)', border:'1px solid var(--glass-border)', borderTopColor:'var(--glass-border-top)', backdropFilter:'blur(20px)', boxShadow:'var(--glass-shadow)' }}>
-                                            {currentUser.role==='Host' && user.role==='Viewer'    && <CtxItem icon={<UserPlus  size={13} style={{ color:'#60a5fa' }}/>} label="Promote to Mod"   onClick={() => { promoteUser(user.id); setOpenMenuId(null); }} />}
+                                            {currentUser.role==='Host' && user.role==='Viewer'    && <CtxItem icon={<UserPlus  size={13} style={{ color:'var(--text)' }}/>} label="Promote to Mod"   onClick={() => { promoteUser(user.id); setOpenMenuId(null); }} />}
                                             {currentUser.role==='Host' && user.role==='Moderator' && <CtxItem icon={<UserMinus size={13} style={{ color:'var(--text-muted)' }}/>} label="Demote to Viewer" onClick={() => { demoteUser(user.id); setOpenMenuId(null); }} />}
                                             {currentUser.role==='Host' && <CtxItem icon={<ArrowRight size={13} style={{ color:'var(--accent)' }}/>} label="Transfer Host" onClick={() => { transferHost(user.id); setOpenMenuId(null); }} />}
                                             <div style={{ height:1, background:'var(--glass-border)', margin:'4px 0' }} />
@@ -109,7 +109,7 @@ const UserQueueSidebar = ({ compact = false }) => {
                     {isPrivileged && queue.length > 0 && (
                         <button onClick={playNext} className="flex items-center gap-1 text-xs font-semibold transition-colors"
                             style={{ color:'var(--accent)' }}
-                            onMouseEnter={e => e.currentTarget.style.color='#c4b5fd'}
+                            onMouseEnter={e => e.currentTarget.style.color='var(--text)'}
                             onMouseLeave={e => e.currentTarget.style.color='var(--accent)'}>
                             <SkipForward size={12}/> Play Next
                         </button>

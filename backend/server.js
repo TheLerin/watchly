@@ -303,7 +303,8 @@ io.on('connection', (socket) => {
                     seekVersion: 0
                 },
                 queue: [],
-                kickedUserIds: new Set()
+                kickedUserIds: new Set(),
+                chatHistory: []
             };
         }
 
@@ -339,7 +340,7 @@ io.on('connection', (socket) => {
             existingUsers: rooms[roomId].users.filter(u => u.connected),
             videoState: rooms[roomId].videoState,
             queue: rooms[roomId].queue,
-            chatHistory: []
+            chatHistory: rooms[roomId].chatHistory || []
         });
 
         socket.to(roomId).emit('user_joined', user);
@@ -353,6 +354,18 @@ io.on('connection', (socket) => {
         const key = socket.userId || socket.id;
         if (now - (messageRateLimitMap.get(key) || 0) < 500) return; // silently drop spam
         messageRateLimitMap.set(key, now);
+        
+        // Store in room's chat history so it survives page refreshes
+        if (rooms[roomId]) {
+            if (!rooms[roomId].chatHistory) rooms[roomId].chatHistory = [];
+            rooms[roomId].chatHistory.push(message);
+            if (rooms[roomId].chatHistory.length > 100) {
+                rooms[roomId].chatHistory.shift();
+            }
+        }
+        
+        // Broadcast to everyone in room EXCEPT the sender
+        // (sender already added the message locally via setMessages)
         socket.to(roomId).emit('receive_message', message);
     });
 
