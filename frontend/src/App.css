@@ -1,4 +1,14 @@
-/* App.css — intentionally empty. This file is kept as a placeholder.
- * All app styles are in src/index.css.
- * The Vite scaffold styles that were here have been removed (ISSUE-29).
- */
+/* App.css — app-level glass styles layered on top of index.css */
+
+/* ── Glass toast overrides ──────────────────────────────────────── */
+.glass-toast {
+  background: var(--glass-bg-strong) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-top-color: var(--glass-border-top) !important;
+  color: var(--text) !important;
+  box-shadow: var(--glass-shadow), var(--glass-inner-shadow) !important;
+  font-family: 'DM Sans', sans-serif !important;
+  border-radius: 16px !important;
+}

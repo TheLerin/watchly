@@ -1,345 +1,296 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-    LogOut, Play, Settings, Copy, Users, ChevronDown, ChevronUp,
-    MessageSquare, X, Moon, Sun, Monitor, Menu, GripHorizontal
-} from 'lucide-react';
+import { LogOut, Play, Settings, Copy, Users, ChevronDown, ChevronUp, MessageSquare, X, GripHorizontal, Check, Menu } from 'lucide-react';
 import ChatUI from './ChatUI';
 import UserQueueSidebar from './UserQueueSidebar';
 import VideoPlayer from './VideoPlayer';
 import { useRoom } from '../context/RoomContext';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, THEME_META } from '../context/ThemeContext';
+import { BackgroundLayers } from './LandingPage';
 import toast from 'react-hot-toast';
-
-// ─── Hooks ────────────────────────────────────────────────────────────────────
 
 function useOrientation() {
     const [isPortrait, setIsPortrait] = useState(() => window.innerHeight > window.innerWidth);
     useEffect(() => {
-        const update = () => setIsPortrait(window.innerHeight > window.innerWidth);
-        window.addEventListener('resize', update);
-        window.addEventListener('orientationchange', update);
-        return () => {
-            window.removeEventListener('resize', update);
-            window.removeEventListener('orientationchange', update);
-        };
+        const u = () => setIsPortrait(window.innerHeight > window.innerWidth);
+        window.addEventListener('resize', u, { passive: true });
+        window.addEventListener('orientationchange', u);
+        return () => { window.removeEventListener('resize', u); window.removeEventListener('orientationchange', u); };
     }, []);
     return isPortrait;
 }
 
-// Tracks whether the viewport is ≥ lg (1024 px) — avoids mounting 3 VideoPlayers
 function useIsDesktop() {
-    const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
+    const [v, setV] = useState(() => window.innerWidth >= 1024);
     useEffect(() => {
-        const update = () => setIsDesktop(window.innerWidth >= 1024);
-        window.addEventListener('resize', update);
-        return () => window.removeEventListener('resize', update);
+        const u = () => setV(window.innerWidth >= 1024);
+        window.addEventListener('resize', u, { passive: true });
+        return () => window.removeEventListener('resize', u);
     }, []);
-    return isDesktop;
+    return v;
 }
 
-function useDragResize(defaultPct = 55) {
-    const [heightPct, setHeightPct] = useState(defaultPct);
-    const dragStartY   = useRef(null);
-    const dragStartPct = useRef(null);
-    // BUG-15: Store heightPct in a ref so the stable onDragStart callback can read
-    // the latest value without adding heightPct to its dependency array.
-    const heightPctRef = useRef(defaultPct);
-    useEffect(() => { heightPctRef.current = heightPct; }, [heightPct]);
-
+function useDragResize(def = 52) {
+    const [pct, setPct] = useState(def);
+    const sY = useRef(null), sP = useRef(null), pRef = useRef(def);
+    useEffect(() => { pRef.current = pct; }, [pct]);
     const onDragStart = useCallback((e) => {
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        dragStartY.current   = clientY;
-        dragStartPct.current = heightPctRef.current; // read from ref — always current
-
+        const y0 = e.touches ? e.touches[0].clientY : e.clientY;
+        sY.current = y0; sP.current = pRef.current;
         const onMove = (ev) => {
-            const y      = ev.touches ? ev.touches[0].clientY : ev.clientY;
-            const delta  = dragStartY.current - y;
-            const vhDelta = (delta / window.innerHeight) * 100;
-            setHeightPct(Math.min(85, Math.max(30, dragStartPct.current + vhDelta)));
+            const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
+            setPct(Math.min(85, Math.max(28, sP.current + (sY.current - y) / window.innerHeight * 100)));
         };
         const onEnd = () => {
             document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup',   onEnd);
+            document.removeEventListener('mouseup', onEnd);
             document.removeEventListener('touchmove', onMove);
-            document.removeEventListener('touchend',  onEnd);
+            document.removeEventListener('touchend', onEnd);
         };
         document.addEventListener('mousemove', onMove, { passive: true });
-        document.addEventListener('mouseup',   onEnd);
+        document.addEventListener('mouseup', onEnd);
         document.addEventListener('touchmove', onMove, { passive: true });
-        document.addEventListener('touchend',  onEnd);
-    }, []); // stable — no deps needed
-
-    return { heightPct, onDragStart };
+        document.addEventListener('touchend', onEnd);
+    }, []);
+    return { heightPct: pct, onDragStart };
 }
 
-// ─── Static sub-components (defined OUTSIDE RoomLayout so they never remount) ─
-
-const Header = ({ roomId, theme, showSettingsMenu, setShowSettingsMenu, settingsRef, setTheme, leaveRoom, navigate }) => (
-    <header className="flex-none h-14 bg-zinc-900/95 border-b border-zinc-800 flex items-center justify-between px-3 sm:px-5 z-40 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-600/30">
-                    <Play fill="white" size={14} className="ml-0.5 text-white" />
-                </div>
-                <span className="font-bold text-lg text-white hidden sm:block">WatchSync</span>
-            </button>
-            <div className="hidden sm:block w-px h-5 bg-zinc-700" />
-            <button
-                onClick={() => { navigator.clipboard.writeText(roomId); toast.success('Room ID copied!', { icon: '📋' }); }}
-                className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-full px-2.5 py-1 hover:bg-zinc-700 transition-colors"
-            >
-                <span className="text-zinc-400 text-xs hidden sm:inline">Room:</span>
-                <span className="font-mono font-semibold text-purple-300 text-xs">{roomId}</span>
-                <Copy size={11} className="text-zinc-500" />
-            </button>
-        </div>
-        <div className="flex items-center gap-2">
-            <div className="relative" ref={settingsRef}>
-                <button
-                    onClick={() => setShowSettingsMenu(s => !s)}
-                    className={`p-2 rounded-lg transition-colors ${showSettingsMenu ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-                >
-                    <Settings size={20} />
+const ThemePicker = ({ theme, setTheme, onClose }) => (
+    <motion.div
+        initial={{ opacity:0, scale:0.92, y:-8 }} animate={{ opacity:1, scale:1, y:0 }}
+        exit={{ opacity:0, scale:0.92, y:-8 }} transition={{ type:'spring', damping:22, stiffness:320 }}
+        className="glass-card absolute top-full right-0 mt-2 w-56 z-50 p-3" style={{ borderRadius:18 }}>
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-3 px-1" style={{ color:'var(--text-muted)' }}>Theme</p>
+        <div className="grid grid-cols-2 gap-2">
+            {Object.entries(THEME_META).map(([id, meta]) => (
+                <button key={id} onClick={() => { setTheme(id); onClose(); }}
+                    className="flex flex-col items-center gap-2 p-2.5 rounded-xl transition-all"
+                    style={{ background: theme===id ? 'var(--accent-soft)' : 'var(--glass-bg)', border:`1px solid ${theme===id ? 'var(--accent-border)' : 'var(--glass-border)'}` }}>
+                    <div className="relative w-8 h-8 rounded-full"
+                         style={{ background:`radial-gradient(circle at 40% 40%,${meta.orb[0]},${meta.orb[1]})` }}>
+                        {theme===id && <div className="absolute inset-0 flex items-center justify-center"><Check size={12} className="text-white" /></div>}
+                    </div>
+                    <span className="text-[11px] font-semibold leading-tight" style={{ color: theme===id ? 'var(--accent)' : 'var(--text-sub)' }}>
+                        {meta.emoji} {meta.label}
+                    </span>
                 </button>
-                <AnimatePresence>
-                    {showSettingsMenu && (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: -6 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: -6 }}
-                            transition={{ duration: 0.15 }}
-                            className="absolute top-full right-0 mt-2 w-52 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl z-50 p-2 flex flex-col gap-0.5"
-                        >
-                            <div className="px-3 py-2 mb-1 border-b border-zinc-800">
-                                <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Theme</h3>
-                            </div>
-                            {[
-                                { id: 'dark',   icon: <Moon size={15} />,    label: 'Default Dark' },
-                                { id: 'light',  icon: <Sun size={15} />,     label: 'Light' },
-                                { id: 'amoled', icon: <Monitor size={15} />, label: 'AMOLED Black' }
-                            ].map(t => (
-                                <button key={t.id} onClick={() => { setTheme(t.id); setShowSettingsMenu(false); }}
-                                    className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-left transition-colors ${theme === t.id ? 'bg-purple-500/20 text-purple-300' : 'text-zinc-300 hover:bg-zinc-800'}`}>
-                                    {t.icon} {t.label}
-                                </button>
-                            ))}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-            <button
-                onClick={() => { leaveRoom(); navigate('/'); }}
-                className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg transition-all text-sm font-medium"
-            >
-                <LogOut size={15} />
-                <span className="hidden sm:inline">Leave</span>
-            </button>
+            ))}
         </div>
-    </header>
+    </motion.div>
 );
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const Header = ({ roomId, theme, setTheme, leaveRoom, navigate }) => {
+    const [showSettings, setShowSettings] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const ref = useRef(null);
+    useEffect(() => {
+        const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setShowSettings(false); };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, []);
+    const copyCode = () => {
+        navigator.clipboard.writeText(roomId);
+        setCopied(true);
+        toast.success('Room code copied!', { icon:'📋' });
+        setTimeout(() => setCopied(false), 2000);
+    };
+    return (
+        <header className="glass-header flex-none h-14 flex items-center justify-between px-4 sm:px-6 z-40 relative">
+            <div className="flex items-center gap-3">
+                <button onClick={() => navigate('/')} className="flex items-center gap-2.5 shrink-0">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+                         style={{ background:'linear-gradient(135deg,var(--accent),var(--accent-2))', boxShadow:'var(--glow-sm-purple)' }}>
+                        <Play fill="white" size={13} className="ml-0.5" />
+                    </div>
+                    <span className="syne font-bold text-base hidden sm:block" style={{ color:'var(--text)' }}>WatchSync</span>
+                </button>
+                <div className="hidden sm:block w-px h-5" style={{ background:'var(--glass-border)' }} />
+                <button onClick={copyCode} className="flex items-center gap-1.5 glass-panel px-3 py-1.5 transition-all" style={{ borderRadius:50 }}>
+                    <span className="text-[10px] font-medium hidden sm:inline" style={{ color:'var(--text-muted)' }}>ROOM</span>
+                    <span className="font-mono font-bold text-xs" style={{ color:'var(--accent)' }}>{roomId}</span>
+                    <AnimatePresence mode="wait">
+                        {copied
+                            ? <motion.span key="c" initial={{scale:0}} animate={{scale:1}} exit={{scale:0}}><Check size={10} style={{ color:'#22c55e' }}/></motion.span>
+                            : <motion.span key="d" initial={{scale:0}} animate={{scale:1}} exit={{scale:0}}><Copy size={10} style={{ color:'var(--text-muted)' }}/></motion.span>}
+                    </AnimatePresence>
+                </button>
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="relative" ref={ref}>
+                    <button onClick={() => setShowSettings(s=>!s)} className="p-2 rounded-lg transition-all"
+                        style={showSettings ? { background:'var(--glass-hover)', color:'var(--text)', border:'1px solid var(--glass-border)' } : { color:'var(--text-sub)' }}>
+                        <Settings size={17} />
+                    </button>
+                    <AnimatePresence>
+                        {showSettings && <ThemePicker theme={theme} setTheme={setTheme} onClose={() => setShowSettings(false)} />}
+                    </AnimatePresence>
+                </div>
+                <button onClick={() => { leaveRoom(); navigate('/'); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
+                    style={{ background:'rgba(239,68,68,0.08)', color:'#f87171', border:'1px solid rgba(239,68,68,0.18)' }}>
+                    <LogOut size={14}/><span className="hidden sm:inline">Leave</span>
+                </button>
+            </div>
+        </header>
+    );
+};
 
 const RoomLayout = () => {
     const { roomId }   = useParams();
     const navigate     = useNavigate();
     const { currentUser, leaveRoom, users, isRestoringSession } = useRoom();
     const { theme, setTheme } = useTheme();
-
-    const [showUsersPanel, setShowUsersPanel]     = useState(false);
-    const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-    const [showMobileChat, setShowMobileChat]     = useState(false);
-    const settingsRef  = useRef(null);
-    const isPortrait   = useOrientation();
-    const isDesktop    = useIsDesktop();
-    const { heightPct, onDragStart } = useDragResize(55);
+    const [showUsersPanel, setShowUsersPanel] = useState(false);
+    const [showMobileChat, setShowMobileChat] = useState(false);
+    const isPortrait  = useOrientation();
+    const isDesktop   = useIsDesktop();
+    const { heightPct, onDragStart } = useDragResize(52);
 
     useEffect(() => {
         if (!currentUser && !isRestoringSession) navigate('/', { replace: true });
     }, [currentUser, isRestoringSession, navigate]);
 
-    useEffect(() => {
-        const close = (e) => {
-            if (settingsRef.current && !settingsRef.current.contains(e.target)) setShowSettingsMenu(false);
-        };
-        document.addEventListener('mousedown', close);
-        return () => document.removeEventListener('mousedown', close);
-    }, []);
-
-    if (isRestoringSession) {
-        return (
-            <div className="h-screen w-full flex items-center justify-center bg-zinc-950">
-                <div className="w-12 h-12 rounded-full border-4 border-purple-500 border-t-transparent animate-spin" />
+    if (isRestoringSession) return (
+        <>
+            <BackgroundLayers />
+            <div className="h-screen w-full flex items-center justify-center relative z-10">
+                <div className="glass-card p-10 flex flex-col items-center gap-5" style={{ borderRadius:24 }}>
+                    <div className="w-12 h-12 rounded-full border-4 border-t-transparent"
+                         style={{ borderColor:'var(--accent-soft)', borderTopColor:'var(--accent)', animation:'spin 0.9s linear infinite' }} />
+                    <p className="syne font-semibold" style={{ color:'var(--text)' }}>Restoring session…</p>
+                </div>
             </div>
-        );
-    }
+        </>
+    );
     if (!currentUser) return null;
 
-    const videoHeightPct = showMobileChat ? 100 - heightPct : 100;
+    const videoH = showMobileChat ? 100 - heightPct : 100;
 
-    // ── Render — unified layout to ensure VideoPlayer NEVER unmounts on resize ──
     return (
-        <div className="h-screen w-full flex flex-col bg-zinc-950 text-white overflow-hidden">
-            {/* Background blobs */}
-            <div className="pointer-events-none fixed top-0 left-1/4 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[120px] -z-0 hidden lg:block" />
-            <div className="pointer-events-none fixed bottom-0 right-1/4 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] -z-0 hidden lg:block" />
+        <div className="h-screen w-full flex flex-col overflow-hidden" style={{ background:'var(--bg-base)' }}>
+            <BackgroundLayers />
+            <div className="relative z-10 flex flex-col h-full">
+                <Header roomId={roomId} theme={theme} setTheme={setTheme} leaveRoom={leaveRoom} navigate={navigate} />
+                <div className={`flex-1 min-h-0 ${isDesktop ? 'flex' : isPortrait ? 'relative flex flex-col overflow-hidden' : 'flex flex-col'}`}>
 
-            <Header
-                roomId={roomId}
-                theme={theme}
-                showSettingsMenu={showSettingsMenu}
-                setShowSettingsMenu={setShowSettingsMenu}
-                settingsRef={settingsRef}
-                setTheme={setTheme}
-                leaveRoom={leaveRoom}
-                navigate={navigate}
-            />
-
-            {/* ── Single unified layout matrix to prevent VideoPlayer unmount ── */}
-            <div className={`flex-1 min-h-0 ${isDesktop ? 'flex' : isPortrait ? 'relative flex flex-col bg-black overflow-hidden' : 'flex flex-col'}`}>
-                
-                {/* ── Fixed DOM Path to Video ── */}
-                <div 
-                    className={
-                        isDesktop ? "flex-1 min-h-0 min-w-0 flex flex-col p-3" :
-                        isPortrait ? "relative bg-black flex-shrink-0 transition-all duration-300" :
-                        "w-full bg-black shrink-0"
-                    }
-                    style={
-                        isDesktop ? {} :
-                        isPortrait ? { height: `${videoHeightPct}%` } :
-                        { height: '55vw', maxHeight: '60vh' }
-                    }
-                >
-                    <div className={
-                        isDesktop ? "flex-1 min-h-0 rounded-2xl overflow-hidden border border-zinc-800 bg-black relative" :
-                        "absolute inset-0 w-full h-full"
-                    }>
-                        <VideoPlayer />
-                        
-                        {/* Mobile Portrait Action Rail */}
-                        {!isDesktop && isPortrait && (
-                            <div className="absolute right-3 bottom-8 flex flex-col items-center gap-4 z-20">
-                                <button onClick={() => setShowUsersPanel(true)} className="flex flex-col items-center gap-1">
-                                    <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center border border-white/20">
-                                        <Menu size={22} className="text-white" />
-                                    </div>
-                                    <span className="text-white text-[10px] font-medium" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>Members</span>
-                                </button>
-                                <button onClick={() => setShowMobileChat(true)} className="flex flex-col items-center gap-1">
-                                    <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur flex items-center justify-center border border-white/20">
-                                        <MessageSquare size={22} className="text-white" />
-                                    </div>
-                                    <span className="text-white text-[10px] font-medium" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>Chat</span>
-                                </button>
-                            </div>
-                        )}
+                    {/* Video */}
+                    <div className={isDesktop ? 'flex-1 min-h-0 min-w-0 p-3 flex flex-col' : isPortrait ? 'relative flex-shrink-0' : 'w-full shrink-0'}
+                         style={isDesktop ? {} : isPortrait ? { height:`${videoH}%`, background:'#000' } : { height:'55vw', maxHeight:'60vh' }}>
+                        <div className={isDesktop ? 'flex-1 min-h-0 relative overflow-hidden video-pulse-border' : 'absolute inset-0 w-full h-full'}
+                             style={isDesktop ? { borderRadius:20, border:'1px solid var(--glass-border)', background:'#000' } : {}}>
+                            <VideoPlayer />
+                            {!isDesktop && isPortrait && (
+                                <div className="absolute right-3 bottom-10 flex flex-col gap-3 z-20">
+                                    {[{ icon:<Menu size={19}/>, label:'Members', fn:() => setShowUsersPanel(true) },
+                                      { icon:<MessageSquare size={19}/>, label:'Chat', fn:() => setShowMobileChat(true) }].map(b => (
+                                        <button key={b.label} onClick={b.fn} className="flex flex-col items-center gap-1">
+                                            <div className="w-11 h-11 rounded-full flex items-center justify-center text-white"
+                                                 style={{ background:'rgba(0,0,0,0.60)', border:'1px solid rgba(255,255,255,0.20)', backdropFilter:'blur(10px)' }}>{b.icon}</div>
+                                            <span className="text-white text-[10px] font-medium" style={{ textShadow:'0 1px 4px rgba(0,0,0,0.9)' }}>{b.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
 
-                {/* ── Desktop Sidebar ── */}
-                {isDesktop && (
-                    <aside className="w-80 xl:w-96 flex-col gap-0 shrink-0 flex p-3 pl-0">
-                        <div className="mb-2 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/60">
-                            <button onClick={() => setShowUsersPanel(v => !v)}
-                                className="flex items-center justify-between w-full px-4 py-3 hover:bg-white/5 transition-colors">
-                                <span className="flex items-center gap-2 text-sm font-semibold text-white">
-                                    <Users size={15} className="text-purple-400" />
-                                    Users &amp; Queue
-                                    <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">{users.length}</span>
-                                </span>
-                                {showUsersPanel ? <ChevronUp size={15} className="text-zinc-400" /> : <ChevronDown size={15} className="text-zinc-400" />}
-                            </button>
-                            <AnimatePresence initial={false}>
-                                {showUsersPanel && (
-                                    <motion.div key="p" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden border-t border-zinc-800">
-                                        <div className="max-h-64 overflow-y-auto"><UserQueueSidebar compact /></div>
+                    {/* Desktop sidebar */}
+                    {isDesktop && (
+                        <aside className="w-80 xl:w-96 shrink-0 flex flex-col p-3 pl-0">
+                            <div className="mb-2 glass-panel rounded-2xl overflow-hidden">
+                                <button onClick={() => setShowUsersPanel(v=>!v)}
+                                    className="flex items-center justify-between w-full px-4 py-3 hover:brightness-110 transition-all">
+                                    <span className="flex items-center gap-2 text-sm font-semibold syne" style={{ color:'var(--text)' }}>
+                                        <Users size={14} style={{ color:'var(--accent)' }}/>
+                                        Users &amp; Queue
+                                        <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background:'var(--accent-soft)', color:'var(--accent)', border:'1px solid var(--accent-border)' }}>{users.length}</span>
+                                    </span>
+                                    {showUsersPanel ? <ChevronUp size={13} style={{ color:'var(--text-muted)' }}/> : <ChevronDown size={13} style={{ color:'var(--text-muted)' }}/>}
+                                </button>
+                                <AnimatePresence initial={false}>
+                                    {showUsersPanel && (
+                                        <motion.div key="up" initial={{ height:0, opacity:0 }} animate={{ height:'auto', opacity:1 }}
+                                            exit={{ height:0, opacity:0 }} transition={{ duration:0.22 }}
+                                            className="overflow-hidden" style={{ borderTop:'1px solid var(--glass-border)' }}>
+                                            <div className="max-h-60 overflow-y-auto"><UserQueueSidebar compact /></div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                            <div className="flex-1 min-h-0"><ChatUI /></div>
+                        </aside>
+                    )}
+
+                    {/* Mobile portrait overlays */}
+                    {!isDesktop && isPortrait && (
+                        <>
+                            <AnimatePresence>
+                                {showMobileChat && (
+                                    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                                        className="absolute bottom-0 inset-x-0 flex flex-col z-30"
+                                        style={{ height:`${heightPct}%`, background:'var(--bg-base)', borderTop:'1px solid var(--glass-border)' }}>
+                                        <div className="flex items-center justify-between px-4 py-2 cursor-row-resize select-none shrink-0"
+                                             style={{ background:'var(--glass-bg)', borderBottom:'1px solid var(--glass-border)' }}
+                                             onMouseDown={onDragStart} onTouchStart={onDragStart}>
+                                            <div className="flex items-center gap-2">
+                                                <GripHorizontal size={14} style={{ color:'var(--text-muted)' }}/>
+                                                <span className="text-sm font-semibold syne" style={{ color:'var(--text)' }}>Live Chat</span>
+                                            </div>
+                                            <button onClick={() => setShowMobileChat(false)} style={{ color:'var(--text-sub)' }}><X size={17}/></button>
+                                        </div>
+                                        <div className="flex-1 min-h-0"><ChatUI hideHeader /></div>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
-                        </div>
-                        <div className="flex-1 min-h-0"><ChatUI /></div>
-                    </aside>
-                )}
+                            <AnimatePresence>
+                                {showUsersPanel && (
+                                    <>
+                                        <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                                            className="absolute inset-0 z-30"
+                                            style={{ background:'rgba(0,0,0,0.60)', backdropFilter:'blur(6px)' }}
+                                            onClick={() => setShowUsersPanel(false)} />
+                                        <motion.div initial={{ y:'100%' }} animate={{ y:0 }} exit={{ y:'100%' }}
+                                            transition={{ type:'spring', damping:28, stiffness:300 }}
+                                            className="absolute inset-x-0 bottom-0 z-40 flex flex-col glass-card"
+                                            style={{ maxHeight:'72vh', borderRadius:'24px 24px 0 0' }}>
+                                            <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom:'1px solid var(--glass-border)' }}>
+                                                <h2 className="syne font-bold flex items-center gap-2" style={{ color:'var(--text)' }}>
+                                                    <Users size={15} style={{ color:'var(--accent)' }}/> Members
+                                                    <span className="text-xs px-1.5 rounded-full" style={{ background:'var(--accent-soft)', color:'var(--accent)' }}>{users.length}</span>
+                                                </h2>
+                                                <button onClick={() => setShowUsersPanel(false)} style={{ color:'var(--text-sub)' }}><X size={19}/></button>
+                                            </div>
+                                            <div className="flex-1 min-h-0 overflow-y-auto"><UserQueueSidebar compact /></div>
+                                        </motion.div>
+                                    </>
+                                )}
+                            </AnimatePresence>
+                        </>
+                    )}
 
-                {/* ── Mobile Portrait Overlays ── */}
-                {!isDesktop && isPortrait && (
-                    <>
-                        {/* Resizable Chat sheet */}
-                        <AnimatePresence>
-                            {showMobileChat && (
-                                <motion.div
-                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                    className="absolute bottom-0 inset-x-0 flex flex-col bg-zinc-950 border-t border-zinc-700 z-30"
-                                    style={{ height: `${heightPct}%` }}
-                                >
-                                    <div className="flex items-center justify-between px-4 py-2 cursor-row-resize select-none shrink-0 bg-zinc-900 border-b border-zinc-800"
-                                        onMouseDown={onDragStart} onTouchStart={onDragStart}>
-                                        <div className="flex items-center gap-2">
-                                            <GripHorizontal size={16} className="text-zinc-500" />
-                                            <span className="text-sm font-semibold text-white">Live Chat</span>
-                                        </div>
-                                        <button onClick={() => setShowMobileChat(false)} className="p-1.5 text-zinc-400 hover:text-white">
-                                            <X size={18} />
-                                        </button>
-                                    </div>
-                                    <div className="flex-1 min-h-0"><ChatUI hideHeader /></div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        {/* Members bottom sheet */}
-                        <AnimatePresence>
-                            {showUsersPanel && (
-                                <>
-                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                        className="absolute inset-0 bg-black/60 z-30"
-                                        onClick={() => setShowUsersPanel(false)} />
-                                    <motion.div
-                                        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-                                        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-                                        className="absolute inset-x-0 bottom-0 z-40 rounded-t-3xl bg-zinc-900 border-t border-zinc-700 flex flex-col"
-                                        style={{ maxHeight: '70vh' }}
-                                    >
-                                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
-                                            <h2 className="font-bold text-white flex items-center gap-2">
-                                                <Users size={16} className="text-purple-400" />
-                                                Members &amp; Queue
-                                                <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">{users.length}</span>
-                                            </h2>
-                                            <button onClick={() => setShowUsersPanel(false)} className="p-1.5 text-zinc-400 hover:text-white"><X size={20} /></button>
-                                        </div>
-                                        <div className="flex-1 min-h-0 overflow-y-auto"><UserQueueSidebar compact /></div>
-                                    </motion.div>
-                                </>
-                            )}
-                        </AnimatePresence>
-                    </>
-                )}
-
-                {/* ── Mobile Landscape Lower Half ── */}
-                {!isDesktop && !isPortrait && (
-                    <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                        <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border-b border-zinc-800 shrink-0">
-                            <button onClick={() => setShowUsersPanel(v => !v)}
-                                className="flex items-center gap-2 text-xs text-zinc-300 hover:text-white transition-colors">
-                                <Users size={13} className="text-purple-400" />
+                    {/* Mobile landscape */}
+                    {!isDesktop && !isPortrait && (
+                        <div className="flex-1 min-h-0 flex flex-col">
+                            <button onClick={() => setShowUsersPanel(v=>!v)}
+                                className="flex items-center gap-2 text-xs px-3 py-2 shrink-0"
+                                style={{ background:'var(--glass-bg)', borderBottom:'1px solid var(--glass-border)', color:'var(--text-sub)' }}>
+                                <Users size={12} style={{ color:'var(--accent)' }}/>
                                 <span className="font-medium">{users.length} Members</span>
-                                {showUsersPanel ? <ChevronUp size={12} className="text-zinc-400" /> : <ChevronDown size={12} className="text-zinc-400" />}
+                                {showUsersPanel ? <ChevronUp size={11}/> : <ChevronDown size={11}/>}
                             </button>
+                            <AnimatePresence initial={false}>
+                                {showUsersPanel && (
+                                    <motion.div initial={{ height:0 }} animate={{ height:'auto' }} exit={{ height:0 }}
+                                        className="overflow-hidden shrink-0" style={{ borderBottom:'1px solid var(--glass-border)' }}>
+                                        <div className="max-h-28 overflow-y-auto"><UserQueueSidebar compact /></div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                            <div className="flex-1 min-h-0"><ChatUI /></div>
                         </div>
-                        <AnimatePresence initial={false}>
-                            {showUsersPanel && (
-                                <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden shrink-0 border-b border-zinc-800">
-                                    <div className="max-h-28 overflow-y-auto"><UserQueueSidebar compact /></div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                        <div className="flex-1 min-h-0"><ChatUI /></div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

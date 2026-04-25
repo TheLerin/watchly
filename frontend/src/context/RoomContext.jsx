@@ -298,8 +298,11 @@ export const RoomProvider = ({ children }) => {
     }, [roomId]);
 
     const seekVideo = useCallback((seconds) => {
-        // Fix 3: Do not double-increment seekVersion locally on the host; wait for server sync to avoid viewer divergence
-        setVideoState(prev => ({ ...prev, playedSeconds: seconds }));
+        // BUG-J FIX: Increment seekVersion locally on the host so that:
+        // 1. State stays consistent with viewers (who increment via onVideoSeeked).
+        // 2. A re-seek to the exact same timestamp still triggers isForcedSeek
+        //    on viewers instead of being silently ignored.
+        setVideoState(prev => ({ ...prev, playedSeconds: seconds, seekVersion: (prev.seekVersion || 0) + 1 }));
         socket.emit('seek_video', { roomId, playedSeconds: seconds });
     }, [roomId]);
 

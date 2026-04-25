@@ -51,39 +51,38 @@ async function trace() {
             break;
         }
 
-        if (ct.includes('text/html')) {
-            const chunks = [];
-            for await (const c of r.data) chunks.push(Buffer.from(c));
-            const html = Buffer.concat(chunks).toString('utf-8');
-            console.log('HTML length:', html.length);
-            console.log('HTML snippet:', html.slice(0, 300).replace(/\s+/g, ' '));
+        // B10/Q10 FIX: Removed redundant `if (ct.includes('text/html'))` wrapper.
+        // At this point ct is always text/html (the guard above handles the non-HTML path).
+        // The trailing bare `break` was unreachable and has been removed.
+        const chunks = [];
+        for await (const c of r.data) chunks.push(Buffer.from(c));
+        const html = Buffer.concat(chunks).toString('utf-8');
+        console.log('HTML length:', html.length);
+        console.log('HTML snippet:', html.slice(0, 300).replace(/\s+/g, ' '));
 
-            const formMatch = html.match(/action="(https?:\/\/[^"]*download[^"]*)"/i)
-                           || html.match(/action="([^"]*\/download[^"]*)"/i);
-            const confirmMatch = html.match(/[?&]confirm=([0-9A-Za-z_-]+)/)
-                              || html.match(/name=["']confirm["'][^>]*value=["']([^"']+)["']/i);
-            const uuidMatch = html.match(/name=["']uuid["'][^>]*value=["']([^"']+)["']/i);
+        const formMatch = html.match(/action="(https?:\/\/[^"]*download[^"]*)"/)
+                       || html.match(/action="([^"]*\/download[^"]*)"/i);
+        const confirmMatch = html.match(/[?&]confirm=([0-9A-Za-z_-]+)/)
+                          || html.match(/name=["']confirm["'][^>]*value=["']([^"']+)["']/i);
+        const uuidMatch = html.match(/name=["']uuid["'][^>]*value=["']([^"']+)["']/i);
 
-            console.log('Form action found:', formMatch ? formMatch[1].slice(0,80) : 'NONE');
-            console.log('Confirm token:', confirmMatch ? confirmMatch[1] : 'NONE');
-            console.log('UUID:', uuidMatch ? uuidMatch[1] : 'NONE');
+        console.log('Form action found:', formMatch ? formMatch[1].slice(0,80) : 'NONE');
+        console.log('Confirm token:', confirmMatch ? confirmMatch[1] : 'NONE');
+        console.log('UUID:', uuidMatch ? uuidMatch[1] : 'NONE');
 
-            if (formMatch) {
-                url = formMatch[1].replace(/&amp;/g, '&');
-                if (!url.startsWith('http')) url = 'https://drive.google.com' + url;
-            } else if (confirmMatch) {
-                const confirm = confirmMatch[1];
-                const uuid = uuidMatch ? uuidMatch[1] : null;
-                url = `https://drive.usercontent.google.com/download?id=${TEST_ID}&export=download&confirm=${confirm}`;
-                if (uuid) url += `&uuid=${uuid}`;
-            } else {
-                console.log('\n❌ Could not find any download link in the HTML');
-                break;
-            }
-            continue;
+        if (formMatch) {
+            url = formMatch[1].replace(/&amp;/g, '&');
+            if (!url.startsWith('http')) url = 'https://drive.google.com' + url;
+        } else if (confirmMatch) {
+            const confirm = confirmMatch[1];
+            const uuid = uuidMatch ? uuidMatch[1] : null;
+            url = `https://drive.usercontent.google.com/download?id=${TEST_ID}&export=download&confirm=${confirm}`;
+            if (uuid) url += `&uuid=${uuid}`;
+        } else {
+            console.log('\n❌ Could not find any download link in the HTML');
+            break;
         }
-
-        break;
+        continue;
     }
 }
 

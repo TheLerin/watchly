@@ -12,7 +12,10 @@ const DRIFT_THRESHOLD = 2;
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 function rewriteGDriveUrl(url) {
-    if (!url || !url.includes('drive.google.com')) return url;
+    if (!url) return url;
+    // Match both share links and direct usercontent links
+    const isGDrive = url.includes('drive.google.com') || url.includes('drive.usercontent.google.com');
+    if (!isGDrive) return url;
     let fileId = null;
     const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
     if (m1) fileId = m1[1];
@@ -24,14 +27,16 @@ function rewriteGDriveUrl(url) {
     return `${BACKEND_URL}/api/proxy/gdrive?id=${fileId}`;
 }
 
-// Resolves an archive.org/details/ page URL into a direct streamable .mp4 URL
+
+// Resolves an archive.org/details/ page URL into a direct streamable video URL
 // by fetching the item's metadata from the archive.org API.
+// BUG-A FIX: Added .ogv/.webm fallback so more items resolve successfully.
 async function resolveArchiveUrl(url) {
     if (!url || !url.includes('archive.org')) return url;
 
     // Already a direct download file URL — use as-is
-    const directMatch = url.match(/archive\.org\/download\/([^/?#]+)\/(.+)/);
-    if (directMatch && directMatch[2]) return url;
+    const directMatch = url.match(/archive\.org\/download\/([^/?#]+)\/.+/);
+    if (directMatch) return url;
 
     // Extract identifier from a details page URL
     const detailsMatch = url.match(/archive\.org\/details\/([^/?#]+)/);
@@ -50,9 +55,16 @@ async function resolveArchiveUrl(url) {
             videoFile = files.find(f => f.format === fmt && !f.name.includes('_thumb') && !f.name.includes('.thumbs'));
             if (videoFile) break;
         }
-        // Fallback: any .mp4 file
+        // Fallback 1: any .mp4
         if (!videoFile) {
             videoFile = files.find(f => f.name.endsWith('.mp4') && !f.name.includes('_thumb'));
+        }
+        // Fallback 2: .ogv or .webm (BUG-A: these were not attempted before)
+        if (!videoFile) {
+            videoFile = files.find(f =>
+                (f.name.endsWith('.ogv') || f.name.endsWith('.webm')) &&
+                !f.name.includes('_thumb')
+            );
         }
 
         if (videoFile) {
@@ -139,6 +151,10 @@ const VideoPlayer = () => {
     const playDebounceRef  = useRef(null);
     const pauseDebounceRef = useRef(null);
     const lastSyncedPosRef = useRef(0);
+    // BUG-I FIX: track whether ReactPlayer is currently buffering.
+    // Drift correction must NOT fire during a stall — it restarts the buffer
+    // from a further position, causing an infinite buffering loop on slow connections.
+    const isBufferingRef   = useRef(false);
 
     const prevSeekVersionReactPlayerRef = useRef(0);
     const prevSeekVersionGDriveRef      = useRef(0);
@@ -147,16 +163,16 @@ const VideoPlayer = () => {
     useEffect(() => { videoStateRef.current = videoState; }, [videoState]);
 
     // ── State ─────────────────────────────────────────────────────────────────
-    const [inputUrl, setInputUrl]         = useState('');
+    const [inputUrl, setInputUrl]           = useState('');
     const [isPlayerReady, setIsPlayerReady] = useState(false);
-    const [playerError, setPlayerError]   = useState(null);
+    const [playerError, setPlayerError]     = useState(null);
     const [subtitleTracks, setSubtitleTracks] = useState([]);
-    const [audioTracks, setAudioTracks]   = useState([]);
+    const [audioTracks, setAudioTracks]     = useState([]);
     const [activeSubtitle, setActiveSubtitle] = useState(-1);
-    const [activeAudio, setActiveAudio]   = useState(0);
-    const [showSubMenu, setShowSubMenu]   = useState(false);
+    const [activeAudio, setActiveAudio]     = useState(0);
+    const [showSubMenu, setShowSubMenu]     = useState(false);
     const [showAudioMenu, setShowAudioMenu] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isFullscreen, setIsFullscreen]   = useState(false);
     const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
     // ── Fullscreen Listeners ──────────────────────────────────────────────────
@@ -193,6 +209,7 @@ const VideoPlayer = () => {
         setActiveSubtitle(-1);
         setActiveAudio(0);
         lastSyncedPosRef.current = 0;
+        isBufferingRef.current   = false;
         prevSeekVersionReactPlayerRef.current = videoState.seekVersion ?? 0;
         prevSeekVersionGDriveRef.current      = videoState.seekVersion ?? 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -210,8 +227,13 @@ const VideoPlayer = () => {
     }, [subtitleTracks]);
 
     // ── 2. Drift correction – ReactPlayer viewers ─────────────────────────────
+    // BUG-I FIX: Guard against buffering. When the player is stalled, seeking
+    // to the host's ever-advancing time restarts the buffer from a further
+    // position → infinite buffer death-loop. We skip correction until playback resumes.
     useEffect(() => {
         if (isPrivileged || !isPlayerReady || !playerRef.current || isGDriveProxy) return;
+        if (isBufferingRef.current) return; // BUG-I: skip during buffer stall
+
         const stateTime    = videoState.playedSeconds || 0;
         const internalTime = playerRef.current.getCurrentTime() || 0;
         const seekVer      = videoState.seekVersion ?? 0;
@@ -231,27 +253,24 @@ const VideoPlayer = () => {
         const seekVer     = videoState.seekVersion ?? 0;
         const isForcedSeek = seekVer !== prevSeekVersionGDriveRef.current;
         prevSeekVersionGDriveRef.current = seekVer;
-        
+
         if (isForcedSeek) {
             nativeVideoRef.current.currentTime = stateTime;
             if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
         } else if (nativeVideoRef.current.readyState >= 3 && !nativeVideoRef.current.paused) {
-            // Use subtle playbackRate to smoothly catch up instead of hard seeking or aggressive fast-forwarding,
-            // which causes buffer starvation and "1 frame per sec" stuttering on marginal proxy connections.
+            // Use subtle playbackRate to smoothly catch up instead of hard seeking,
+            // which causes buffer starvation on marginal proxy connections.
             const diff = stateTime - currentTime; // Positive means host is ahead
-            
+
             if (Math.abs(diff) > 15) {
                 // Way out of sync (or joined late), force jump
                 nativeVideoRef.current.currentTime = stateTime;
                 if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
             } else if (diff > 5) {
-                // Viewer is lagging behind -> slow/subtle speed up (1.05x instead of 1.25x)
                 if (nativeVideoRef.current.playbackRate !== 1.05) nativeVideoRef.current.playbackRate = 1.05;
             } else if (diff < -5) {
-                // Viewer is ahead -> slow down
                 if (nativeVideoRef.current.playbackRate !== 0.95) nativeVideoRef.current.playbackRate = 0.95;
             } else {
-                // Normal sync (within 5 seconds tolerance is fine for streaming)
                 if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
             }
         }
@@ -260,8 +279,7 @@ const VideoPlayer = () => {
     // ── 4. GDrive play / pause control ────────────────────────────────────────
     useEffect(() => {
         if (!isGDriveProxy || !nativeVideoRef.current || !isPlayerReady) return;
-        
-        // Prevent infinite feedback loops by only dispatching if DOM is actually out of sync
+
         if (videoState.isPlaying) {
             if (nativeVideoRef.current.paused) {
                 nativeVideoRef.current.play().catch((err) => {
@@ -274,6 +292,24 @@ const VideoPlayer = () => {
             }
         }
     }, [videoState.isPlaying, isGDriveProxy, isPlayerReady]);
+
+    // ── 4b. BUG-H FIX: Autoplay-blocked detection for ReactPlayer viewers ─────
+    // ReactPlayer forwards the `playing` prop but browsers can silently block
+    // autoplay. We detect this by trying to call play() on the internal element
+    // when the room is in a playing state and the element is paused.
+    useEffect(() => {
+        if (isPrivileged || isGDriveProxy || !isPlayerReady) return;
+        if (videoState.isPlaying) {
+            const internal = playerRef.current?.getInternalPlayer?.();
+            if (internal instanceof HTMLVideoElement && internal.paused) {
+                internal.play().catch(err => {
+                    if (err.name === 'NotAllowedError') setAutoplayBlocked(true);
+                });
+            }
+        } else {
+            setAutoplayBlocked(false);
+        }
+    }, [videoState.isPlaying, isPlayerReady, isPrivileged, isGDriveProxy]);
 
     // ── 5. ReactPlayer onReady ────────────────────────────────────────────────
     const handleReady = useCallback(() => {
@@ -299,7 +335,9 @@ const VideoPlayer = () => {
     }, []);
 
     // ── 6. Host progress sync interval (ReactPlayer + GDrive host) ───────────
-    // FIX: GDrive host was previously excluded — now both player types sync
+    // BUG-G FIX: syncProgress is ONLY called here (every 2s), not in onProgress.
+    // Previously both the interval and onProgress emitted sync_progress, causing
+    // redundant traffic and viewer state race conditions.
     useEffect(() => {
         if (!isPrivileged) return;
         syncIntervalRef.current = setInterval(() => {
@@ -330,38 +368,46 @@ const VideoPlayer = () => {
     }, [activeAudio]);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    const debouncePlay = () => {
+    // P5 FIX: Wrap all helper functions in useCallback so they are stable across renders.
+    // These functions only use refs and stable callbacks, so they never need to re-create
+    // unless the underlying context action changes.
+    const debouncePlay = useCallback(() => {
         clearTimeout(pauseDebounceRef.current);
         clearTimeout(playDebounceRef.current);
         playDebounceRef.current = setTimeout(() => {
             if (!isSeekingRef.current) playVideo();
         }, 200);
-    };
+    }, [playVideo]);
 
-    const debouncePause = (getTime) => {
+    const debouncePause = useCallback((getTime) => {
         clearTimeout(playDebounceRef.current);
         clearTimeout(pauseDebounceRef.current);
         pauseDebounceRef.current = setTimeout(() => {
-            isSeekingRef.current = false;
             if (!isSeekingRef.current) pauseVideo(getTime());
         }, 200);
-    };
+    }, [pauseVideo]);
 
-    const startSeekGuard = () => {
+    const startSeekGuard = useCallback(() => {
         clearTimeout(playDebounceRef.current);
         clearTimeout(pauseDebounceRef.current);
         isSeekingRef.current = true;
-    };
+    }, []);
 
-    const endSeekGuard = (getTime) => {
+    // BUG-D FIX: Reset isSeekingRef to false IMMEDIATELY (not inside the 300ms
+    // timeout). Previously the timeline was:
+    //   onSeek → startSeekGuard (isSeekingRef=true) → endSeekGuard (300ms timer)
+    //   → onPlay → debouncePlay (200ms) → fires while isSeekingRef STILL TRUE
+    //   → playVideo() never called → viewers stayed paused after every host seek.
+    // Now isSeekingRef clears immediately so the 200ms play debounce succeeds.
+    const endSeekGuard = useCallback((getTime) => {
         clearTimeout(seekEndTimerRef.current);
+        isSeekingRef.current = false; // ← clear now, not inside the timeout
         seekEndTimerRef.current = setTimeout(() => {
-            isSeekingRef.current = false;
             const t = getTime();
             lastSyncedPosRef.current = t;
             seekVideo(t);
         }, 300);
-    };
+    }, [seekVideo]);
 
     const handleLoad = async (e) => {
         e.preventDefault();
@@ -380,6 +426,26 @@ const VideoPlayer = () => {
             toast.success('Archive.org link resolved!', { icon: '📼' });
         }
         loadVideo(url);
+        setInputUrl('');
+    };
+
+    // BUG-F FIX: Queue button also resolves archive.org /details/ URLs before
+    // queuing. Previously the raw /details/ page URL was queued, which broke
+    // playback for all viewers when the item was played from the queue.
+    const handleQueueAdd = async () => {
+        if (!inputUrl.trim()) return;
+        let url = inputUrl.trim();
+        if (url.includes('archive.org/details/')) {
+            toast.loading('Resolving archive.org link...', { id: 'archive-resolve-q' });
+            url = await resolveArchiveUrl(url);
+            toast.dismiss('archive-resolve-q');
+            if (url === inputUrl.trim()) {
+                toast.error('Could not find a video file at that archive.org link.');
+                return;
+            }
+        }
+        addToQueue(url, '', url);
+        toast.success('Added to queue');
         setInputUrl('');
     };
 
@@ -412,7 +478,7 @@ const VideoPlayer = () => {
                                 type="text"
                                 value={inputUrl}
                                 onChange={e => setInputUrl(e.target.value)}
-                                placeholder="YouTube, Vimeo, Google Drive link, or direct video URL..."
+                                placeholder="YouTube, Vimeo, Google Drive, archive.org or direct video URL..."
                                 className="w-full rounded-xl py-2 pl-10 pr-4 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
                                 style={{ background: 'var(--panel-bg)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
                             />
@@ -421,8 +487,9 @@ const VideoPlayer = () => {
                             className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-xl text-sm font-medium transition-colors">
                             Load
                         </button>
+                        {/* BUG-F FIX: use handleQueueAdd which resolves archive.org URLs */}
                         <button type="button" disabled={!inputUrl.trim()}
-                            onClick={() => { addToQueue(inputUrl.trim(), '', inputUrl.trim()); toast.success('Added to queue'); setInputUrl(''); }}
+                            onClick={handleQueueAdd}
                             className="px-3 py-2 text-gray-300 border border-white/10 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-white/5 transition-colors"
                             style={{ background: 'var(--panel-bg)' }}>
                             <Plus size={14} /> Queue
@@ -512,7 +579,7 @@ const VideoPlayer = () => {
                             <h2 className="text-xl font-semibold mb-2 text-gray-200">No Video Playing</h2>
                             <p className="text-gray-400 max-w-sm text-sm">
                                 {isPrivileged
-                                    ? 'Paste a YouTube, Vimeo, or Google Drive link and click Load.'
+                                    ? 'Paste a YouTube, Vimeo, Google Drive, or archive.org link and click Load.'
                                     : 'Waiting for the host to start a video.'}
                             </p>
                         </motion.div>
@@ -533,28 +600,32 @@ const VideoPlayer = () => {
                                         controlsList="nodownload"
                                         style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                                         onLoadedMetadata={() => {
-                                            // Fires early — set initial seek position reliably
                                             const stateTime = videoStateRef.current.playedSeconds || 0;
                                             if (stateTime > 2 && nativeVideoRef.current) {
                                                 nativeVideoRef.current.currentTime = stateTime;
                                             }
                                         }}
                                         onCanPlay={() => {
-                                            const wasReady = isPlayerReady;
-                                            setIsPlayerReady(true);
+                                            // B7 FIX: Use functional setIsPlayerReady so we read the
+                                            // *previous* state value instead of the stale closure
+                                            // 'isPlayerReady'. Two rapid onCanPlay calls both saw
+                                            // wasReady=false and called play() twice.
+                                            setIsPlayerReady(prev => {
+                                                if (!prev && videoStateRef.current.isPlaying && nativeVideoRef.current?.paused) {
+                                                    nativeVideoRef.current.play().catch((err) => {
+                                                        if (err.name === 'NotAllowedError') setAutoplayBlocked(true);
+                                                    });
+                                                }
+                                                return true;
+                                            });
                                             setPlayerError(null);
-                                            // Only force play on initial load. If already loaded, let the effect stream or native DOM handle it.
-                                            if (!wasReady && videoStateRef.current.isPlaying && nativeVideoRef.current && nativeVideoRef.current.paused) {
-                                                nativeVideoRef.current.play().catch((err) => {
-                                                    if (err.name === 'NotAllowedError') setAutoplayBlocked(true);
-                                                });
-                                            }
                                         }}
                                         onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged) return; debouncePlay(); }}
                                         onPause={() => { if (!isPrivileged) return; debouncePause(() => nativeVideoRef.current?.currentTime || 0); }}
                                         onSeeking={() => { if (!isPrivileged) return; startSeekGuard(); }}
                                         onSeeked={() => { if (!isPrivileged) return; endSeekGuard(() => nativeVideoRef.current?.currentTime || 0); }}
-                                        onTimeUpdate={() => { /* host sync handled by interval in effect #6 */ }}
+                                        // Q5: Empty onTimeUpdate removed — host sync runs via
+                                        // the setInterval in effect #6, not this event.
                                         onError={() => {
                                             setPlayerError('Could not load Google Drive video. Make sure the file is shared as "Anyone with the link" in Google Drive.');
                                         }}
@@ -588,52 +659,98 @@ const VideoPlayer = () => {
                                 </div>
                             )}
 
-                            {/* ── YouTube / Vimeo / direct URL: ReactPlayer ──────── */}
+                            {/* ── YouTube / Vimeo / Archive / direct URL: ReactPlayer ──────── */}
                             {!isGDriveProxy && playerUrl && (
-                                <ReactPlayer
-                                    ref={playerRef}
-                                    key={playerUrl}
-                                    url={playerUrl}
-                                    playing={videoState.isPlaying}
-                                    controls={isPrivileged || isYouTube}
-                                    width="100%"
-                                    height="100%"
-                                    onReady={handleReady}
-                                    onPlay={() => { if (!isPrivileged) return; debouncePlay(); }}
-                                    onPause={() => { if (!isPrivileged) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
-                                    onSeek={() => {
-                                        if (!isPrivileged) {
-                                            playerRef.current?.seekTo(videoState.playedSeconds, 'seconds');
-                                            return;
-                                        }
-                                        startSeekGuard();
-                                        endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
-                                    }}
-                                    onError={() => setPlayerError('Could not load video.')}
-                                    progressInterval={1000}
-                                    onProgress={(p) => {
-                                        if (!isPrivileged || isSeekingRef.current) return;
-                                        if (Math.abs(p.playedSeconds - lastSyncedPosRef.current) >= SYNC_INTERVAL_MS / 1000) {
+                                <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                                    <ReactPlayer
+                                        ref={playerRef}
+                                        key={playerUrl}
+                                        url={playerUrl}
+                                        playing={videoState.isPlaying}
+                                        // BUG-B FIX: Archive viewers need controls so they can see the play
+                                        // button when autoplay is blocked. Seeking is locked via the
+                                        // transparent overlay rendered below — not by hiding controls.
+                                        controls={isPrivileged || isYouTube || isArchive}
+                                        width="100%"
+                                        height="100%"
+                                        onReady={handleReady}
+                                        onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged) return; debouncePlay(); }}
+                                        onPause={() => { if (!isPrivileged) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
+                                        // BUG-C FIX: Viewers — do NOT snap back to videoState.playedSeconds
+                                        // here. That caused a seek loop (stale closure value → seeks to wrong
+                                        // time → triggers another onSeek → repeat). The seekbar-blocker overlay
+                                        // prevents viewers from dragging; drift correction (effect #2) handles
+                                        // any residual drift. For host — BUG-D is fixed in endSeekGuard.
+                                        onSeek={() => {
+                                            if (!isPrivileged) return; // viewers: blocked by overlay, no-op
+                                            // B8 FIX: ReactPlayer's onSeek fires AFTER seeking completes
+                                            // (equivalent to onSeeked on a native element). Calling
+                                            // startSeekGuard() + endSeekGuard() back-to-back was toggling
+                                            // isSeekingRef on then off in the same tick — the guard was
+                                            // effectively doing nothing. Only endSeekGuard is needed here.
+                                            endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
+                                        }}
+                                        onError={() => setPlayerError('Could not load video.')}
+                                        // BUG-G FIX: syncProgress removed from here. The setInterval in
+                                        // effect #6 is the single source of progress sync for the host.
+                                        // Dual emission caused viewer state races.
+                                        onProgress={(p) => {
                                             lastSyncedPosRef.current = p.playedSeconds;
-                                            syncProgress(p.playedSeconds);
-                                        }
-                                    }}
-                                    config={{
-                                        youtube: {
-                                            playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 }
-                                        },
-                                        file: {
-                                            // crossOrigin: 'anonymous' breaks archive.org CDN servers
-                                            // — only apply it for non-archive URLs (needed for subtitles)
-                                            attributes: isArchive
-                                                ? { preload: 'auto' }
-                                                : { preload: 'auto', crossOrigin: 'anonymous' },
-                                            tracks: subtitleTracks
-                                                .filter(t => !t.isNative)
-                                                .map(t => ({ kind: 'subtitles', src: t.src, srcLang: t.srcLang, label: t.label, default: t.default }))
-                                        }
-                                    }}
-                                />
+                                        }}
+                                        progressInterval={1000}
+                                        // BUG-I FIX: Flip isBufferingRef so drift correction skips during stall
+                                        onBuffer={() => { isBufferingRef.current = true; }}
+                                        onBufferEnd={() => { isBufferingRef.current = false; }}
+                                        config={{
+                                            youtube: {
+                                                playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 }
+                                            },
+                                            file: {
+                                                // crossOrigin: 'anonymous' breaks archive.org CDN servers
+                                                // — only apply it for non-archive URLs (needed for subtitles)
+                                                attributes: isArchive
+                                                    ? { preload: 'auto' }
+                                                    : { preload: 'auto', crossOrigin: 'anonymous' },
+                                                tracks: subtitleTracks
+                                                    .filter(t => !t.isNative)
+                                                    .map(t => ({ kind: 'subtitles', src: t.src, srcLang: t.srcLang, label: t.label, default: t.default }))
+                                            }
+                                        }}
+                                    />
+
+                                    {/* BUG-B FIX: Transparent seekbar blocker for archive.org viewers.
+                                        Archive viewers have controls={true} so they can click play,
+                                        but this overlay prevents them from dragging the seekbar
+                                        independently (which would desync them from the host). */}
+                                    {isArchive && !isPrivileged && (
+                                        <div style={{
+                                            position: 'absolute', bottom: 0, left: 0, right: 0, height: '48px',
+                                            zIndex: 10, cursor: 'not-allowed'
+                                        }} />
+                                    )}
+
+                                    {/* BUG-H FIX: Autoplay-blocked overlay for ReactPlayer (archive + direct).
+                                        Previously only shown for the GDrive native <video> path. */}
+                                    {autoplayBlocked && !isPrivileged && (
+                                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+                                            <div className="flex flex-col items-center p-6 border border-white/20 bg-zinc-900/90 rounded-2xl shadow-2xl">
+                                                <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center mb-4 cursor-pointer hover:bg-orange-500/40 hover:scale-105 transition-all"
+                                                    onClick={() => {
+                                                        const internal = playerRef.current?.getInternalPlayer?.();
+                                                        if (internal instanceof HTMLVideoElement) {
+                                                            internal.play().then(() => setAutoplayBlocked(false)).catch(console.error);
+                                                        }
+                                                    }}>
+                                                    <Play size={32} className="text-orange-400 ml-1" />
+                                                </div>
+                                                <h3 className="text-xl font-bold text-white mb-2">Autoplay Blocked</h3>
+                                                <p className="text-gray-400 text-sm text-center max-w-xs">
+                                                    Your browser paused the video. Click play to sync with the host.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             )}
 
                             {/* ── Error overlay ───────────────────────────────────── */}

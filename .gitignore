@@ -6,3 +6,11 @@ dist/
 .gemini/
 .gsd/
 .agent/
+
+# Q4: Debug/diagnostic artifacts — do not commit these
+backend/log.json
+backend/test-out.txt
+backend/gdrive-html-dump.html
+backend/gdrive-trace.js
+backend/test-*.js
+*.zip

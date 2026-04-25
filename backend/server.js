@@ -15,7 +15,8 @@ const io = new Server(server, {
     cors: {
         origin: FRONTEND_URL,
         methods: ['GET', 'POST']
-    }
+    },
+    maxHttpBufferSize: 1e6  // S6: explicit 1 MB limit (Socket.IO default)
 });
 
 // ── Local BitTorrent Tracker ────────────────────────────────────────────────
@@ -38,9 +39,19 @@ app.get('/', (req, res) => {
 const gdriveCache = new Map(); // id -> { url, cookieJar, timestamp }
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+// P1: Proactively evict expired GDrive cache entries every 30 minutes
+// so the Map doesn't grow unbounded in long-running processes.
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of gdriveCache) {
+        if (now - val.timestamp >= CACHE_TTL_MS) gdriveCache.delete(key);
+    }
+}, 30 * 60 * 1000).unref(); // .unref() so this timer doesn't block process exit
+
 // Handle CORS preflight BEFORE the main handler so Express reaches it first
 app.options('/api/proxy/gdrive', (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // S1/S2: Lock CORS to the known frontend origin (not wildcard)
+    res.setHeader('Access-Control-Allow-Origin', FRONTEND_URL);
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Range');
     res.sendStatus(204);
@@ -59,7 +70,8 @@ app.all('/api/proxy/gdrive', async (req, res) => {
     const REFERER = 'https://drive.google.com/';
 
     const setCorsHeaders = () => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        // S1/S2: Unified CORS — matches the OPTIONS preflight above
+        res.setHeader('Access-Control-Allow-Origin', FRONTEND_URL);
         res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     };
@@ -260,16 +272,18 @@ app.all('/api/proxy/gdrive', async (req, res) => {
     }
 });
 
-// Handle CORS preflight for the proxy route
-app.options('/api/proxy/gdrive', (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Range');
-    res.sendStatus(204);
+// ISSUE-34: Global Express error handler — catches any unhandled route errors
+// and returns a clean JSON response instead of leaking stack traces.
+// Must be registered before server.listen so it's in the middleware chain.
+app.use((err, req, res, next) => {
+    console.error('Unhandled route error:', err.message);
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
-
-
+// S3: Shared rate-limit map keyed by userId so multi-tab users share one bucket
+const messageRateLimitMap = new Map(); // userId -> lastMessageTime
 
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
@@ -331,12 +345,14 @@ io.on('connection', (socket) => {
         socket.to(roomId).emit('user_joined', user);
     });
 
-    // ISSUE-33: Chat rate limit — minimum 500ms between messages per socket
-    let lastMessageTime = 0;
+    // ISSUE-33 / S3: Chat rate limit — minimum 500ms between messages per userId.
+    // Using a shared map (keyed by userId) so a user with multiple tabs can't
+    // bypass the limit by opening extra connections.
     socket.on('send_message', ({ roomId, message }) => {
         const now = Date.now();
-        if (now - lastMessageTime < 500) return; // silently drop spam
-        lastMessageTime = now;
+        const key = socket.userId || socket.id;
+        if (now - (messageRateLimitMap.get(key) || 0) < 500) return; // silently drop spam
+        messageRateLimitMap.set(key, now);
         socket.to(roomId).emit('receive_message', message);
     });
 
@@ -383,19 +399,23 @@ io.on('connection', (socket) => {
         const canKick = sender.role === 'Host' || (sender.role === 'Moderator' && target.role === 'Viewer');
         if (canKick) {
             // BUG-02: Record the userId in the ban list before removing from users array
-            if (rooms[roomId]) {
-                rooms[roomId].kickedUserIds.add(target.userId);
+            if (rooms[roomId]) rooms[roomId].kickedUserIds.add(target.userId);
+
+            // B1 FIX: Fetch the actual Socket object and emit directly.
+            // Using io.to(targetId) works when targetId is the *current* socket ID,
+            // but if the user reconnected the ID has changed. The socket ref is authoritative.
+            const targetSocket = io.sockets.sockets.get(targetId);
+            if (targetSocket) {
+                targetSocket.emit('user_kicked');
+                targetSocket.leave(roomId);
+                targetSocket.roomId = null;
             }
-            io.to(targetId).emit('user_kicked');
+
             if (rooms[roomId] && rooms[roomId].users) {
                 rooms[roomId].users = rooms[roomId].users.filter(u => u.id !== targetId);
             }
             io.to(roomId).emit('user_left', targetId);
-            const targetSocket = io.sockets.sockets.get(targetId);
-            if (targetSocket) {
-                targetSocket.leave(roomId);
-                targetSocket.roomId = null;
-            }
+
             if (rooms[roomId] && rooms[roomId].users.length === 0) {
                 delete rooms[roomId];
             }
@@ -409,6 +429,12 @@ io.on('connection', (socket) => {
         const sender = getUserInRoom(socket.id, roomId);
         if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
             if (rooms[roomId]) {
+                // S4: Reject non-HTTP URLs to prevent javascript:/data: injection.
+                // Torrent magnet URIs are passed via the magnetURI field, not url.
+                if (url && !/^https?:\/\//i.test(url)) {
+                    console.warn(`change_video: rejected non-HTTP url from ${sender.nickname}`);
+                    return;
+                }
                 const newState = { url: url || '', magnetURI: magnetURI || '', isPlaying: true, playedSeconds: 0, updatedAt: Date.now(), seekVersion: 0 };
                 rooms[roomId].videoState = newState;
                 io.to(roomId).emit('video_changed', newState);
@@ -541,6 +567,8 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
         handleDisconnect();
+        // S3: Clean up the rate-limit entry for this user on disconnect
+        if (socket.userId) messageRateLimitMap.delete(socket.userId);
     });
 });
 
@@ -549,11 +577,3 @@ server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
 
-// ISSUE-34: Global Express error handler — catches any unhandled route errors
-// and returns a clean JSON response instead of leaking stack traces.
-app.use((err, req, res, next) => {
-    console.error('Unhandled route error:', err.message);
-    if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});

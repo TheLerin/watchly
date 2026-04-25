@@ -1,154 +1,152 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Crown, Shield, Video, MoreVertical, UserPlus, UserMinus, UserX, ArrowRight, Trash2, PlayCircle, SkipForward } from 'lucide-react';
+import { Crown, Shield, Video, MoreVertical, UserPlus, UserMinus, UserX, ArrowRight, Trash2, PlayCircle, SkipForward } from 'lucide-react';
 import { useRoom } from '../context/RoomContext';
 import { AnimatePresence, motion } from 'framer-motion';
 
-// compact = used as an inlined accordion child (no outer wrapper card needed)
+const ROLE_BG = { Host:'linear-gradient(135deg,#7c3aed,#4f46e5)', Moderator:'linear-gradient(135deg,#2563eb,#4f46e5)' };
+const ROLE_GLOW = { Host:'var(--glow-sm-purple)', Moderator:'0 0 12px rgba(59,130,246,0.45)' };
+
+const RoleBadge = ({ role }) => {
+    if (role === 'Host')      return <Crown  size={11} style={{ color:'#a78bfa', filter:'drop-shadow(0 0 4px rgba(167,139,250,0.7))' }} />;
+    if (role === 'Moderator') return <Shield size={11} style={{ color:'#60a5fa', filter:'drop-shadow(0 0 4px rgba(96,165,250,0.6))' }}  />;
+    return null;
+};
+
+const CtxItem = ({ icon, label, danger, onClick }) => (
+    <button onClick={onClick}
+        className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors rounded-lg"
+        style={{ color: danger ? '#f87171' : 'var(--text)' }}
+        onMouseEnter={e => e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.08)' : 'var(--glass-hover)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+        {icon}{label}
+    </button>
+);
+
 const UserQueueSidebar = ({ compact = false }) => {
     const { users, currentUser, promoteUser, demoteUser, transferHost, kickUser, queue, removeFromQueue, playNext } = useRoom();
     const [openMenuId, setOpenMenuId] = useState(null);
-
     const isPrivileged = currentUser?.role === 'Host' || currentUser?.role === 'Moderator';
 
     useEffect(() => {
-        const handleClickOutside = () => setOpenMenuId(null);
-        document.addEventListener('click', handleClickOutside);
-        return () => document.removeEventListener('click', handleClickOutside);
+        const close = () => setOpenMenuId(null);
+        document.addEventListener('click', close);
+        return () => document.removeEventListener('click', close);
     }, []);
 
-    const panelStyle = { background: 'var(--panel-bg)', border: '1px solid var(--border-color)' };
-    const headerStyle = { borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)' };
+    return (
+        <div className={`flex flex-col ${compact ? '' : 'h-full gap-3'}`}>
 
-    const content = (
-        <>
-            {/* ── Users Section ── */}
-            <div className={`${compact ? '' : 'flex-1'} overflow-hidden flex flex-col min-h-0 ${compact ? '' : 'rounded-2xl'}`}
-                style={compact ? {} : panelStyle}>
-                <div className="px-4 py-2.5 flex items-center justify-between shrink-0" style={headerStyle}>
-                    <h3 className="font-semibold text-sm flex items-center gap-2" style={{ color: 'var(--text-color)' }}>
-                        <Users size={14} className="text-purple-400" /> Users
+            {/* ── Users ── */}
+            <div className={compact ? '' : 'glass-panel rounded-2xl overflow-hidden flex flex-col'}>
+                <div className="px-4 py-2.5 flex items-center justify-between shrink-0"
+                     style={{ borderBottom:'1px solid var(--glass-border)', background:'var(--glass-bg)' }}>
+                    <h3 className="syne font-semibold text-sm flex items-center gap-2" style={{ color:'var(--text)' }}>
+                        Users <span className="text-xs" style={{ color:'var(--text-muted)' }}>{users.length} online</span>
                     </h3>
-                    <span className="text-xs text-gray-400">{users.length} Online</span>
                 </div>
-                <div className="overflow-y-auto p-2 space-y-0.5">
-                    {users.map(user => (
-                        <div key={user.id} className="relative group">
-                            <div className="flex items-center justify-between px-2 py-1.5 hover:bg-white/5 rounded-lg transition-colors cursor-default">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: 'var(--text-color)' }}>
-                                        {user.nickname} {currentUser?.id === user.id && <span className="text-xs text-gray-500">(You)</span>}
-                                    </span>
-                                    {user.role === 'Host' && <Crown size={13} className="text-purple-400" />}
-                                    {user.role === 'Moderator' && <Shield size={13} className="text-blue-400" />}
-                                </div>
-
-                                {currentUser && currentUser.id !== user.id &&
-                                    (currentUser.role === 'Host' || (currentUser.role === 'Moderator' && user.role === 'Viewer')) && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === user.id ? null : user.id); }}
-                                            className="p-1 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-white/10 text-gray-400 transition-all"
-                                        >
-                                            <MoreVertical size={13} />
+                <div className="p-2 space-y-0.5 overflow-y-auto">
+                    {users.map(user => {
+                        const isMe = currentUser?.id === user.id;
+                        const canManage = currentUser && !isMe && (currentUser.role==='Host' || (currentUser.role==='Moderator' && user.role==='Viewer'));
+                        return (
+                            <div key={user.id} className="relative group">
+                                <div className="flex items-center justify-between px-2 py-2 rounded-xl transition-all"
+                                     onMouseEnter={e => e.currentTarget.style.background='var(--glass-hover)'}
+                                     onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                                             style={{ background: ROLE_BG[user.role] || 'var(--glass-border)', boxShadow: ROLE_GLOW[user.role] || 'none' }}>
+                                            {user.nickname?.[0]?.toUpperCase() || '?'}
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-sm font-medium" style={{ color:'var(--text)' }}>{user.nickname}</span>
+                                            {isMe && <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ color:'var(--text-muted)', background:'var(--glass-bg)', border:'1px solid var(--glass-border)' }}>you</span>}
+                                            <RoleBadge role={user.role} />
+                                        </div>
+                                    </div>
+                                    {canManage && (
+                                        <button onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId===user.id ? null : user.id); }}
+                                            className="p-1 rounded-lg opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all"
+                                            style={{ color:'var(--text-muted)', background:'var(--glass-bg)' }}>
+                                            <MoreVertical size={13}/>
                                         </button>
                                     )}
+                                </div>
+                                <AnimatePresence>
+                                    {openMenuId===user.id && (
+                                        <motion.div
+                                            initial={{ opacity:0, scale:0.94, y:-4 }} animate={{ opacity:1, scale:1, y:0 }}
+                                            exit={{ opacity:0, scale:0.94, y:-4 }} transition={{ duration:0.14 }}
+                                            className="absolute right-8 top-8 w-44 z-50 p-1.5"
+                                            style={{ borderRadius:14, background:'var(--glass-bg-strong)', border:'1px solid var(--glass-border)', borderTopColor:'var(--glass-border-top)', backdropFilter:'blur(20px)', boxShadow:'var(--glass-shadow)' }}>
+                                            {currentUser.role==='Host' && user.role==='Viewer'    && <CtxItem icon={<UserPlus  size={13} style={{ color:'#60a5fa' }}/>} label="Promote to Mod"   onClick={() => { promoteUser(user.id); setOpenMenuId(null); }} />}
+                                            {currentUser.role==='Host' && user.role==='Moderator' && <CtxItem icon={<UserMinus size={13} style={{ color:'var(--text-muted)' }}/>} label="Demote to Viewer" onClick={() => { demoteUser(user.id); setOpenMenuId(null); }} />}
+                                            {currentUser.role==='Host' && <CtxItem icon={<ArrowRight size={13} style={{ color:'var(--accent)' }}/>} label="Transfer Host" onClick={() => { transferHost(user.id); setOpenMenuId(null); }} />}
+                                            <div style={{ height:1, background:'var(--glass-border)', margin:'4px 0' }} />
+                                            <CtxItem icon={<UserX size={13}/>} label="Kick User" danger onClick={() => { kickUser(user.id); setOpenMenuId(null); }} />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
-
-                            <AnimatePresence>
-                                {openMenuId === user.id && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -4 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -4 }}
-                                        className="absolute right-8 top-8 w-44 rounded-xl shadow-xl overflow-hidden z-50 py-1"
-                                        style={panelStyle}
-                                    >
-                                        {currentUser.role === 'Host' && user.role === 'Viewer' && (
-                                            <button onClick={() => { promoteUser(user.id); setOpenMenuId(null); }}
-                                                className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-white/5 flex items-center gap-2">
-                                                <UserPlus size={13} className="text-blue-400" /> Promote to Mod
-                                            </button>
-                                        )}
-                                        {currentUser.role === 'Host' && user.role === 'Moderator' && (
-                                            <button onClick={() => { demoteUser(user.id); setOpenMenuId(null); }}
-                                                className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-white/5 flex items-center gap-2">
-                                                <UserMinus size={13} className="text-gray-400" /> Demote to Viewer
-                                            </button>
-                                        )}
-                                        {currentUser.role === 'Host' && (
-                                            <button onClick={() => { transferHost(user.id); setOpenMenuId(null); }}
-                                                className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-white/5 flex items-center gap-2">
-                                                <ArrowRight size={13} className="text-purple-400" /> Transfer Host
-                                            </button>
-                                        )}
-                                        <button onClick={() => { kickUser(user.id); setOpenMenuId(null); }}
-                                            className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2 border-t border-white/5 mt-1 pt-2">
-                                            <UserX size={13} /> Kick User
-                                        </button>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* ── Up Next Queue ── */}
-            <div className={`${compact ? '' : 'flex-1'} overflow-hidden flex flex-col min-h-0 ${compact ? '' : 'rounded-2xl'}`}
-                style={compact ? { borderTop: '1px solid var(--border-color)' } : panelStyle}>
-                <div className="px-4 py-2.5 flex items-center justify-between shrink-0" style={headerStyle}>
-                    <h3 className="font-semibold text-sm flex items-center gap-2" style={{ color: 'var(--text-color)' }}>
-                        <Video size={14} /> Up Next
+            {/* ── Queue ── */}
+            <div className={compact ? '' : 'glass-panel rounded-2xl overflow-hidden flex flex-col flex-1'}
+                 style={compact ? { borderTop:'1px solid var(--glass-border)' } : {}}>
+                <div className="px-4 py-2.5 flex items-center justify-between shrink-0"
+                     style={{ borderBottom:'1px solid var(--glass-border)', background:'var(--glass-bg)' }}>
+                    <h3 className="syne font-semibold text-sm flex items-center gap-2" style={{ color:'var(--text)' }}>
+                        <Video size={13} style={{ color:'var(--text-sub)' }} /> Up Next
                         {queue.length > 0 && (
-                            <span className="ml-1 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">
+                            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background:'var(--accent-soft)', color:'var(--accent)', border:'1px solid var(--accent-border)' }}>
                                 {queue.length}
                             </span>
                         )}
                     </h3>
                     {isPrivileged && queue.length > 0 && (
-                        <button onClick={playNext} className="flex items-center gap-1.5 text-xs text-purple-300 hover:text-purple-200 transition-colors">
-                            <SkipForward size={13} /> Play Next
+                        <button onClick={playNext} className="flex items-center gap-1 text-xs font-semibold transition-colors"
+                            style={{ color:'var(--accent)' }}
+                            onMouseEnter={e => e.currentTarget.style.color='#c4b5fd'}
+                            onMouseLeave={e => e.currentTarget.style.color='var(--accent)'}>
+                            <SkipForward size={12}/> Play Next
                         </button>
                     )}
                 </div>
-                <div className={`overflow-y-auto p-2 space-y-1 ${compact ? 'max-h-40' : 'flex-1'}`}>
+                <div className={`p-2 space-y-1 overflow-y-auto ${compact ? 'max-h-36' : 'flex-1'}`}>
                     <AnimatePresence>
                         {queue.length === 0 ? (
-                            <p className="text-xs text-gray-500 p-3">
-                                {isPrivileged ? 'Add URLs with the Queue button.' : 'Queue is empty.'}
+                            <p className="text-xs p-3" style={{ color:'var(--text-muted)' }}>
+                                {isPrivileged ? 'Add URLs to the queue below.' : 'Queue is empty.'}
                             </p>
-                        ) : (
-                            queue.map((item, idx) => (
-                                <motion.div
-                                    key={item.id}
-                                    initial={{ opacity: 0, x: -8 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: 8 }}
-                                    className="flex items-center gap-2 p-2 hover:bg-white/5 rounded-lg group/item"
-                                >
-                                    <span className="text-xs text-gray-500 w-4 flex-shrink-0">{idx + 1}</span>
-                                    <PlayCircle size={13} className="text-gray-500 flex-shrink-0" />
-                                    <span className="text-xs text-gray-300 flex-1 truncate" title={item.label}>{item.label}</span>
-                                    {isPrivileged && (
-                                        <button onClick={() => removeFromQueue(item.id)}
-                                            className="opacity-0 group-hover/item:opacity-100 text-gray-500 hover:text-red-400 transition-all">
-                                            <Trash2 size={12} />
-                                        </button>
-                                    )}
-                                </motion.div>
-                            ))
-                        )}
+                        ) : queue.map((item, idx) => (
+                            <motion.div key={item.id}
+                                initial={{ opacity:0, x:-8 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:8 }}
+                                transition={{ duration:0.18 }}
+                                className="flex items-center gap-2 px-2 py-2 rounded-xl group/q transition-all"
+                                onMouseEnter={e => e.currentTarget.style.background='var(--glass-hover)'}
+                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                <span className="text-xs w-4 shrink-0 font-mono" style={{ color:'var(--text-muted)' }}>{idx+1}</span>
+                                <PlayCircle size={12} style={{ color:'var(--text-muted)', flexShrink:0 }}/>
+                                <span className="text-xs flex-1 truncate" style={{ color:'var(--text-sub)' }} title={item.label}>{item.label}</span>
+                                {isPrivileged && (
+                                    <button onClick={() => removeFromQueue(item.id)}
+                                        className="opacity-0 group-hover/q:opacity-100 transition-all p-0.5 rounded"
+                                        style={{ color:'var(--text-muted)' }}
+                                        onMouseEnter={e => e.currentTarget.style.color='#f87171'}
+                                        onMouseLeave={e => e.currentTarget.style.color='var(--text-muted)'}>
+                                        <Trash2 size={11}/>
+                                    </button>
+                                )}
+                            </motion.div>
+                        ))}
                     </AnimatePresence>
                 </div>
             </div>
-        </>
+        </div>
     );
-
-    if (compact) {
-        // In compact mode (inside accordion) just return user list, no outer card
-        return <div className="flex flex-col">{content}</div>;
-    }
-
-    return <div className="flex flex-col h-full gap-3">{content}</div>;
 };
 
 export default UserQueueSidebar;
