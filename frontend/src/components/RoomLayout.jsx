@@ -99,7 +99,7 @@ const Header = ({ roomId, theme, setTheme, leaveRoom, navigate }) => {
         <header className="glass-header flex-none h-14 flex items-center justify-between px-4 sm:px-6 z-40 relative">
             <div className="flex items-center gap-3">
                 <button onClick={() => navigate('/')} className="flex items-center gap-2.5 shrink-0">
-                    <img src="/logo.png" alt="Watchly Logo" className="w-8 h-auto theme-invert transition-all" />
+                    <img src="/logo.png" alt="Watchly Logo" className="w-12 h-auto theme-invert transition-all" />
                     <span className="syne font-bold text-base hidden sm:block" style={{ color:'var(--text)' }}>Watchly</span>
                 </button>
                 <div className="hidden sm:block w-px h-5" style={{ background:'var(--glass-border)' }} />

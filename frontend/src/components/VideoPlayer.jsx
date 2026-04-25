@@ -575,7 +575,7 @@ const VideoPlayer = () => {
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                             className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
                             <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse">
-                                <img src="/logo.png" alt="Watchly Logo" className="w-12 h-auto opacity-70 theme-invert transition-all" />
+                                <img src="/logo.png" alt="Watchly Logo" className="w-16 h-auto opacity-70 theme-invert transition-all" />
                             </div>
                             <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>No Video Playing</h2>
                             <p className="text-sm max-w-sm" style={{ color: 'var(--text-sub)' }}>
@@ -600,7 +600,7 @@ const VideoPlayer = () => {
                                         style={{ background: 'var(--bg-base)' }}
                                     >
                                         <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse shimmer-pill">
-                                            <img src="/logo.png" alt="Loading" className="w-12 h-auto opacity-50 animate-bounce theme-invert transition-all" />
+                                            <img src="/logo.png" alt="Loading" className="w-16 h-auto opacity-50 animate-bounce theme-invert transition-all" />
                                         </div>
                                         <h2 className="text-xl font-bold mb-2 animate-pulse" style={{ color: 'var(--text)' }}>
                                             Buffering stream...
