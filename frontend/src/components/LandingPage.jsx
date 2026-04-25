@@ -168,7 +168,7 @@ const LandingPage = () => {
                 className="relative z-10 flex items-center justify-between px-6 sm:px-10 py-5 glass-header"
                 style={{ borderTop: 'none', borderLeft: 'none', borderRight: 'none' }}>
                 <div className="flex items-center gap-3">
-                    <img src="/logo.png" alt="WatchSync Logo" className="w-10 h-auto" />
+                    <img src="/logo.png" alt="WatchSync Logo" className="w-10 h-auto theme-invert transition-all" />
                     <span className="syne font-bold text-xl tracking-tight" style={{ color: 'var(--text)' }}>WatchSync</span>
                 </div>
                 <div className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium glass-panel"

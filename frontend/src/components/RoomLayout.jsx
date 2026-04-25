@@ -64,7 +64,7 @@ const ThemePicker = ({ theme, setTheme, onClose }) => (
         <p className="text-[10px] font-bold uppercase tracking-wider mb-3 px-1" style={{ color:'var(--text-muted)' }}>Theme</p>
         <div className="grid grid-cols-2 gap-2">
             {Object.entries(THEME_META).map(([id, meta]) => (
-                <button key={id} onClick={() => { setTheme(id); onClose(); }}
+                <button key={id} onClick={(e) => { e.stopPropagation(); setTheme(id); onClose(); }}
                     className="flex flex-col items-center gap-2 p-2.5 rounded-xl transition-all"
                     style={{ background: theme===id ? 'var(--accent-soft)' : 'var(--glass-bg)', border:`1px solid ${theme===id ? 'var(--accent-border)' : 'var(--glass-border)'}` }}>
                     <div className="relative w-8 h-8 rounded-full"
@@ -99,7 +99,7 @@ const Header = ({ roomId, theme, setTheme, leaveRoom, navigate }) => {
         <header className="glass-header flex-none h-14 flex items-center justify-between px-4 sm:px-6 z-40 relative">
             <div className="flex items-center gap-3">
                 <button onClick={() => navigate('/')} className="flex items-center gap-2.5 shrink-0">
-                    <img src="/logo.png" alt="WatchSync Logo" className="w-8 h-auto" />
+                    <img src="/logo.png" alt="WatchSync Logo" className="w-8 h-auto theme-invert transition-all" />
                     <span className="syne font-bold text-base hidden sm:block" style={{ color:'var(--text)' }}>WatchSync</span>
                 </button>
                 <div className="hidden sm:block w-px h-5" style={{ background:'var(--glass-border)' }} />
