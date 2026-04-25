@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <!-- Replace YOUR_DOMAIN.com with your actual deployed URL -->
-    <loc>https://YOUR_DOMAIN.com/</loc>
+    <loc>https://wchly.vercel.app/</loc>
     <lastmod>2026-04-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>

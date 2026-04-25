@@ -1,5 +1,4 @@
 User-agent: *
 Allow: /
 
-# Replace YOUR_DOMAIN.com with your actual deployed URL
-Sitemap: https://YOUR_DOMAIN.com/sitemap.xml
+Sitemap: https://wchly.vercel.app/sitemap.xml
