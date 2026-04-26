@@ -183,8 +183,7 @@ const LandingPage = () => {
 
                 {/* Left: Action Card */}
                 <div className="w-full lg:w-1/2 flex justify-center lg:justify-start order-2 lg:order-1">
-                    <motion.div {...fadeUp(0.45)} className="glass-card p-6 sm:p-8 lg:p-10 flex flex-col gap-5 sm:gap-6 lg:gap-8 w-full max-w-sm sm:max-w-md lg:max-w-[540px]"
-                                style={{ borderRadius: 24 }}>
+                    <motion.div {...fadeUp(0.45)} className="p-6 sm:p-8 lg:p-10 flex flex-col gap-5 sm:gap-6 lg:gap-8 w-full max-w-sm sm:max-w-md lg:max-w-[540px]">
 
                         {/* Tab switcher */}
                         <div className="relative flex rounded-xl overflow-hidden p-1.5 gap-1.5"
