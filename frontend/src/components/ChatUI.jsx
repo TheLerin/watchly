@@ -38,7 +38,7 @@ const ChatUI = ({ hideHeader = false }) => {
 
     return (
         <div className="flex flex-col h-full overflow-hidden glass-panel rounded-2xl"
-             style={{ borderRadius:18 }}>
+             style={{ borderRadius:18, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
 
             {/* Header */}
             {!hideHeader && (

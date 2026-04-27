@@ -194,7 +194,7 @@ const RoomLayout = () => {
                     {/* Desktop sidebar */}
                     {isDesktop && (
                         <aside className="w-80 xl:w-96 shrink-0 flex flex-col p-3 pl-0">
-                            <div className="mb-2 glass-panel rounded-2xl overflow-hidden">
+                            <div className="mb-2 glass-panel rounded-2xl overflow-hidden" style={{ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
                                 <button onClick={() => setShowUsersPanel(v=>!v)}
                                     className="flex items-center justify-between w-full px-4 py-3 hover:brightness-110 transition-all">
                                     <span className="flex items-center gap-2 text-sm font-semibold syne" style={{ color:'var(--text)' }}>
@@ -224,10 +224,10 @@ const RoomLayout = () => {
                             <AnimatePresence>
                                 {showMobileChat && (
                                     <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-                                        className="absolute bottom-0 inset-x-0 flex flex-col z-30"
-                                        style={{ height:`${heightPct}%`, background:'var(--bg-base)', borderTop:'1px solid var(--glass-border)' }}>
+                                        className="absolute bottom-0 inset-x-0 flex flex-col z-30 glass-panel"
+                                        style={{ height:`${heightPct}%`, borderTop:'1px solid var(--glass-border)', borderRadius: '24px 24px 0 0', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
                                         <div className="flex items-center justify-between px-4 py-2 cursor-row-resize select-none shrink-0"
-                                             style={{ background:'var(--glass-bg)', borderBottom:'1px solid var(--glass-border)' }}
+                                             style={{ borderBottom:'1px solid var(--glass-border)' }}
                                              onMouseDown={onDragStart} onTouchStart={onDragStart}>
                                             <div className="flex items-center gap-2">
                                                 <GripHorizontal size={14} style={{ color:'var(--text-muted)' }}/>
@@ -248,8 +248,8 @@ const RoomLayout = () => {
                                             onClick={() => setShowUsersPanel(false)} />
                                         <motion.div initial={{ y:'100%' }} animate={{ y:0 }} exit={{ y:'100%' }}
                                             transition={{ type:'spring', damping:28, stiffness:300 }}
-                                            className="absolute inset-x-0 bottom-0 z-40 flex flex-col"
-                                            style={{ maxHeight:'72vh', borderRadius:'24px 24px 0 0', background: 'var(--bg-base)', borderTop: '1px solid var(--glass-border)' }}>
+                                            className="absolute inset-x-0 bottom-0 z-40 flex flex-col glass-panel"
+                                            style={{ maxHeight:'72vh', borderRadius:'24px 24px 0 0', borderTop: '1px solid var(--glass-border)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
                                             <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom:'1px solid var(--glass-border)' }}>
                                                 <h2 className="syne font-bold flex items-center gap-2" style={{ color:'var(--text)' }}>
                                                     <Users size={15} style={{ color:'var(--accent)' }}/> Members
@@ -269,8 +269,8 @@ const RoomLayout = () => {
                     {!isDesktop && !isPortrait && (
                         <div className="flex-1 min-h-0 flex flex-col">
                             <button onClick={() => setShowUsersPanel(v=>!v)}
-                                className="flex items-center gap-2 text-xs px-3 py-2 shrink-0"
-                                style={{ background:'var(--glass-bg)', borderBottom:'1px solid var(--glass-border)', color:'var(--text-sub)' }}>
+                                className="flex items-center gap-2 text-xs px-3 py-2 shrink-0 glass-panel"
+                                style={{ borderBottom:'1px solid var(--glass-border)', color:'var(--text-sub)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
                                 <Users size={12} style={{ color:'var(--accent)' }}/>
                                 <span className="font-medium">{users.length} Members</span>
                                 {showUsersPanel ? <ChevronUp size={11}/> : <ChevronDown size={11}/>}
