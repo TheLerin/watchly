@@ -142,6 +142,9 @@ export const RoomProvider = ({ children }) => {
         function onQueueUpdated(newQueue) {
             setQueue(newQueue);
         }
+        function onVoiceUpdated({ userId, isVoiceActive, isMuted }) {
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, isVoiceActive, isMuted } : u));
+        }
         // Handle server-side validation errors (room full, invalid room code, etc.)
         function onErrorMessage({ message }) {
             toast.error(message || 'Server error', { duration: 4000 });
@@ -161,6 +164,7 @@ export const RoomProvider = ({ children }) => {
         socket.on('video_progress', onVideoProgress);
         socket.on('video_seeked', onVideoSeeked);
         socket.on('queue_updated', onQueueUpdated);
+        socket.on('voice_updated', onVoiceUpdated);
         socket.on('error_message', onErrorMessage);
 
         return () => {
@@ -178,6 +182,7 @@ export const RoomProvider = ({ children }) => {
             socket.off('video_progress', onVideoProgress);
             socket.off('video_seeked', onVideoSeeked);
             socket.off('queue_updated', onQueueUpdated);
+            socket.off('voice_updated', onVoiceUpdated);
             socket.off('error_message', onErrorMessage);
         };
     }, []);

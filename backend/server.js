@@ -613,6 +613,37 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- VOICE / WEBRTC ---
+    socket.on('toggle_voice', ({ roomId, isVoiceActive, isMuted }) => {
+        const user = getUserInRoom(socket.id, roomId);
+        if (user) {
+            user.isVoiceActive = isVoiceActive;
+            user.isMuted = isMuted;
+            io.to(roomId).emit('voice_updated', { userId: user.id, isVoiceActive, isMuted });
+        }
+    });
+
+    socket.on('webrtc_offer', ({ targetSocketId, offer }) => {
+        socket.to(targetSocketId).emit('webrtc_offer', {
+            senderSocketId: socket.id,
+            offer
+        });
+    });
+
+    socket.on('webrtc_answer', ({ targetSocketId, answer }) => {
+        socket.to(targetSocketId).emit('webrtc_answer', {
+            senderSocketId: socket.id,
+            answer
+        });
+    });
+
+    socket.on('webrtc_ice_candidate', ({ targetSocketId, candidate }) => {
+        socket.to(targetSocketId).emit('webrtc_ice_candidate', {
+            senderSocketId: socket.id,
+            candidate
+        });
+    });
+
     // --- DISCONNECT HANDLING ---
 
     const handleDisconnect = () => {

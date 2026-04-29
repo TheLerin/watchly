@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Play, Settings, Copy, Users, ChevronDown, ChevronUp, MessageSquare, X, GripHorizontal, Check, Menu, Wifi, WifiOff } from 'lucide-react';
 import ChatUI from './ChatUI';
 import UserQueueSidebar from './UserQueueSidebar';
+import VoiceRoom from './VoiceRoom';
 import VideoPlayer from './VideoPlayer';
 import { useRoom } from '../context/RoomContext';
 import { useTheme, THEME_META } from '../context/ThemeContext';
@@ -221,6 +222,7 @@ const RoomLayout = () => {
                                     )}
                                 </AnimatePresence>
                             </div>
+                            <VoiceRoom />
                             <div className="flex-1 min-h-0"><ChatUI /></div>
                         </aside>
                     )}
@@ -264,7 +266,10 @@ const RoomLayout = () => {
                                                 </h2>
                                                 <button onClick={() => setShowUsersPanel(false)} style={{ color:'var(--text-sub)' }}><X size={19}/></button>
                                             </div>
-                                            <div className="flex-1 min-h-0 overflow-y-auto"><UserQueueSidebar compact /></div>
+                                            <div className="flex-1 min-h-0 overflow-y-auto">
+                                                <div className="p-3 pb-0"><VoiceRoom /></div>
+                                                <UserQueueSidebar compact />
+                                            </div>
                                         </motion.div>
                                     </>
                                 )}
@@ -290,6 +295,7 @@ const RoomLayout = () => {
                                     </motion.div>
                                 )}
                             </AnimatePresence>
+                            <VoiceRoom />
                             <div className="flex-1 min-h-0"><ChatUI /></div>
                         </div>
                     )}
