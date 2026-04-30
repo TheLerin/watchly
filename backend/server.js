@@ -43,153 +43,160 @@ app.get('/', (req, res) => {
 });
 
 // ── Google Drive Proxy ──────────────────────────────────────────────────────
-// Manually follows every redirect while accumulating cookies so Google's
-// scan/confirmation flow works. Uses drive.google.com/uc as the entry point
-// (with a Referer header) which issues a 303 redirect to the actual download.
-// Usage: GET /api/proxy/gdrive?id=<GOOGLE_DRIVE_FILE_ID>
 
-const gdriveCache = new Map(); // id -> { url, cookieJar, timestamp }
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const gdriveCache    = new Map(); // id → { url, cookieJar, timestamp }
+const gdriveInFlight = new Map(); // id → Promise<{url,cookieJar}|null>  — FIX #2: dedup concurrent requests
 
-// P1: Proactively evict expired GDrive cache entries every 30 minutes
-// so the Map doesn't grow unbounded in long-running processes.
+// FIX #6: 20-min TTL — Google session tokens expire in ~15–30 min; 1-hour TTL caused mass expiry races
+const CACHE_TTL_MS = 20 * 60 * 1000;
+
 setInterval(() => {
     const now = Date.now();
     for (const [key, val] of gdriveCache) {
         if (now - val.timestamp >= CACHE_TTL_MS) gdriveCache.delete(key);
     }
-}, 30 * 60 * 1000).unref(); // .unref() so this timer doesn't block process exit
+}, 10 * 60 * 1000).unref();
 
-// Handle CORS preflight BEFORE the main handler so Express reaches it first
+// FIX #10: Proxy CORS can safely be wildcard — no user auth cookies traverse this route
 app.options('/api/proxy/gdrive', (req, res) => {
-    // S1/S2: Lock CORS to the known frontend origin (not wildcard)
-    res.setHeader('Access-Control-Allow-Origin', FRONTEND_URL);
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Range');
     res.sendStatus(204);
 });
 
-// FIX: app.all handles both GET and HEAD — browsers send HEAD first to check Content-Length
 app.all('/api/proxy/gdrive', async (req, res) => {
     const { id } = req.query;
     if (!['GET', 'HEAD'].includes(req.method)) return res.sendStatus(405);
     if (!id) return res.status(400).send('Missing Google Drive file id');
 
-    // Per-hop timeout in ms — prevents the server hanging indefinitely
-    const HOP_TIMEOUT_MS = 15000;
-
+    const HOP_TIMEOUT_MS  = 15000;
+    const STREAM_IDLE_MS  = 30000; // FIX #11: kill piped stream if Google stalls mid-transfer
     const UA      = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36';
     const REFERER = 'https://drive.google.com/';
+    const isHead  = req.method === 'HEAD';
 
     const setCorsHeaders = () => {
-        // S1/S2: Unified CORS — matches the OPTIONS preflight above
-        res.setHeader('Access-Control-Allow-Origin', FRONTEND_URL);
+        res.setHeader('Access-Control-Allow-Origin', '*'); // FIX #10
         res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     };
-
-    const isHead = req.method === 'HEAD';
 
     const streamResponse = (hop) => {
         const ct = hop.headers['content-type'] || 'video/mp4';
         setCorsHeaders();
         res.setHeader('Content-Type', ct);
         if (hop.headers['content-length']) res.setHeader('Content-Length', hop.headers['content-length']);
-        // Always advertise range support so the browser can seek
         res.setHeader('Accept-Ranges', hop.headers['accept-ranges'] || 'bytes');
-        if (hop.headers['content-range'])  res.setHeader('Content-Range',  hop.headers['content-range']);
+        if (hop.headers['content-range']) res.setHeader('Content-Range', hop.headers['content-range']);
         res.status(hop.status === 206 ? 206 : 200);
-        // FIX: HEAD requests must NOT pipe a body — only headers are returned
         if (isHead) {
             try { hop.data.destroy(); } catch (_) {}
             return res.end();
         }
+        // FIX #11: Inactivity timer — reset on each data chunk; abort if idle for STREAM_IDLE_MS
+        let idleTimer = null;
+        const resetIdle = () => {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                console.log(`GDrive: stream idle ${STREAM_IDLE_MS}ms — aborting`);
+                try { hop.data.destroy(); } catch (_) {}
+                if (!res.writableEnded) res.end();
+            }, STREAM_IDLE_MS);
+        };
+        resetIdle();
+        hop.data.on('data', resetIdle);
+        hop.data.on('end',  () => clearTimeout(idleTimer));
+        hop.data.on('error',() => clearTimeout(idleTimer));
         hop.data.pipe(res);
-        req.on('close', () => { try { hop.data.destroy(); } catch (_) {} });
+        req.on('close', () => { clearTimeout(idleTimer); try { hop.data.destroy(); } catch (_) {} });
     };
 
+    // FIX #7: Cap at 64 KB — enough to find any confirm token / form field in the HTML
     const readBodyText = async (stream) => {
-        const chunks = [];
-        for await (const c of stream) chunks.push(Buffer.from(c));
+        const chunks = []; let total = 0; const MAX = 64 * 1024;
+        for await (const c of stream) {
+            chunks.push(Buffer.from(c));
+            total += c.length;
+            if (total >= MAX) { try { stream.destroy(); } catch (_) {} break; }
+        }
         return Buffer.concat(chunks).toString('utf-8');
     };
 
-    // ── Check Cache First ────────────────────────────────────────────────────
-    const cached = gdriveCache.get(id);
-    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-        try {
-            const headers = { 'User-Agent': UA, 'Referer': REFERER, 'Accept': 'video/mp4,video/webm,video/*;q=0.9,*/*;q=0.8' };
-            if (cached.cookieJar) headers['Cookie'] = cached.cookieJar;
-            if (req.headers.range) headers['Range'] = req.headers.range;
-
-            const hop = await axios({
-                // FIX: Forward the actual request method (HEAD or GET) instead of hardcoding GET
-                method: req.method, url: cached.url, responseType: 'stream',
-                headers, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS,
-            });
-            
-            if (hop.status < 400 && !(hop.headers['content-type'] || '').includes('text/html')) {
-                console.log(`GDrive: CACHE HIT (${hop.status}) -> ${cached.url.slice(0, 80)}`);
-                return streamResponse(hop);
-            }
-            // If cache returns error or HTML, it might have expired on Google's end
-            console.log(`GDrive: CACHE STALE (${hop.status}) — clearing and re-fetching`);
-            try { hop.data.destroy(); } catch (_) {}
-            gdriveCache.delete(id);
-        } catch (e) {
-            console.log('GDrive: CACHE network error — clearing cache');
-            gdriveCache.delete(id);
+    // Helper: stream from an already-resolved URL (used by cache hits and in-flight waiters)
+    const tryStreamResolved = async (url, cookieJar) => {
+        const headers = { 'User-Agent': UA, 'Referer': REFERER, 'Accept': 'video/mp4,video/webm,video/*;q=0.9,*/*;q=0.8' };
+        if (cookieJar)           headers['Cookie'] = cookieJar;
+        if (req.headers.range)   headers['Range']  = req.headers.range;
+        const hop = await axios({ method: req.method, url, responseType: 'stream', headers, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
+        if (hop.status < 400 && !(hop.headers['content-type'] || '').includes('text/html')) {
+            console.log(`GDrive: resolved stream (${hop.status}) → ${url.slice(0, 80)}`);
+            streamResponse(hop); return true;
         }
+        try { hop.data.destroy(); } catch (_) {}
+        return false;
+    };
+
+    // ── 1. Cache hit ─────────────────────────────────────────────────────────
+    const cached = gdriveCache.get(id);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        try {
+            const ok = await tryStreamResolved(cached.url, cached.cookieJar);
+            if (ok) return;
+            console.log('GDrive: CACHE STALE — clearing');
+            gdriveCache.delete(id);
+        } catch { gdriveCache.delete(id); }
     }
 
-    // ── Entry-point URL strategies (tried in order) ──────────────────────────
-    // Strategy A: drive.google.com/uc — still issues a 303 redirect when given Referer
-    // Strategy B: drive.usercontent.google.com/download — legacy fallback
+    // ── 2. FIX #2: Wait for any in-flight resolution for the same ID ─────────
+    if (gdriveInFlight.has(id)) {
+        console.log(`GDrive: waiting for in-flight resolution of ${id}`);
+        try {
+            const entry = await gdriveInFlight.get(id);
+            if (entry) { const ok = await tryStreamResolved(entry.url, entry.cookieJar); if (ok) return; }
+        } catch (_) {}
+        // in-flight failed — fall through to our own attempt
+    }
+
+    // ── 3. Fresh resolution ───────────────────────────────────────────────────
+    // FIX #4: Removed duplicate strategy (both /uc entries hit the same endpoint with the same result)
     const startUrls = [
         `https://drive.google.com/uc?export=download&id=${id}&confirm=t`,
-        `https://drive.google.com/uc?id=${id}&export=download&confirm=t&authuser=0`,
         `https://drive.usercontent.google.com/download?id=${id}&export=download&authuser=0&confirm=t`,
     ];
+
+    // Register in-flight promise so concurrent requests for this ID wait instead of hammering Google
+    let resolveInFlight, rejectInFlight;
+    const inFlightPromise = new Promise((res, rej) => { resolveInFlight = res; rejectInFlight = rej; });
+    gdriveInFlight.set(id, inFlightPromise);
 
     for (const startUrl of startUrls) {
     try {
         let url       = startUrl;
         let cookieJar = '';
         let hops      = 10;
+        // FIX #1: Track whether we've followed at least one redirect.
+        // Range header must NOT be sent to the /uc entry-point (causes 416).
+        // Once we've been redirected to the real file URL it is safe.
+        let rangeAttached = false;
 
         while (hops-- > 0) {
             const headers = {
                 'User-Agent': UA,
-                'Referer':    REFERER,   // ← required: Google returns 303 only with Referer
+                'Referer':    REFERER,
                 'Accept':     'video/mp4,video/webm,video/*;q=0.9,*/*;q=0.8',
             };
-            if (cookieJar)         headers['Cookie'] = cookieJar;
-            // FIX #1: Only forward Range on the final content hop.
-            // Sending Range during 302/303 redirects can cause 416 errors.
-            // We track whether we've seen at least one redirect to know
-            // we're past the entry point. Range is always safe on cache hits
-            // and after the first redirect resolves to the real file URL.
+            if (cookieJar)                              headers['Cookie'] = cookieJar;
+            // FIX #1: Re-apply Range at the top of EVERY hop after first redirect (headers recreated each iteration)
+            if (rangeAttached && req.headers.range)     headers['Range']  = req.headers.range;
 
             let hop;
             try {
-                // FIX #2: Forward the actual request method (HEAD or GET)
-                // so HEAD preflight doesn't download the entire file body.
-                hop = await axios({
-                    method: isHead ? 'HEAD' : 'GET', url, responseType: 'stream',
-                    headers, maxRedirects: 0,
-                    validateStatus: s => s < 600,
-                    timeout: HOP_TIMEOUT_MS,
-                });
+                hop = await axios({ method: isHead ? 'HEAD' : 'GET', url, responseType: 'stream', headers, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
             } catch (e) {
-                // axios throws on 3xx when maxRedirects=0 — response is on the error object
-                if (e.response && e.response.headers.location) {
-                    hop = e.response;
-                } else {
-                    throw e;
-                }
+                if (e.response && e.response.headers.location) { hop = e.response; } else { throw e; }
             }
 
-            // Accumulate cookies across hops (critical — axios auto-mode drops them)
             const sc = hop.headers['set-cookie'];
             if (sc) {
                 const fresh = sc.map(c => c.split(';')[0]).join('; ');
@@ -200,72 +207,59 @@ app.all('/api/proxy/gdrive', async (req, res) => {
             const ct     = hop.headers['content-type'] || '';
             const loc    = hop.headers['location']     || '';
 
-            // 3xx — follow the redirect
             if (status >= 300 && status < 400 && loc) {
                 try { hop.data.destroy(); } catch (_) {}
                 url = loc.startsWith('http') ? loc : `https://drive.google.com${loc}`;
-                // FIX #1: Now that we've followed at least one redirect,
-                // the next hop targets the real file — attach Range header.
-                if (req.headers.range && !headers['Range']) headers['Range'] = req.headers.range;
+                rangeAttached = true; // FIX #1: past the entry-point, safe to send Range now
                 console.log(`GDrive hop (${status}) → ${url.slice(0, 100)}`);
                 continue;
             }
 
-            // Got actual bytes — stream to client
             if (!ct.includes('text/html') && status < 400) {
                 console.log(`GDrive: streaming (${ct}, status=${status})`);
-                
-                // Cache the final resolved URL and cookies to bypass all this logic next time
-                gdriveCache.set(id, { url, cookieJar, timestamp: Date.now() });
-
+                const entry = { url, cookieJar, timestamp: Date.now() };
+                gdriveCache.set(id, entry);
+                gdriveInFlight.delete(id);
+                resolveInFlight({ url, cookieJar });
                 return streamResponse(hop);
             }
 
-            // 4xx that isn't HTML — file not found / not shared
             if (status === 403 || status === 404) {
                 try { hop.data.destroy(); } catch (_) {}
-                console.log(`GDrive: ${status} from ${url.slice(0,80)} — trying next strategy`);
-                break; // try next startUrl
+                console.log(`GDrive: ${status} from ${url.slice(0, 80)} — trying next strategy`);
+                break;
             }
 
-            // Got HTML — virus-scan / confirmation page
             if (ct.includes('text/html')) {
-                const html = await readBodyText(hop.data);
+                const html = await readBodyText(hop.data); // FIX #7: capped at 64 KB
 
-                // Try 1: extract confirm + uuid hidden fields or URL params (most reliable now)
                 const cm = html.match(/[?&]confirm=([0-9A-Za-z_-]+)/)
                          || html.match(/name=["']confirm["'][^>]*value=["']([^"']+)["']/i);
                 const um = html.match(/name=["']uuid["'][^>]*value=["']([^"']+)["']/i)
                          || html.match(/[?&]uuid=([0-9A-Za-z_-]+)/);
-
                 if (cm) {
-                    const confirm = cm[1];
-                    const uuid    = um ? um[1] : null;
+                    const confirm = cm[1]; const uuid = um ? um[1] : null;
                     url = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=${confirm}`;
                     if (uuid) url += `&uuid=${uuid}`;
+                    rangeAttached = true;
                     console.log(`GDrive: confirm retry (confirm=${confirm}, uuid=${uuid || 'none'})`);
                     continue;
                 }
 
-                // Try 2: look for any direct usercontent download link in the HTML
                 const lm = html.match(/href="(https:\/\/drive\.usercontent\.google\.com\/download[^"]+)"/i);
-                if (lm) {
-                    url = lm[1].replace(/&amp;/g, '&');
-                    console.log(`GDrive: usercontent link in HTML → ${url.slice(0, 100)}`);
-                    continue;
-                }
+                if (lm) { url = lm[1].replace(/&amp;/g, '&'); rangeAttached = true; console.log(`GDrive: usercontent link in HTML → ${url.slice(0, 100)}`); continue; }
 
-                // Try 3: grab the form action URL directly (only if it has confirm params natively)
-                let m = html.match(/action="(https?:\/\/[^"]*download[^"]*confirm=[^"]*)"/i)
-                      || html.match(/action="([^"]*\/download[^"]*confirm=[^"]*)"/i);
-                if (m) {
-                    url = m[1].replace(/&amp;/g, '&');
+                const fm = html.match(/action="(https?:\/\/[^"]*download[^"]*confirm=[^"]*)"/i)
+                         || html.match(/action="([^"]*\/download[^"]*confirm=[^"]*)"/i);
+                if (fm) {
+                    url = fm[1].replace(/&amp;/g, '&');
                     if (!url.startsWith('http')) url = 'https://drive.google.com' + url;
+                    rangeAttached = true;
                     console.log(`GDrive: form action fallback → ${url.slice(0, 100)}`);
                     continue;
                 }
 
-                console.log(`GDrive: no usable link found in HTML (${html.length} bytes), breaking`);
+                console.log(`GDrive: no usable link in HTML (${html.length} bytes), breaking`);
                 break;
             }
 
@@ -273,24 +267,26 @@ app.all('/api/proxy/gdrive', async (req, res) => {
             break;
         }
 
-        // This startUrl strategy exhausted — try next one
-        if (res.headersSent) return;
-        console.log(`GDrive: startUrl exhausted (${startUrl.slice(0,60)}), trying next...`);
+        if (res.headersSent) { gdriveInFlight.delete(id); rejectInFlight(new Error('failed')); return; }
+        console.log(`GDrive: startUrl exhausted (${startUrl.slice(0, 60)}), trying next...`);
     } catch (err) {
-        if (res.headersSent) break;
-        console.log(`GDrive: startUrl threw: ${err.message} (${startUrl.slice(0,50)}), trying next...`);
+        if (res.headersSent) { gdriveInFlight.delete(id); rejectInFlight(new Error('failed')); break; }
+        console.log(`GDrive: startUrl threw: ${err.message} — trying next...`);
     }
-    } // end for (startUrls)
+    }
 
-    // All strategies failed
+    gdriveInFlight.delete(id);
+    rejectInFlight(new Error('all strategies failed'));
     if (!res.headersSent) {
         setCorsHeaders();
         res.status(502).json({
             error: 'Could not stream this Google Drive file.',
-            hint: 'Make sure the file is shared as "Anyone with the link" (Viewer). Large files may require re-sharing or using a direct video host instead.',
+            hint: 'Make sure the file is shared as "Anyone with the link" (Viewer). Large files may require re-sharing.',
         });
     }
 });
+
+
 
 // ISSUE-34: Global Express error handler — catches any unhandled route errors
 // and returns a clean JSON response instead of leaking stack traces.

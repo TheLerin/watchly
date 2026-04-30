@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import ReactPlayer from 'react-player';
+import ReactPlayer from 'react-player/lazy'; // FIX #3: lazy import loads only the needed adapter, not all adapters
 import { useRoom } from '../context/RoomContext';
 import { Play, Link as LinkIcon, Lock, AlertCircle, Plus, ChevronDown, Mic, Subtitles as SubtitlesIcon, FolderOpen, Maximize, Minimize, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -156,6 +156,12 @@ const VideoPlayer = () => {
     // from a further position, causing an infinite buffering loop on slow connections.
     const isBufferingRef   = useRef(false);
 
+    // FIX #5: Track whether the initial seek (jump to host's playedSeconds on join) has
+    // completed. onCanPlay can fire before the seek finishes, causing play() to start
+    // from position 0 then visibly jump to the correct position.
+    // Only allow onCanPlay → play() once the initial seek has fired onSeeked.
+    const initialSeekDoneRef = useRef(true); // true = no seek needed (stateTime <= 2)
+
     const prevSeekVersionReactPlayerRef = useRef(0);
     const prevSeekVersionGDriveRef      = useRef(0);
 
@@ -169,6 +175,8 @@ const VideoPlayer = () => {
     const [inputUrl, setInputUrl]           = useState('');
     const [isPlayerReady, setIsPlayerReady] = useState(false);
     const [playerError, setPlayerError]     = useState(null);
+    // FIX #9: Show actual buffer fill % in the loading skeleton
+    const [bufferedPercent, setBufferedPercent] = useState(0);
     const [subtitleTracks, setSubtitleTracks] = useState([]);
     const [audioTracks, setAudioTracks]     = useState([]);
     const [activeSubtitle, setActiveSubtitle] = useState(-1);
@@ -223,8 +231,10 @@ const VideoPlayer = () => {
         setAudioTracks([]);
         setActiveSubtitle(-1);
         setActiveAudio(0);
+        setBufferedPercent(0);
         lastSyncedPosRef.current = 0;
         isBufferingRef.current   = false;
+        initialSeekDoneRef.current = true; // FIX #5: reset; will be set false if stateTime > 2
         prevSeekVersionReactPlayerRef.current = videoState.seekVersion ?? 0;
         prevSeekVersionGDriveRef.current      = videoState.seekVersion ?? 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -644,9 +654,20 @@ const VideoPlayer = () => {
                                         <h2 className="text-xl font-bold mb-2 animate-pulse" style={{ color: 'var(--text)' }}>
                                             Buffering stream...
                                         </h2>
+                                        {/* FIX #9: Real buffer fill bar for GDrive; indeterminate shimmer for others */}
                                         <div className="w-48 h-2 bg-white/10 rounded-full overflow-hidden mt-2">
-                                            <div className="h-full bg-emerald-400 animate-pulse w-full origin-left" style={{ animation: 'shimmer 1.5s infinite linear' }} />
+                                            {isGDriveProxy && bufferedPercent > 0 ? (
+                                                <div
+                                                    className="h-full bg-emerald-400 transition-all duration-500 rounded-full"
+                                                    style={{ width: `${bufferedPercent}%` }}
+                                                />
+                                            ) : (
+                                                <div className="h-full bg-emerald-400 animate-pulse w-full origin-left" style={{ animation: 'shimmer 1.5s infinite linear' }} />
+                                            )}
                                         </div>
+                                        {isGDriveProxy && bufferedPercent > 0 && (
+                                            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{Math.round(bufferedPercent)}% buffered</p>
+                                        )}
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -665,6 +686,8 @@ const VideoPlayer = () => {
                                         onLoadedMetadata={() => {
                                             const stateTime = videoStateRef.current.playedSeconds || 0;
                                             if (stateTime > 2 && nativeVideoRef.current) {
+                                                // FIX #5: Mark seek as pending — onCanPlay must wait for onSeeked
+                                                initialSeekDoneRef.current = false;
                                                 nativeVideoRef.current.currentTime = stateTime;
                                             }
                                         }}
@@ -674,7 +697,10 @@ const VideoPlayer = () => {
                                             // 'isPlayerReady'. Two rapid onCanPlay calls both saw
                                             // wasReady=false and called play() twice.
                                             setIsPlayerReady(prev => {
-                                                if (!prev && videoStateRef.current.isPlaying && nativeVideoRef.current?.paused) {
+                                                // FIX #5: Only autoplay if the initial seek has already completed
+                                                // (or no seek was needed). Prevents playing from position 0
+                                                // then visibly jumping to the correct position.
+                                                if (!prev && initialSeekDoneRef.current && videoStateRef.current.isPlaying && nativeVideoRef.current?.paused) {
                                                     nativeVideoRef.current.play().catch((err) => {
                                                         if (err.name === 'NotAllowedError') setAutoplayBlocked(true);
                                                     });
@@ -686,22 +712,39 @@ const VideoPlayer = () => {
                                         onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged) return; debouncePlay(); }}
                                         onPause={() => { if (!isPrivileged) return; debouncePause(() => nativeVideoRef.current?.currentTime || 0); }}
                                         onSeeking={() => { if (!isPrivileged) return; startSeekGuard(); }}
-                                        onSeeked={() => { if (!isPrivileged) return; endSeekGuard(() => nativeVideoRef.current?.currentTime || 0); }}
+                                        onSeeked={() => {
+                                            // FIX #5: Initial seek completed — now safe to autoplay
+                                            initialSeekDoneRef.current = true;
+                                            if (isPlayerReady && videoStateRef.current.isPlaying && nativeVideoRef.current?.paused) {
+                                                nativeVideoRef.current.play().catch((err) => {
+                                                    if (err.name === 'NotAllowedError') setAutoplayBlocked(true);
+                                                });
+                                            }
+                                            if (!isPrivileged) return;
+                                            endSeekGuard(() => nativeVideoRef.current?.currentTime || 0);
+                                        }}
                                         // FIX #6: Track buffering state on native <video> so drift
                                         // correction skips during stalls (same as ReactPlayer path).
                                         onWaiting={() => { isBufferingRef.current = true; }}
                                         onPlaying={() => { isBufferingRef.current = false; }}
+                                        // FIX #9: Update buffer fill progress
+                                        onTimeUpdate={() => {
+                                            const v = nativeVideoRef.current;
+                                            if (v && v.buffered.length > 0 && v.duration > 0) {
+                                                setBufferedPercent(Math.min(100, (v.buffered.end(v.buffered.length - 1) / v.duration) * 100));
+                                            }
+                                        }}
                                         onError={() => {
                                             setPlayerError('Could not load Google Drive video. Make sure the file is shared as "Anyone with the link" in Google Drive.');
                                         }}
                                     />
-                                    {/* Transparent overlay blocks seekbar for viewers so they cannot desync */}
-                                    {/* FIX #10: Increased from 48px to 64px to cover Firefox/Safari control bars */}
+                                    {/* FIX #8: Dual overlay — bottom covers desktop Chrome/Firefox seekbar,
+                                        top covers iOS Safari controls (which appear at top of video) */}
                                     {!isPrivileged && (
-                                        <div style={{
-                                            position: 'absolute', bottom: 0, left: 0, right: 0, height: '64px',
-                                            zIndex: 10, cursor: 'not-allowed'
-                                        }} />
+                                        <>
+                                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '64px', zIndex: 10, cursor: 'not-allowed' }} />
+                                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '44px', zIndex: 10, cursor: 'not-allowed' }} />
+                                        </>
                                     )}
                                     {/* Autoplay Blocked Overlay */}
                                     {autoplayBlocked && (
@@ -734,47 +777,24 @@ const VideoPlayer = () => {
                                         key={playerUrl}
                                         url={playerUrl}
                                         playing={videoState.isPlaying}
-                                        // BUG-B FIX: Archive viewers need controls so they can see the play
-                                        // button when autoplay is blocked. Seeking is locked via the
-                                        // transparent overlay rendered below — not by hiding controls.
                                         controls={isPrivileged || isYouTube || isArchive}
                                         width="100%"
                                         height="100%"
                                         onReady={handleReady}
                                         onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged) return; debouncePlay(); }}
                                         onPause={() => { if (!isPrivileged) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
-                                        // BUG-C FIX: Viewers — do NOT snap back to videoState.playedSeconds
-                                        // here. That caused a seek loop (stale closure value → seeks to wrong
-                                        // time → triggers another onSeek → repeat). The seekbar-blocker overlay
-                                        // prevents viewers from dragging; drift correction (effect #2) handles
-                                        // any residual drift. For host — BUG-D is fixed in endSeekGuard.
                                         onSeek={() => {
-                                            if (!isPrivileged) return; // viewers: blocked by overlay, no-op
-                                            // B8 FIX: ReactPlayer's onSeek fires AFTER seeking completes
-                                            // (equivalent to onSeeked on a native element). Calling
-                                            // startSeekGuard() + endSeekGuard() back-to-back was toggling
-                                            // isSeekingRef on then off in the same tick — the guard was
-                                            // effectively doing nothing. Only endSeekGuard is needed here.
+                                            if (!isPrivileged) return;
                                             endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
                                         }}
                                         onError={() => setPlayerError('Could not load video.')}
-                                        // BUG-G FIX: syncProgress removed from here. The setInterval in
-                                        // effect #6 is the single source of progress sync for the host.
-                                        // Dual emission caused viewer state races.
-                                        onProgress={(p) => {
-                                            lastSyncedPosRef.current = p.playedSeconds;
-                                        }}
+                                        onProgress={(p) => { lastSyncedPosRef.current = p.playedSeconds; }}
                                         progressInterval={1000}
-                                        // BUG-I FIX: Flip isBufferingRef so drift correction skips during stall
                                         onBuffer={() => { isBufferingRef.current = true; }}
                                         onBufferEnd={() => { isBufferingRef.current = false; }}
                                         config={{
-                                            youtube: {
-                                                playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 }
-                                            },
+                                            youtube: { playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 } },
                                             file: {
-                                                // crossOrigin: 'anonymous' breaks archive.org CDN servers
-                                                // — only apply it for non-archive URLs (needed for subtitles)
                                                 attributes: isArchive
                                                     ? { preload: 'auto' }
                                                     : { preload: 'auto', crossOrigin: 'anonymous' },
@@ -785,20 +805,15 @@ const VideoPlayer = () => {
                                         }}
                                     />
 
-                                    {/* BUG-B FIX: Transparent seekbar blocker for archive.org viewers.
-                                        Archive viewers have controls={true} so they can click play,
-                                        but this overlay prevents them from dragging the seekbar
-                                        independently (which would desync them from the host). */}
-                                    {/* FIX #10: Increased from 48px to 64px for cross-browser coverage */}
-                                    {isArchive && !isPrivileged && (
-                                        <div style={{
-                                            position: 'absolute', bottom: 0, left: 0, right: 0, height: '64px',
-                                            zIndex: 10, cursor: 'not-allowed'
-                                        }} />
+                                    {/* FIX #8: Dual seekbar blocker — bottom for desktop, top for iOS Safari */}
+                                    {!isPrivileged && (
+                                        <>
+                                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '64px', zIndex: 10, cursor: 'not-allowed' }} />
+                                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '44px', zIndex: 10, cursor: 'not-allowed' }} />
+                                        </>
                                     )}
 
-                                    {/* BUG-H FIX: Autoplay-blocked overlay for ReactPlayer (archive + direct).
-                                        Previously only shown for the GDrive native <video> path. */}
+                                    {/* FIX #12: Autoplay-blocked overlay — null-safe getInternalPlayer + YouTube API fallback */}
                                     {autoplayBlocked && !isPrivileged && (
                                         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
                                             <div className="flex flex-col items-center p-6 border border-white/20 bg-black/90 rounded-2xl shadow-2xl">
@@ -808,14 +823,14 @@ const VideoPlayer = () => {
                                                         const internal = playerRef.current?.getInternalPlayer?.();
                                                         if (internal instanceof HTMLVideoElement) {
                                                             internal.play().then(() => setAutoplayBlocked(false)).catch(console.error);
+                                                        } else if (internal && typeof internal.playVideo === 'function') {
+                                                            internal.playVideo(); setAutoplayBlocked(false);
                                                         }
                                                     }}>
                                                     <Play size={32} className="ml-1" style={{ color: 'var(--text)' }} />
                                                 </div>
                                                 <h3 className="text-xl font-bold text-white mb-2">Autoplay Blocked</h3>
-                                                <p className="text-gray-400 text-sm text-center max-w-xs">
-                                                    Your browser paused the video. Click play to sync with the host.
-                                                </p>
+                                                <p className="text-gray-400 text-sm text-center max-w-xs">Your browser paused the video. Click play to sync with the host.</p>
                                             </div>
                                         </div>
                                     )}
