@@ -610,6 +610,12 @@ io.on('connection', (socket) => {
     });
 
     // --- VOICE / WEBRTC ---
+    socket.on('network_ping', (_payload, callback) => {
+        if (typeof callback === 'function') {
+            callback({ serverTime: Date.now() });
+        }
+    });
+
     socket.on('toggle_voice', ({ roomId, isVoiceActive, isMuted }) => {
         const user = getUserInRoom(socket.id, roomId);
         if (user) {

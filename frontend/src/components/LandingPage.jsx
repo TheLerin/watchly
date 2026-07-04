@@ -1,344 +1,626 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Users, Zap, HardDrive, MonitorPlay, ChevronRight, User, Hash, ArrowRight } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Activity,
+    ArrowRight,
+    Check,
+    ChevronRight,
+    Clock3,
+    Globe2,
+    HardDrive,
+    Hash,
+    Lock,
+    MessageSquare,
+    Mic,
+    MonitorPlay,
+    Play,
+    Radio,
+    ShieldCheck,
+    Signal,
+    Sparkles,
+    User,
+    Users,
+    Wifi,
+    Zap,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRoom } from '../context/RoomContext';
-import { useTheme } from '../context/ThemeContext';
-import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
 
-/* ── Background orbs + noise (rendered globally behind everything) ── */
-export const BackgroundLayers = () => {
-    const spotRef = useRef(null);
-    const { isDark } = useTheme();
+const MotionArticle = motion.article;
+const MotionDiv = motion.div;
+const MotionHeader = motion.header;
+const MotionSection = motion.section;
 
-    useEffect(() => {
-        const move = (e) => {
-            if (spotRef.current) {
-                spotRef.current.style.left = e.clientX + 'px';
-                spotRef.current.style.top  = e.clientY + 'px';
-            }
-        };
-        window.addEventListener('mousemove', move, { passive: true });
-        return () => window.removeEventListener('mousemove', move);
-    }, []);
+export const BackgroundLayers = () => (
+    <>
+        <div className="bg-base-layer" />
+        <div className="fixed inset-0 z-[1] pointer-events-none overflow-hidden">
+            <div
+                className="absolute inset-0"
+                style={{
+                    background:
+                        'linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)',
+                    backgroundSize: '56px 56px',
+                    maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.45) 48%, rgba(0,0,0,0.08))',
+                    WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.45) 48%, rgba(0,0,0,0.08))',
+                }}
+            />
+            <div
+                className="absolute inset-0"
+                style={{
+                    background:
+                        'linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.72) 52%, rgba(0,0,0,0.96) 100%)',
+                }}
+            />
+        </div>
+        <div className="noise-overlay" />
+    </>
+);
 
-    return (
-        <>
-            <div className="bg-base-layer" />
-            <div className="fixed inset-0 z-[1] pointer-events-none overflow-hidden">
-                <video autoPlay loop muted playsInline className="absolute min-w-full min-h-full object-cover"
-                    style={{ opacity: isDark ? 0.35 : 0.15 }}
-                    onError={(e) => { e.target.style.display = 'none'; }}>
-                    <source src="/bg-video.mp4" type="video/mp4" />
-                </video>
-                <div className="absolute inset-0" style={{ background: isDark ? 'radial-gradient(circle at center, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.8) 100%)' : 'radial-gradient(circle at center, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.9) 100%)' }} />
-            </div>
-            <div className="noise-overlay" />
-            {isDark && <div className="cursor-spotlight" ref={spotRef} />}
-        </>
-    );
-};
-
-/* ── Magnetic button hook ─────────────────────────────────────────── */
-function useMagnet(strength = 0.35) {
-    const ref = useRef(null);
-    useEffect(() => {
-        const el = ref.current;
-        if (!el) return;
-        const onMove = (e) => {
-            const r = el.getBoundingClientRect();
-            const cx = r.left + r.width  / 2;
-            const cy = r.top  + r.height / 2;
-            const dx = e.clientX - cx, dy = e.clientY - cy;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < 80) {
-                const pull = (1 - dist/80) * strength;
-                el.style.transform = `translate(${dx*pull}px,${dy*pull}px)`;
-            } else {
-                el.style.transform = '';
-            }
-        };
-        const onLeave = () => {
-            el.style.transition = 'transform 0.5s cubic-bezier(0.34,1.56,0.64,1)';
-            el.style.transform = '';
-            setTimeout(() => { if (el) el.style.transition = ''; }, 500);
-        };
-        document.addEventListener('mousemove', onMove, { passive: true });
-        el.addEventListener('mouseleave', onLeave);
-        return () => {
-            document.removeEventListener('mousemove', onMove);
-            el?.removeEventListener('mouseleave', onLeave);
-        };
-    }, [strength]);
-    return ref;
-}
-
-/* ── 3D tilt card hook ────────────────────────────────────────────── */
-function use3DTilt(strength = 8) {
-    const ref = useRef(null);
-    useEffect(() => {
-        const el = ref.current;
-        if (!el) return;
-        const onMove = (e) => {
-            const r = el.getBoundingClientRect();
-            const x = (e.clientX - r.left) / r.width  - 0.5;
-            const y = (e.clientY - r.top)  / r.height - 0.5;
-            el.style.transform = `perspective(1000px) rotateY(${x*strength}deg) rotateX(${-y*strength*0.75}deg) scale(1.02)`;
-        };
-        const onLeave = () => {
-            el.style.transition = 'transform 0.6s cubic-bezier(0.34,1.56,0.64,1)';
-            el.style.transform = '';
-            setTimeout(() => { if (el) el.style.transition = ''; }, 600);
-        };
-        el.addEventListener('mousemove', onMove);
-        el.addEventListener('mouseleave', onLeave);
-        return () => {
-            el?.removeEventListener('mousemove', onMove);
-            el?.removeEventListener('mouseleave', onLeave);
-        };
-    }, [strength]);
-    return ref;
-}
-
-/* ── Stagger animation helper ─────────────────────────────────────── */
-const fadeUp = (delay = 0, y = 24) => ({
-    initial:    { opacity: 0, y },
-    animate:    { opacity: 1, y: 0 },
-    transition: { duration: 0.65, ease: [0.22,1,0.36,1], delay },
+const fadeUp = (delay = 0, y = 18) => ({
+    initial: { opacity: 0, y },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1], delay },
 });
 
-const FEATURES = [
-    { icon: <Zap size={22}/>, title: 'Instant Sync', desc: 'Play, pause, seek — mirrored to every viewer in under a second.', gradient: 'from-zinc-500 to-zinc-700', glow: 'var(--glow-sm)' },
-    { icon: <HardDrive size={22}/>, title: 'Google Drive', desc: 'Our proxy streams your private Drive files to the whole room.', gradient: 'from-gray-500 to-gray-700', glow: 'var(--glow-sm)' },
-    { icon: <MonitorPlay size={22}/>, title: 'Any Platform', desc: 'YouTube, Vimeo, MP4, Archive.org — if it plays, we sync it.', gradient: 'from-slate-500 to-slate-700', glow: 'var(--glow-sm)' },
+const navItems = [
+    { label: 'Product', target: 'product-preview' },
+    { label: 'Features', target: 'features' },
+    { label: 'Voice', target: 'voice' },
+    { label: 'Trust', target: 'trust' },
 ];
 
-const STEPS = [
-    { n: '01', icon: '🚀', title: 'Create a Room', desc: 'Pick a nickname and generate your instant room code — no account required.' },
-    { n: '02', icon: '🔗', title: 'Share the Code', desc: 'Send the 7-character code to anyone in the world. They join instantly.' },
-    { n: '03', icon: '🎬', title: 'Watch Together', desc: 'Every play, pause, and seek syncs to all viewers in real time.' },
+const features = [
+    {
+        icon: <MonitorPlay size={18} />,
+        title: 'Synchronized playback',
+        desc: 'Play, pause, seek, and drift correction stay aligned for everyone in the room.',
+    },
+    {
+        icon: <Mic size={18} />,
+        title: 'Premium voice rooms',
+        desc: 'A refined call dock keeps mute, leave, participants, and ping visible without stealing focus.',
+    },
+    {
+        icon: <MessageSquare size={18} />,
+        title: 'Live room chat',
+        desc: 'A compact conversation layer designed for quick reactions while the video stays primary.',
+    },
+    {
+        icon: <HardDrive size={18} />,
+        title: 'Drive and direct video',
+        desc: 'Stream shared video sources through a clean queue and host-controlled playback flow.',
+    },
+    {
+        icon: <ShieldCheck size={18} />,
+        title: 'Roles and control',
+        desc: 'Hosts and moderators can guide rooms confidently with clear ownership and queue actions.',
+    },
+    {
+        icon: <Signal size={18} />,
+        title: 'Connection-aware UI',
+        desc: 'Ping and Wi-Fi quality states show green, yellow, or red before users wonder what is wrong.',
+    },
 ];
 
-const STATS = [
-    { value: '∞',    label: 'Videos Synced' },
-    { value: '0ms',  label: 'Added Lag' },
-    { value: '100%', label: 'Free Forever' },
-    { value: '5+',   label: 'Platforms' },
+const trustItems = [
+    'No account required',
+    'Private room codes',
+    'Host and moderator roles',
+    'Connection state visibility',
+    'Responsive watch room',
+    'Clean reconnect handling',
 ];
 
-/* ── Fake chat messages cycling in the preview card ──────────────── */
-const FAKE_MSGS = ['this is so good 🔥', 'omg the twist!!', 'pause here 😭', '10/10 movie fr'];
+const previewUsers = [
+    { name: 'Ari', state: 'Host', active: true },
+    { name: 'Sam', state: 'Muted', active: false },
+    { name: 'Mia', state: 'Voice', active: true },
+];
+
+const roomEvents = [
+    'Ari added a video to queue',
+    'Mia joined voice',
+    'Playback synced at 01:42:18',
+];
 
 const LandingPage = () => {
-    const navigate  = useNavigate();
+    const navigate = useNavigate();
     const { joinRoom, currentUser, roomId } = useRoom();
-    const [nickname,   setNickname]   = useState('');
-    const [joinCode,   setJoinCode]   = useState('');
-    const [activeTab,  setActiveTab]  = useState('create');
-    const [chatIdx,    setChatIdx]    = useState(0);
-    const magnetRef = useMagnet(0.30);
+    const [nickname, setNickname] = useState('');
+    const [joinCode, setJoinCode] = useState('');
+    const [activeTab, setActiveTab] = useState('create');
+    const actionRef = useRef(null);
 
     useEffect(() => {
         if (currentUser && roomId) navigate(`/room/${roomId}`);
     }, [currentUser, roomId, navigate]);
 
-    // Cycle fake chat messages
-    useEffect(() => {
-        const t = setInterval(() => setChatIdx(i => (i+1) % FAKE_MSGS.length), 2800);
-        return () => clearInterval(t);
-    }, []);
-
     const handleCreate = () => {
         if (!nickname.trim()) return;
-        joinRoom(Math.random().toString(36).substring(2,9).toUpperCase(), nickname.trim());
+        joinRoom(Math.random().toString(36).substring(2, 9).toUpperCase(), nickname.trim());
     };
+
     const handleJoin = () => {
         if (!nickname.trim() || !joinCode.trim()) return;
         joinRoom(joinCode.trim().toUpperCase(), nickname.trim());
     };
+
     const handleKey = (e) => {
         if (e.key !== 'Enter') return;
         activeTab === 'create' ? handleCreate() : handleJoin();
     };
+
+    const scrollTo = (target) => {
+        document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    const focusAction = (tab = 'create') => {
+        setActiveTab(tab);
+        actionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.setTimeout(() => document.getElementById('nickname-input')?.focus(), 350);
+    };
+
     const canSubmit = nickname.trim() && (activeTab === 'create' || joinCode.trim());
 
     return (
-        <div className="min-h-screen flex flex-col relative" style={{ isolation: 'isolate' }}>
+        <div className="min-h-screen relative overflow-hidden" style={{ isolation: 'isolate', background: 'var(--bg-base)' }}>
             <BackgroundLayers />
 
-            {/* ── Navbar ────────────────────────────────────────────── */}
-            <motion.nav {...fadeUp(0.1)}
-                className="relative z-10 flex items-center justify-between px-6 sm:px-10 py-5 glass-header"
-                style={{ borderTop: 'none', borderLeft: 'none', borderRight: 'none' }}>
-                <div className="flex items-center gap-3">
-                    <img src="/logo.png" alt="Watchly Logo" className="w-14 h-auto theme-invert transition-all" />
-                    <span className="syne font-bold text-xl tracking-tight" style={{ color: 'var(--text)' }}>Watchly</span>
+            <MotionHeader
+                {...fadeUp(0.05, 8)}
+                className="sticky top-0 z-40 border-b border-white/10 bg-black/70 backdrop-blur-xl"
+            >
+                <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+                    <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-3">
+                        <img src="/logo.png" alt="Watchly" className="h-10 w-auto theme-invert" />
+                        <span className="text-sm font-bold tracking-tight text-white sm:text-base">Watchly</span>
+                    </button>
+
+                    <nav className="hidden items-center rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 md:flex">
+                        {navItems.map(item => (
+                            <button
+                                key={item.target}
+                                onClick={() => scrollTo(item.target)}
+                                className="rounded-full px-3 py-1.5 text-sm font-medium text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"
+                            >
+                                {item.label}
+                            </button>
+                        ))}
+                    </nav>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => focusAction('join')}
+                            className="hidden rounded-lg border border-white/10 px-3 py-2 text-sm font-semibold text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.05] sm:inline-flex"
+                        >
+                            Join Room
+                        </button>
+                        <button
+                            onClick={() => focusAction('create')}
+                            className="rounded-lg bg-white px-3 py-2 text-sm font-bold text-black transition hover:bg-zinc-200"
+                        >
+                            Create Room
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium glass-panel"
-                     style={{ color: 'var(--text-sub)', borderRadius: 50 }}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-                    Live sync ready
-                </div>
-            </motion.nav>
+            </MotionHeader>
 
-            {/* ── Hero ──────────────────────────────────────────────── */}
-            <main className="relative z-10 flex-1 flex flex-col lg:flex-row items-center justify-center lg:justify-between gap-8 sm:gap-12 lg:gap-16 px-5 sm:px-8 lg:px-12 py-8 sm:py-12 lg:py-14 max-w-[1400px] mx-auto w-full min-h-[100dvh]">
+            <main className="relative z-10">
+                <section className="mx-auto flex max-w-7xl flex-col items-center px-4 pb-10 pt-10 sm:px-6 sm:pt-14 lg:px-8">
+                    <MotionDiv {...fadeUp(0.12)} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-zinc-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        Free. No sign-up. Just paste a link and watch.
+                    </MotionDiv>
 
-                {/* Left: Action Card */}
-                <div className="w-full lg:w-1/2 flex justify-center lg:justify-start order-2 lg:order-1">
-                    <motion.div {...fadeUp(0.45)} className="p-6 sm:p-8 lg:p-10 flex flex-col gap-5 sm:gap-6 lg:gap-8 w-full max-w-sm sm:max-w-md lg:max-w-[540px]">
+                    <MotionDiv {...fadeUp(0.2)} className="mt-7 max-w-5xl text-center">
+                        <h1 className="text-balance text-5xl font-semibold leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl">
+                            Same scene. Same second. Miles apart.
+                        </h1>
+                        <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-zinc-400 sm:text-lg">
+                            Watchly syncs your video perfectly with friends anywhere in the world — complete with
+                            voice chat, live reactions, queue control, and a room that feels like sitting together.
+                        </p>
+                    </MotionDiv>
 
-                        {/* Tab switcher */}
-                        <div className="relative flex rounded-xl overflow-hidden p-1.5 gap-1.5"
-                             style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
-                            {[{ id:'create', label:'Create Room' }, { id:'join', label:'Join Room' }].map(tab => (
-                                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                                    className="relative flex-1 py-3 sm:py-4 text-sm sm:text-base font-bold rounded-xl z-10 transition-colors"
-                                    style={{ color: activeTab === tab.id ? 'var(--btn-text)' : 'var(--text-sub)' }}>
-                                    {activeTab === tab.id && (
-                                        <motion.div layoutId="tab-pill" className="absolute inset-0 rounded-xl z-[-1]"
-                                            style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent-2))', boxShadow: '0 4px 16px var(--accent-glow)' }}
-                                            transition={{ type:'spring', bounce:0.2, duration:0.4 }} />
-                                    )}
-                                    {tab.label}
-                                </button>
+                    <MotionDiv {...fadeUp(0.28)} className="mt-7 flex flex-col items-center gap-3 sm:flex-row">
+                        <button
+                            onClick={() => focusAction('create')}
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-bold text-black transition hover:bg-zinc-200"
+                        >
+                            Create Room
+                            <ArrowRight size={15} />
+                        </button>
+                        <button
+                            onClick={() => focusAction('join')}
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-5 text-sm font-bold text-white transition hover:border-white/25 hover:bg-white/[0.06]"
+                        >
+                            Join Existing Room
+                        </button>
+                    </MotionDiv>
+
+                    <MotionDiv
+                        id="product-preview"
+                        {...fadeUp(0.36)}
+                        className="mt-9 grid w-full gap-4 lg:grid-cols-[1.1fr_0.9fr]"
+                    >
+                        <ProductPreview />
+                        <ActionPanel
+                            ref={actionRef}
+                            activeTab={activeTab}
+                            canSubmit={canSubmit}
+                            handleCreate={handleCreate}
+                            handleJoin={handleJoin}
+                            handleKey={handleKey}
+                            joinCode={joinCode}
+                            nickname={nickname}
+                            setActiveTab={setActiveTab}
+                            setJoinCode={setJoinCode}
+                            setNickname={setNickname}
+                        />
+                    </MotionDiv>
+                </section>
+
+                <MotionSection id="features" {...fadeUp(0.08)} className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+                    <SectionHeading
+                        eyebrow="Built for watching together"
+                        title="Every feature designed around the shared moment."
+                        desc="Video stays front and center while voice, chat, and queue controls stay within reach — never in the way."
+                    />
+                    <div className="mt-10 grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 md:grid-cols-2 lg:grid-cols-3">
+                        {features.map((feature, index) => (
+                            <MotionArticle
+                                key={feature.title}
+                                {...fadeUp(index * 0.04)}
+                                className="group bg-black p-6 transition hover:bg-zinc-950"
+                            >
+                                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white transition group-hover:border-white/25">
+                                    {feature.icon}
+                                </div>
+                                <h3 className="mt-5 text-base font-semibold text-white">{feature.title}</h3>
+                                <p className="mt-2 text-sm leading-6 text-zinc-500">{feature.desc}</p>
+                            </MotionArticle>
+                        ))}
+                    </div>
+                </MotionSection>
+
+                <MotionSection id="voice" {...fadeUp(0.08)} className="border-y border-white/10 bg-white/[0.02] px-4 py-16 sm:px-6 lg:px-8">
+                    <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+                        <div>
+                            <p className="text-sm font-semibold text-emerald-400">Talk while you watch</p>
+                            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+                                Voice that feels like you're in the same room.
+                            </h2>
+                            <p className="mt-5 max-w-xl text-base leading-8 text-zinc-400">
+                                React, laugh, and talk in real time with compact voice controls that stay out of the way.
+                                Connection quality shows instantly through color-coded latency states.
+                            </p>
+                            <div className="mt-7 grid gap-3 sm:grid-cols-3">
+                                {[
+                                    ['Fast', '31 ms', '#22c55e'],
+                                    ['Okay', '182 ms', '#eab308'],
+                                    ['Slow', '421 ms', '#ef4444'],
+                                ].map(([label, ping, color]) => (
+                                    <div key={label} className="rounded-xl border border-white/10 bg-black px-4 py-3">
+                                        <div className="flex items-center gap-2 text-sm font-bold" style={{ color }}>
+                                            <Wifi size={15} />
+                                            {label}
+                                        </div>
+                                        <p className="mt-1 text-xs text-zinc-500">{ping}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <VoicePreview />
+                    </div>
+                </MotionSection>
+
+                <MotionSection id="trust" {...fadeUp(0.08)} className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+                    <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
+                        <SectionHeading
+                            eyebrow="Trust by design"
+                            title="Transparent rooms where everyone knows what's happening."
+                            desc="Roles, connection quality, and room state are always visible — so everyone can focus on watching, not wondering."
+                            align="left"
+                        />
+                        <div className="grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2">
+                            {trustItems.map(item => (
+                                <div key={item} className="flex items-center gap-3 bg-black p-4">
+                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                                        <Check size={14} />
+                                    </span>
+                                    <span className="text-sm font-medium text-zinc-300">{item}</span>
+                                </div>
                             ))}
                         </div>
+                    </div>
+                </MotionSection>
 
-                        {/* Nickname */}
-                        <div className="relative">
-                            <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
-                            <input id="nickname-input" type="text" placeholder="Your nickname…"
-                                value={nickname} maxLength={24}
-                                onChange={e => setNickname(e.target.value)} onKeyDown={handleKey}
-                                className="glass-input w-full rounded-xl py-4 pl-12 pr-4 text-base font-medium" />
+                <section className="px-4 pb-16 sm:px-6 lg:px-8">
+                    <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-10 text-center sm:px-10 sm:py-14">
+                        <p className="text-sm font-semibold text-zinc-500">Ready in seconds</p>
+                        <h2 className="mx-auto mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+                            Drop a link, share the code, start watching together.
+                        </h2>
+                        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+                            <button
+                                onClick={() => focusAction('create')}
+                                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-bold text-black transition hover:bg-zinc-200"
+                            >
+                                Create Room
+                                <ChevronRight size={15} />
+                            </button>
+                            <button
+                                onClick={() => focusAction('join')}
+                                className="inline-flex h-11 items-center justify-center rounded-lg border border-white/10 px-5 text-sm font-bold text-white transition hover:bg-white/[0.06]"
+                            >
+                                Join Room
+                            </button>
                         </div>
-
-                        {/* Room code */}
-                        <AnimatePresence>
-                            {activeTab === 'join' && (
-                                <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }}
-                                    exit={{ opacity:0, height:0 }} transition={{ duration:0.22 }} className="overflow-hidden">
-                                    <div className="relative">
-                                        <Hash size={18} className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
-                                        <input id="room-code-input" type="text" placeholder="ROOM CODE"
-                                            value={joinCode} maxLength={10}
-                                            onChange={e => setJoinCode(e.target.value.toUpperCase())} onKeyDown={handleKey}
-                                            className="glass-input w-full rounded-xl py-4 pl-12 pr-4 text-base font-mono font-bold tracking-widest uppercase" />
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        {/* CTA */}
-                        <button ref={magnetRef}
-                            id={activeTab === 'create' ? 'create-room-btn' : 'join-room-btn'}
-                            onClick={activeTab === 'create' ? handleCreate : handleJoin}
-                            disabled={!canSubmit}
-                            className="btn-primary relative flex items-center justify-center gap-3 py-4 sm:py-5 w-full text-base sm:text-lg font-bold"
-                            style={{ borderRadius: 16 }}>
-                            {activeTab === 'create'
-                                ? <><Play size={18} style={{ fill: 'var(--btn-text)', color: 'var(--btn-text)' }} /> <span>Create Room</span></>
-                                : <><Users size={18} /> <span>Join Room</span></>}
-                            <ChevronRight size={18} className="absolute right-5 opacity-60" />
-                        </button>
-
-                        <p className="text-center text-xs sm:text-sm" style={{ color: 'var(--text-muted)' }}>
-                            No signup · No downloads · Plays anywhere
-                        </p>
-                    </motion.div>
-                </div>
-
-                {/* Right: Text Content */}
-                <div className="w-full lg:w-1/2 flex flex-col items-center lg:items-start text-center lg:text-left order-1 lg:order-2 lg:pl-10">
-                    <motion.div {...fadeUp(0.2)} className="flex flex-col items-center lg:items-start">
-                        <span className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold rounded-full px-4 sm:px-5 py-1.5 sm:py-2 mb-5 sm:mb-8 shimmer-pill"
-                              style={{ color: 'var(--accent)', border: '1px solid var(--accent-border)', borderRadius: 50 }}>
-                            <Zap size={12} fill="currentColor" />
-                            Free · No account required · Open source
-                        </span>
-                        <h1 className="syne text-5xl sm:text-6xl lg:text-[5.5rem] xl:text-[6rem] font-extrabold leading-[1.05] tracking-tight" style={{ color: 'var(--text)' }}>
-                            Watch.<br />
-                            <span className="text-gradient-animated">Together.</span><br />
-                            In Sync.
-                        </h1>
-                    </motion.div>
-
-                    <motion.p {...fadeUp(0.35)}
-                        className="text-base sm:text-lg lg:text-xl leading-relaxed max-w-md sm:max-w-xl mt-5 sm:mt-8 lg:mx-0 mx-auto" style={{ color: 'var(--text-sub)' }}>
-                        Create a room, share the code, and enjoy perfectly synchronized playback with
-                        friends anywhere — YouTube, Vimeo, Google Drive, and more.
-                    </motion.p>
-                </div>
+                    </div>
+                </section>
             </main>
 
-            {/* ── Stats bar ─────────────────────────────────────────── */}
-            <motion.section {...fadeUp(0.6)} className="relative z-10 px-4 sm:px-6 lg:px-10 pb-8 sm:pb-12">
-                <div className="max-w-4xl mx-auto glass-panel rounded-2xl px-4 sm:px-6 py-4 sm:py-5 grid grid-cols-2 sm:flex sm:justify-around gap-4 sm:gap-6">
-                    {STATS.map(s => (
-                        <div key={s.label} className="text-center">
-                            <div className="syne text-xl sm:text-2xl font-bold text-gradient">{s.value}</div>
-                            <div className="text-[10px] sm:text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{s.label}</div>
-                        </div>
-                    ))}
-                </div>
-            </motion.section>
-
-            {/* ── Features ──────────────────────────────────────────── */}
-            <section className="relative z-10 pb-8 sm:pb-12 px-4 sm:px-10">
-                <div className="max-w-4xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                    {FEATURES.map((f,i) => (
-                        <motion.div key={f.title} {...fadeUp(0.65 + i*0.10)}
-                            className="glass-interactive p-4 sm:p-6 flex flex-row sm:flex-col gap-4">
-                            <div className={`w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl sm:rounded-2xl flex items-center justify-center bg-gradient-to-br ${f.gradient} text-white`}
-                                 style={{ boxShadow: `0 4px 20px ${f.glow}` }}>
-                                {f.icon}
-                            </div>
-                            <div>
-                                <p className="syne font-semibold text-sm sm:text-base mb-1" style={{ color: 'var(--text)' }}>{f.title}</p>
-                                <p className="text-xs sm:text-sm leading-relaxed" style={{ color: 'var(--text-sub)' }}>{f.desc}</p>
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
-            </section>
-
-            {/* ── How it works ──────────────────────────────────────── */}
-            <section className="relative z-10 pb-12 sm:pb-16 px-4 sm:px-10">
-                <motion.h2 {...fadeUp(0.7)} className="syne text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-10" style={{ color: 'var(--text)' }}>
-                    How It Works
-                </motion.h2>
-                <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-stretch gap-3 sm:gap-0">
-                    {STEPS.map((s, i) => (
-                        <React.Fragment key={s.n}>
-                            <motion.div {...fadeUp(0.75 + i*0.1)}
-                                className="glass-card flex-1 p-5 sm:p-6 flex flex-col gap-3"
-                                style={{ borderRadius: 20 }}>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-xl sm:text-2xl">{s.icon}</span>
-                                    <span className="syne text-xs font-bold tracking-widest" style={{ color: 'var(--text-muted)' }}>{s.n}</span>
-                                </div>
-                                <p className="syne font-bold text-sm sm:text-base" style={{ color: 'var(--text)' }}>{s.title}</p>
-                                <p className="text-xs sm:text-sm leading-relaxed" style={{ color: 'var(--text-sub)' }}>{s.desc}</p>
-                            </motion.div>
-                            {i < 2 && (
-                                <div className="hidden sm:flex items-center justify-center px-2 shrink-0">
-                                    <ArrowRight size={16} style={{ color: 'var(--accent-border)' }} />
-                                </div>
-                            )}
-                        </React.Fragment>
-                    ))}
-                </div>
-            </section>
-
-            {/* ── Footer ────────────────────────────────────────────── */}
-            <footer className="relative z-10 glass-header text-center py-5 px-6"
-                    style={{ borderTop: '1px solid var(--glass-border)', borderBottom: 'none', borderLeft: 'none', borderRight: 'none' }}>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    Watchly &copy; {new Date().getFullYear()} — Free, open, and forever in sync.
-                </p>
+            <footer className="relative z-10 border-t border-white/10 px-4 py-6 text-center text-xs text-zinc-600">
+                © Watchly {new Date().getFullYear()} — Watch together, perfectly in sync.
             </footer>
         </div>
     );
 };
+
+const SectionHeading = ({ eyebrow, title, desc, align = 'center' }) => (
+    <div className={align === 'center' ? 'mx-auto max-w-3xl text-center' : 'max-w-2xl'}>
+        <p className="text-sm font-semibold text-zinc-500">{eyebrow}</p>
+        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-5xl">{title}</h2>
+        <p className="mt-5 text-base leading-8 text-zinc-400">{desc}</p>
+    </div>
+);
+
+const ProductPreview = () => (
+    <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60">
+        <div className="flex h-12 items-center justify-between border-b border-white/10 bg-black px-4">
+            <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            </div>
+            <div className="hidden items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-xs font-medium text-zinc-400 sm:flex">
+                <Lock size={12} />
+                ROOM 8HWXIZR
+            </div>
+        </div>
+
+        <div className="grid min-h-[480px] gap-px bg-white/10 lg:grid-cols-[1fr_280px]">
+            <div className="bg-black p-4">
+                <div className="relative flex aspect-video min-h-[260px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-zinc-950">
+                    <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+                        <span className="rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs font-semibold text-zinc-300">
+                            Playing now
+                        </span>
+                        <span className="flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
+                            <Activity size={12} />
+                            Synced
+                        </span>
+                    </div>
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                        <Play size={24} fill="currentColor" />
+                    </div>
+                    <div className="absolute inset-x-4 bottom-4">
+                        <div className="mb-3 flex items-center justify-between text-xs text-zinc-500">
+                            <span>01:42:18</span>
+                            <span>02:15:04</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                            <div className="h-full w-[64%] rounded-full bg-white" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    {[
+                        ['Latency', '31 ms', <Wifi size={15} />],
+                        ['Viewers', '12 active', <Users size={15} />],
+                        ['Queue', '4 videos', <Clock3 size={15} />],
+                    ].map(([label, value, icon]) => (
+                        <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                            <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">{icon}{label}</div>
+                            <div className="mt-2 text-sm font-bold text-white">{value}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="grid gap-px bg-white/10">
+                <div className="bg-black p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-white">Room</h3>
+                        <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400">LIVE</span>
+                    </div>
+                    <div className="space-y-2">
+                        {previewUsers.map(user => (
+                            <div key={user.name} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-2.5">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xs font-bold text-black">
+                                    {user.name.charAt(0)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="truncate text-xs font-bold text-white">{user.name}</p>
+                                    <p className="text-[11px] text-zinc-500">{user.state}</p>
+                                </div>
+                                <span className={`h-2 w-2 rounded-full ${user.active ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="bg-black p-4">
+                    <h3 className="mb-3 text-sm font-bold text-white">Activity</h3>
+                    <div className="space-y-2">
+                        {roomEvents.map(event => (
+                            <div key={event} className="rounded-xl bg-white/[0.03] px-3 py-2 text-xs text-zinc-400">
+                                {event}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
+const ActionPanel = React.forwardRef(({
+    activeTab,
+    canSubmit,
+    handleCreate,
+    handleJoin,
+    handleKey,
+    joinCode,
+    nickname,
+    setActiveTab,
+    setJoinCode,
+    setNickname,
+}, ref) => (
+    <div
+        ref={ref}
+        id="room-action-card"
+        className="rounded-3xl border border-white/10 bg-black p-5 shadow-2xl shadow-black/50 sm:p-6"
+    >
+        <div className="mb-5">
+            <p className="text-sm font-semibold text-zinc-500">Start watching</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">Create or join a room.</h2>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
+            {[
+                { id: 'create', label: 'Create Room' },
+                { id: 'join', label: 'Join Room' },
+            ].map(tab => (
+                <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`rounded-lg px-3 py-2.5 text-sm font-bold transition ${activeTab === tab.id ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}
+                >
+                    {tab.label}
+                </button>
+            ))}
+        </div>
+
+        <div className="mt-5 space-y-3">
+            <label className="block">
+                <span className="mb-2 block text-xs font-semibold uppercase text-zinc-600">Nickname</span>
+                <span className="relative block">
+                    <User size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                    <input
+                        id="nickname-input"
+                        type="text"
+                        placeholder="Your nickname..."
+                        value={nickname}
+                        maxLength={24}
+                        onChange={e => setNickname(e.target.value)}
+                        onKeyDown={handleKey}
+                        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.03] pl-10 pr-3 text-sm font-medium text-white outline-none transition placeholder:text-zinc-700 focus:border-white/30"
+                    />
+                </span>
+            </label>
+
+            <AnimatePresence initial={false}>
+                {activeTab === 'join' && (
+                    <MotionDiv
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                    >
+                        <label className="block pt-1">
+                            <span className="mb-2 block text-xs font-semibold uppercase text-zinc-600">Room code</span>
+                            <span className="relative block">
+                                <Hash size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                                <input
+                                    id="room-code-input"
+                                    type="text"
+                                    placeholder="ROOM CODE"
+                                    value={joinCode}
+                                    maxLength={10}
+                                    onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                                    onKeyDown={handleKey}
+                                    className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.03] pl-10 pr-3 font-mono text-sm font-bold uppercase tracking-widest text-white outline-none transition placeholder:text-zinc-700 focus:border-white/30"
+                                />
+                            </span>
+                        </label>
+                    </MotionDiv>
+                )}
+            </AnimatePresence>
+        </div>
+
+        <button
+            id={activeTab === 'create' ? 'create-room-btn' : 'join-room-btn'}
+            onClick={activeTab === 'create' ? handleCreate : handleJoin}
+            disabled={!canSubmit}
+            className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-bold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+            {activeTab === 'create' ? <Play size={16} fill="currentColor" /> : <Users size={16} />}
+            {activeTab === 'create' ? 'Create Room' : 'Join Room'}
+            <ChevronRight size={16} />
+        </button>
+
+        <div className="mt-5 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
+            {[
+                [<Globe2 size={13} />, 'No signup'],
+                [<Radio size={13} />, 'Live sync'],
+                [<Sparkles size={13} />, 'Premium UI'],
+            ].map(([icon, text]) => (
+                <div key={text} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+                    {icon}
+                    {text}
+                </div>
+            ))}
+        </div>
+    </div>
+));
+
+ActionPanel.displayName = 'ActionPanel';
+
+const VoicePreview = () => (
+    <div className="rounded-3xl border border-white/10 bg-black p-4 shadow-2xl shadow-black/50">
+        <div className="rounded-2xl border border-white/10 bg-zinc-950 p-4">
+            <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+                    <Mic size={19} />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-bold text-white">Voice Call</p>
+                        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                            Live
+                        </span>
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-500">3 users - 08:42 - 31 ms</p>
+                </div>
+                <button className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-bold text-emerald-400">
+                    Ping
+                </button>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+                {[
+                    ['You', 'Mic on', true],
+                    ['Sam', 'Muted', false],
+                    ['Mia', 'Speaking', true],
+                ].map(([name, state, active]) => (
+                    <div key={name} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black px-3 py-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xs font-bold text-black">
+                            {name.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-bold text-white">{name}</p>
+                            <p className={`text-[11px] ${active ? 'text-emerald-400' : 'text-red-400'}`}>{state}</p>
+                        </div>
+                        <span className={`h-2.5 w-2.5 rounded-full ${active ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                    </div>
+                ))}
+            </div>
+        </div>
+    </div>
+);
 
 export default LandingPage;

@@ -1,7 +1,7 @@
 {
   "name": "Watchly",
   "short_name": "Watchly",
-  "description": "Watch videos together in perfect sync.",
+  "description": "Same scene, same second, miles apart. Sync video with friends anywhere.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#060612",

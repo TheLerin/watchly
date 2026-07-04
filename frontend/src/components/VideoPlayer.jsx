@@ -522,32 +522,29 @@ const VideoPlayer = () => {
 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
-        <div className="flex flex-col h-full w-full gap-2">
+        <div className="flex h-full w-full flex-col gap-3">
 
             {/* ── Control Bar (Host/Mod only) ─────────────────────────── */}
             {isPrivileged && (
-                <div className="flex gap-2 flex-shrink-0">
-                    <form onSubmit={handleLoad} className="flex flex-1 items-center gap-1.5 p-1 rounded-xl transition-all" style={{ background: 'var(--glass-bg-strong)', border: '1px solid var(--glass-border-top)', boxShadow: '0 4px 20px var(--accent-glow)' }}>
-                        <div className="relative flex-1 flex items-center">
-                            <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" size={16} style={{ color: 'var(--text-sub)' }} />
+                <div className="flex flex-shrink-0 gap-2">
+                    <form onSubmit={handleLoad} className="flex flex-1 items-center gap-1.5 rounded-2xl border border-white/10 bg-black/80 p-1.5 shadow-xl shadow-black/30 transition-all">
+                        <div className="relative flex flex-1 items-center">
+                            <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                             <input
                                 type="text"
                                 value={inputUrl}
                                 onChange={e => setInputUrl(e.target.value)}
                                 placeholder="Paste YouTube, Vimeo, Google Drive, or direct video URL..."
-                                className="w-full bg-transparent py-2.5 pl-10 pr-4 text-sm focus:outline-none placeholder-gray-500"
-                                style={{ color: 'var(--text)' }}
+                                className="w-full bg-transparent py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-600 outline-none"
                             />
                         </div>
-                        <div className="flex items-center gap-1.5 pr-1 shrink-0">
+                        <div className="flex shrink-0 items-center gap-1.5">
                             <button type="submit" disabled={!inputUrl.trim()}
-                                className="px-4 py-2 disabled:opacity-40 rounded-lg text-xs font-bold transition-transform active:scale-95"
-                                style={{ background: 'var(--text)', color: 'var(--bg-base)' }}>
+                                className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 active:scale-95 disabled:opacity-40">
                                 Play Now
                             </button>
                             <button type="button" disabled={!inputUrl.trim()} onClick={handleQueueAdd}
-                                className="px-4 py-2 disabled:opacity-40 rounded-lg text-xs font-bold transition-transform active:scale-95"
-                                style={{ background: 'transparent', color: 'var(--text)', border: '1px solid var(--glass-border)' }}>
+                                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/[0.06] active:scale-95 disabled:opacity-40">
                                 Queue
                             </button>
                         </div>
@@ -580,8 +577,8 @@ const VideoPlayer = () => {
                             </div>
                         );
                         return (
-                            <div className="flex items-center gap-1.5 px-3 py-2 border border-white/10 bg-white/5 rounded-xl text-xs text-gray-500 shrink-0" title="No video loaded">
-                                <span className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0" />
+                            <div className="flex shrink-0 items-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-500" title="No video loaded">
+                                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-700" />
                                 <span className="hidden sm:inline">No source</span>
                             </div>
                         );
@@ -591,9 +588,8 @@ const VideoPlayer = () => {
 
             {/* ── Track toolbar ─────────────────────────────────────────── */}
             {hasContent && (subtitleTracks.length > 0 || audioTracks.length > 0 || isPrivileged) && (
-                <div ref={trackToolbarRef} className="flex gap-3 items-center flex-shrink-0 flex-wrap p-2 rounded-xl"
-                    style={{ background: 'var(--panel-bg)', border: '1px solid var(--border-color)' }}>
-                    <span className="text-xs font-semibold text-gray-400">Tracks:</span>
+                <div ref={trackToolbarRef} className="flex flex-shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-black/70 p-2">
+                    <span className="text-xs font-semibold text-zinc-500">Tracks:</span>
                     {subtitleTracks.length > 0 && (
                         <SubtitleMenu
                             activeSubtitle={activeSubtitle} setActiveSubtitle={setActiveSubtitle}
@@ -624,17 +620,17 @@ const VideoPlayer = () => {
             )}
 
             {/* ── Player ────────────────────────────────────────────────── */}
-            <div ref={playerContainerRef} className="flex-1 rounded-2xl overflow-hidden border border-white/10 relative group min-h-0" style={{ background: '#000' }}>
+            <div ref={playerContainerRef} className="group relative min-h-0 flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl shadow-black/50">
                 <AnimatePresence mode="wait">
                     {!hasContent ? (
                         <motion.div key="empty"
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                            className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                            <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse">
-                                <img src="/logo.png" alt="Watchly Logo" className="w-16 h-auto opacity-70 theme-invert transition-all" />
+                            className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.06),transparent_45%)] p-6 text-center">
+                            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/60">
+                                <img src="/logo.png" alt="Watchly Logo" className="w-14 h-auto opacity-80 theme-invert transition-all" />
                             </div>
-                            <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>No Video Playing</h2>
-                            <p className="text-sm max-w-sm" style={{ color: 'var(--text-sub)' }}>
+                            <h2 className="mb-2 text-xl font-semibold text-white">No video playing</h2>
+                            <p className="max-w-sm text-sm leading-6 text-zinc-500">
                                 {isPrivileged
                                     ? 'Paste a video URL in the bar above and click Play Now to begin syncing.'
                                     : 'Waiting for the host to start a video.'}

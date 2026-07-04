@@ -2,14 +2,20 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { socket } from '../socket';
 import toast from 'react-hot-toast';
+import { getNetworkQualityFromPing } from '../utils/networkQuality';
 
 const RoomContext = createContext();
 
 export const useRoom = () => useContext(RoomContext);
 
+const PING_INTERVAL_MS = 7000;
+const PING_TIMEOUT_MS = 2500;
+
 export const RoomProvider = ({ children }) => {
     const [isRestoringSession, setIsRestoringSession] = useState(true);
     const [isConnected, setIsConnected] = useState(false);
+    const [networkPingMs, setNetworkPingMs] = useState(null);
+    const [networkQuality, setNetworkQuality] = useState('offline');
     const [currentUser, setCurrentUser] = useState(null);
     const [users, setUsers] = useState([]);
     const [messages, setMessages] = useState([]);
@@ -32,10 +38,50 @@ export const RoomProvider = ({ children }) => {
     // BUG-11: Timeout ref so we can clear it once room_joined fires
     const restoreTimeoutRef = useRef(null);
 
+    const measurePing = useCallback(() => {
+        if (!socket.connected) {
+            setNetworkPingMs(null);
+            setNetworkQuality('offline');
+            return Promise.resolve(null);
+        }
+
+        const startedAt = performance.now();
+        setNetworkQuality(prev => prev === 'offline' ? 'checking' : prev);
+
+        return new Promise(resolve => {
+            socket.timeout(PING_TIMEOUT_MS).emit('network_ping', { sentAt: Date.now() }, (err, response = {}) => {
+                if (err) {
+                    setNetworkPingMs(null);
+                    setNetworkQuality('poor');
+                    resolve(null);
+                    return;
+                }
+
+                const pingMs = Math.max(1, Math.round(performance.now() - startedAt));
+                setNetworkPingMs(pingMs);
+                setNetworkQuality(getNetworkQualityFromPing(pingMs, true));
+                resolve({ pingMs, serverTime: response.serverTime });
+            });
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!isConnected) return undefined;
+
+        const firstPingId = setTimeout(measurePing, 0);
+        const intervalId = setInterval(measurePing, PING_INTERVAL_MS);
+        return () => {
+            clearTimeout(firstPingId);
+            clearInterval(intervalId);
+        };
+    }, [isConnected, measurePing]);
+
     useEffect(() => {
         function onConnect() { setIsConnected(true); }
         function onDisconnect() {
             setIsConnected(false);
+            setNetworkPingMs(null);
+            setNetworkQuality('offline');
             setCurrentUser(null);
         }
         function onRoomJoined({ user, existingUsers, videoState: initialVideoState, queue: initialQueue, chatHistory }) {
@@ -373,6 +419,8 @@ export const RoomProvider = ({ children }) => {
         <RoomContext.Provider value={{
             isRestoringSession,
             isConnected,
+            networkPingMs,
+            networkQuality,
             currentUser,
             users,
             messages,
@@ -394,6 +442,7 @@ export const RoomProvider = ({ children }) => {
             removeFromQueue,
             playNext,
             syncProgress,
+            measurePing,
         }}>
             {children}
         </RoomContext.Provider>
