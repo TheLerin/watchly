@@ -1,15 +1,19 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import ReactPlayer from 'react-player/lazy'; // FIX #3: lazy import loads only the needed adapter, not all adapters
 import { useRoom } from '../context/RoomContext';
-import { Play, Link as LinkIcon, Lock, AlertCircle, Plus, ChevronDown, Mic, Subtitles as SubtitlesIcon, FolderOpen, Maximize, Minimize, RefreshCw } from 'lucide-react';
+import { Play, Link as LinkIcon, Lock, AlertCircle, Plus, ChevronDown, Mic, Subtitles as SubtitlesIcon, FolderOpen, Maximize, Minimize, RefreshCw, FileVideo, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { fingerprintLocalFile, formatFileSize, readLocalVideoDuration } from '../utils/localMedia';
+import useSynchronizedMedia from '../hooks/useSynchronizedMedia';
 
 // How often the host reports playback position (ms)
-const SYNC_INTERVAL_MS = 2000;
+const SYNC_INTERVAL_MS = 1500;
 // Max drift before a viewer auto-corrects during normal playback
-const DRIFT_THRESHOLD = 2;
+const HARD_DRIFT_THRESHOLD = 1.25;
+const SOFT_DRIFT_THRESHOLD = 0.18;
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const MotionDiv = motion.div;
 
 function rewriteGDriveUrl(url) {
     if (!url) return url;
@@ -90,7 +94,7 @@ const SubtitleMenu = ({ activeSubtitle, setActiveSubtitle, subtitleTracks, showS
         </button>
         <AnimatePresence>
             {showSubMenu && (
-                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                <MotionDiv initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                     className="absolute top-full left-0 mt-1 bg-black/80 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40" style={{ background: 'var(--glass-bg-strong)', borderColor: 'var(--glass-border)' }}>
                     <button onClick={() => { setActiveSubtitle(-1); setShowSubMenu(false); }}
                         className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === -1 ? 'font-bold' : ''}`} style={{ color: activeSubtitle === -1 ? 'var(--text)' : 'var(--text-sub)' }}>Off</button>
@@ -100,7 +104,7 @@ const SubtitleMenu = ({ activeSubtitle, setActiveSubtitle, subtitleTracks, showS
                             {t.label}{t.language ? ` (${t.language})` : ''}
                         </button>
                     ))}
-                </motion.div>
+                </MotionDiv>
             )}
         </AnimatePresence>
     </div>
@@ -116,7 +120,7 @@ const AudioMenu = ({ activeAudio, setActiveAudio, audioTracks, showAudioMenu, se
         </button>
         <AnimatePresence>
             {showAudioMenu && (
-                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                <MotionDiv initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                     className="absolute top-full left-0 mt-1 bg-black/80 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40" style={{ background: 'var(--glass-bg-strong)', borderColor: 'var(--glass-border)' }}>
                     {audioTracks.map(t => (
                         <button key={t.index} onClick={() => { setActiveAudio(t.index); setShowAudioMenu(false); }}
@@ -124,7 +128,7 @@ const AudioMenu = ({ activeAudio, setActiveAudio, audioTracks, showAudioMenu, se
                             {t.label}{t.language ? ` (${t.language})` : ''}
                         </button>
                     ))}
-                </motion.div>
+                </MotionDiv>
             )}
         </AnimatePresence>
     </div>
@@ -134,9 +138,10 @@ const AudioMenu = ({ activeAudio, setActiveAudio, audioTracks, showAudioMenu, se
 
 const VideoPlayer = () => {
     const {
-        videoState, currentUser,
+        videoState, currentUser, localReadiness, controllerMemberId, playback, clock, isConnected,
         loadVideo, addToQueue,
-        playVideo, pauseVideo, syncProgress, seekVideo
+        selectLocalMedia, markLocalMediaReady, markLocalMediaNotReady, markLocalMediaStatus,
+        playVideo, pauseVideo, syncProgress, seekVideo, endVideo, getExpectedPosition, sendPlaybackTelemetry
     } = useRoom();
 
     // ── Refs ─────────────────────────────────────────────────────────────────
@@ -144,7 +149,12 @@ const VideoPlayer = () => {
     const nativeVideoRef     = useRef(null);
     const playerContainerRef = useRef(null);
     const subtitleInputRef   = useRef(null);
+    const localFileInputRef  = useRef(null);
+    const localInputModeRef  = useRef('match');
     const syncIntervalRef    = useRef(null);
+    const localFileUrlRef    = useRef('');
+    const localSessionRef    = useRef(null);
+    const wasConnectedRef    = useRef(isConnected);
 
     const isSeekingRef     = useRef(false);
     const seekEndTimerRef  = useRef(null);
@@ -189,6 +199,10 @@ const VideoPlayer = () => {
     const [showAudioMenu, setShowAudioMenu] = useState(false);
     const [isFullscreen, setIsFullscreen]   = useState(false);
     const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+    const [localFileUrl, setLocalFileUrl] = useState('');
+    const [fingerprintProgress, setFingerprintProgress] = useState(0);
+    const [isFingerprinting, setIsFingerprinting] = useState(false);
+    const [localFileError, setLocalFileError] = useState('');
 
     // ── Fullscreen Listeners ──────────────────────────────────────────────────
     useEffect(() => {
@@ -218,17 +232,97 @@ const VideoPlayer = () => {
     };
 
     // ── Derived values ────────────────────────────────────────────────────────
-    const isPrivileged  = currentUser?.role === 'Host' || currentUser?.role === 'Moderator';
+    const isPrivileged  = currentUser?.userId === controllerMemberId;
     const rawUrl        = videoState.url || null;
     const playerUrl     = rewriteGDriveUrl(rawUrl);
+    const isLocal       = videoState.sourceType === 'local' && !!videoState.localMedia;
     const isGDriveProxy = !!(playerUrl && playerUrl.includes('/api/proxy/gdrive'));
-    const hasContent    = !!(videoState.url || videoState.magnetURI);
+    const isNativePlayer = isLocal || isGDriveProxy;
+    const hasContent    = isLocal || !!(videoState.url || videoState.magnetURI);
     const isYouTube     = !!(playerUrl && (playerUrl.includes('youtube.com') || playerUrl.includes('youtu.be')));
     const isArchive     = !!(playerUrl && playerUrl.includes('archive.org'));
+    const isLocalReady  = isLocal && !!localFileUrl && localSessionRef.current === videoState.localMedia?.sessionId;
+    const { apply: applySynchronizedState, correct: correctSynchronizedState } = useSynchronizedMedia({ clock, durationSec: videoState.localMedia?.duration || Infinity });
+
+    useEffect(() => {
+        if (!isLocal || !isLocalReady || !playback || !nativeVideoRef.current) return;
+        applySynchronizedState(nativeVideoRef.current, playback);
+    }, [isLocal, isLocalReady, playback, applySynchronizedState]);
+    useEffect(() => {
+        const reconnected = isConnected && !wasConnectedRef.current;
+        wasConnectedRef.current = isConnected;
+        if (!isLocal || !isLocalReady || !nativeVideoRef.current) return;
+        if (!isConnected) {
+            nativeVideoRef.current.pause();
+            return;
+        }
+        if (reconnected && playback) {
+            clock.sample(7).finally(() => applySynchronizedState(nativeVideoRef.current, playback, { force: true }));
+        }
+    }, [applySynchronizedState, clock, isConnected, isLocal, isLocalReady, playback]);
+    useEffect(() => {
+        if (!isLocal || !isLocalReady || !playback) return undefined;
+        const correct = (force = false) => {
+            if (!isBufferingRef.current) correctSynchronizedState(nativeVideoRef.current, playback, force);
+        };
+        const interval = setInterval(correct, 1000);
+        const visible = () => { if (document.visibilityState === 'visible') correct(true); };
+        document.addEventListener('visibilitychange', visible);
+        return () => { clearInterval(interval); document.removeEventListener('visibilitychange', visible); };
+    }, [isLocal, isLocalReady, playback, correctSynchronizedState]);
+    useEffect(() => {
+        if (!isLocal || !isLocalReady || !playback) return undefined;
+        const report = () => {
+            const video = nativeVideoRef.current;
+            if (!video) return;
+            sendPlaybackTelemetry({
+                positionSec: video.currentTime || 0,
+                readyState: video.readyState,
+                buffering: isBufferingRef.current,
+                lastSeq: playback.seq
+            });
+        };
+        report();
+        const interval = setInterval(report, 2000);
+        return () => clearInterval(interval);
+    }, [isLocal, isLocalReady, playback, sendPlaybackTelemetry]);
+    const everyoneReady = localReadiness.totalCount > 0 && localReadiness.readyCount >= localReadiness.totalCount;
+
+    // A brief Socket.IO reconnect clears server-side readiness, but the browser
+    // can still have the verified File and blob URL. Re-announce that readiness
+    // instead of forcing the user to choose the same file again.
+    useEffect(() => {
+        const media = videoState.localMedia;
+        if (!isLocalReady || currentUser?.localReady !== false || !media) return;
+        markLocalMediaReady({
+            mediaSessionId: media.sessionId,
+            fingerprint: media.fingerprint,
+            size: media.size,
+            duration: media.duration,
+        });
+    }, [
+        currentUser?.localReady,
+        isLocalReady,
+        markLocalMediaReady,
+        videoState.localMedia,
+    ]);
 
     // ── 1. Reset on URL change ────────────────────────────────────────────────
     useEffect(() => {
-        setIsPlayerReady(false);
+        const localSessionId = videoState.localMedia?.sessionId || null;
+        const hasActiveLocalFile = Boolean(
+            localSessionId &&
+            localSessionRef.current === localSessionId &&
+            localFileUrlRef.current
+        );
+
+        // Blob URLs can reach `canplay` before this source-reset effect runs.
+        // Do not overwrite that ready event for the file that is still active.
+        // If the event won the race, readyState is already HAVE_FUTURE_DATA (3)
+        // or better; otherwise the normal onCanPlay handler will finish setup.
+        const activeLocalVideoIsReady = hasActiveLocalFile &&
+            nativeVideoRef.current?.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
+        setIsPlayerReady(activeLocalVideoIsReady);
         setPlayerError(null);
         setAutoplayBlocked(false);
         setSubtitleTracks([]);
@@ -245,14 +339,34 @@ const VideoPlayer = () => {
         prevSeekVersionReactPlayerRef.current = videoState.seekVersion ?? 0;
         prevSeekVersionGDriveRef.current      = videoState.seekVersion ?? 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [videoState.url, videoState.magnetURI]);
+    }, [videoState.url, videoState.magnetURI, videoState.localMedia?.sessionId]);
+
+    useEffect(() => {
+        const activeSession = videoState.localMedia?.sessionId || null;
+        if (localSessionRef.current === activeSession) return;
+        if (localFileUrlRef.current) {
+            URL.revokeObjectURL(localFileUrlRef.current);
+            localFileUrlRef.current = '';
+        }
+        localSessionRef.current = null;
+        setLocalFileUrl('');
+        setLocalFileError('');
+        setFingerprintProgress(0);
+    }, [videoState.localMedia?.sessionId]);
+
+    useEffect(() => () => {
+        if (localFileUrlRef.current) {
+            URL.revokeObjectURL(localFileUrlRef.current);
+            localFileUrlRef.current = '';
+        }
+    }, []);
 
     // ── Revoke subtitle Object URLs on unmount ────────────────────────────────
     useEffect(() => {
         return () => {
             subtitleTracks.forEach(t => {
                 if (t.src && !t.isNative) {
-                    try { URL.revokeObjectURL(t.src); } catch (_) {}
+                    try { URL.revokeObjectURL(t.src); } catch { /* already revoked */ }
                 }
             });
         };
@@ -263,26 +377,36 @@ const VideoPlayer = () => {
     // to the host's ever-advancing time restarts the buffer from a further
     // position → infinite buffer death-loop. We skip correction until playback resumes.
     useEffect(() => {
-        if (isPrivileged || !isPlayerReady || !playerRef.current || isGDriveProxy) return;
+        if (isPrivileged || !isPlayerReady || !playerRef.current || isNativePlayer) return;
         if (isBufferingRef.current) return; // BUG-I: skip during buffer stall
 
-        const stateTime    = videoState.playedSeconds || 0;
+        const stateTime    = getExpectedPosition(videoState);
         const internalTime = playerRef.current.getCurrentTime() || 0;
         const seekVer      = videoState.seekVersion ?? 0;
         const isForcedSeek = seekVer !== prevSeekVersionReactPlayerRef.current;
         prevSeekVersionReactPlayerRef.current = seekVer;
-        if (isForcedSeek || Math.abs(internalTime - stateTime) > DRIFT_THRESHOLD) {
+        const drift = stateTime - internalTime;
+        if (isForcedSeek || Math.abs(drift) > HARD_DRIFT_THRESHOLD) {
             playerRef.current.seekTo(stateTime, 'seconds');
+            const internal = playerRef.current?.getInternalPlayer?.();
+            if (internal instanceof HTMLMediaElement) internal.playbackRate = 1;
+        } else {
+            const internal = playerRef.current?.getInternalPlayer?.();
+            if (internal instanceof HTMLMediaElement) {
+                internal.playbackRate = Math.abs(drift) > SOFT_DRIFT_THRESHOLD
+                    ? (drift > 0 ? 1.03 : 0.97)
+                    : 1;
+            }
         }
-    }, [videoState.playedSeconds, videoState.seekVersion, isPlayerReady, isPrivileged, isGDriveProxy]);
+    }, [videoState, isPlayerReady, isPrivileged, isNativePlayer, getExpectedPosition]);
 
     // ── 3. Drift correction – GDrive native video viewers ────────────────────
     // Guard with isPlayerReady so we don't seek before video is loaded
     // FIX #6: Also guard with isBufferingRef — same protection as ReactPlayer path
     useEffect(() => {
-        if (!isGDriveProxy || isPrivileged || !nativeVideoRef.current || !isPlayerReady) return;
+        if (!isNativePlayer || isPrivileged || !nativeVideoRef.current || !isPlayerReady || (isLocal && !isLocalReady)) return;
         if (isBufferingRef.current) return; // FIX #6: skip during buffer stall
-        const stateTime   = videoState.playedSeconds || 0;
+        const stateTime   = getExpectedPosition(videoState);
         const currentTime = nativeVideoRef.current.currentTime || 0;
         const seekVer     = videoState.seekVersion ?? 0;
         const isForcedSeek = seekVer !== prevSeekVersionGDriveRef.current;
@@ -296,23 +420,23 @@ const VideoPlayer = () => {
             // which causes buffer starvation on marginal proxy connections.
             const diff = stateTime - currentTime; // Positive means host is ahead
 
-            if (Math.abs(diff) > 15) {
+            if (Math.abs(diff) > HARD_DRIFT_THRESHOLD) {
                 // Way out of sync (or joined late), force jump
                 nativeVideoRef.current.currentTime = stateTime;
                 if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
-            } else if (diff > 5) {
-                if (nativeVideoRef.current.playbackRate !== 1.05) nativeVideoRef.current.playbackRate = 1.05;
-            } else if (diff < -5) {
-                if (nativeVideoRef.current.playbackRate !== 0.95) nativeVideoRef.current.playbackRate = 0.95;
+            } else if (diff > SOFT_DRIFT_THRESHOLD) {
+                if (nativeVideoRef.current.playbackRate !== 1.03) nativeVideoRef.current.playbackRate = 1.03;
+            } else if (diff < -SOFT_DRIFT_THRESHOLD) {
+                if (nativeVideoRef.current.playbackRate !== 0.97) nativeVideoRef.current.playbackRate = 0.97;
             } else {
                 if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
             }
         }
-    }, [videoState.playedSeconds, videoState.seekVersion, isGDriveProxy, isPrivileged, isPlayerReady]);
+    }, [videoState, isNativePlayer, isLocal, isLocalReady, isPrivileged, isPlayerReady, getExpectedPosition]);
 
     // ── 4. GDrive play / pause control ────────────────────────────────────────
     useEffect(() => {
-        if (!isGDriveProxy || !nativeVideoRef.current || !isPlayerReady) return;
+        if (!isNativePlayer || isLocal || !nativeVideoRef.current || !isPlayerReady) return;
 
         if (videoState.isPlaying) {
             if (nativeVideoRef.current.paused) {
@@ -325,14 +449,14 @@ const VideoPlayer = () => {
                 nativeVideoRef.current.pause();
             }
         }
-    }, [videoState.isPlaying, isGDriveProxy, isPlayerReady]);
+    }, [videoState.isPlaying, isNativePlayer, isLocal, isLocalReady, isPlayerReady]);
 
     // ── 4b. BUG-H FIX: Autoplay-blocked detection for ReactPlayer viewers ─────
     // ReactPlayer forwards the `playing` prop but browsers can silently block
     // autoplay. We detect this by trying to call play() on the internal element
     // when the room is in a playing state and the element is paused.
     useEffect(() => {
-        if (isPrivileged || isGDriveProxy || !isPlayerReady) return;
+        if (isPrivileged || isNativePlayer || !isPlayerReady) return;
         if (videoState.isPlaying) {
             const internal = playerRef.current?.getInternalPlayer?.();
             if (internal instanceof HTMLVideoElement && internal.paused) {
@@ -343,7 +467,7 @@ const VideoPlayer = () => {
         } else {
             setAutoplayBlocked(false);
         }
-    }, [videoState.isPlaying, isPlayerReady, isPrivileged, isGDriveProxy]);
+    }, [videoState.isPlaying, isPlayerReady, isPrivileged, isNativePlayer]);
 
     // ── 5. ReactPlayer onReady ────────────────────────────────────────────────
     const handleReady = useCallback(() => {
@@ -373,10 +497,10 @@ const VideoPlayer = () => {
     // Previously both the interval and onProgress emitted sync_progress, causing
     // redundant traffic and viewer state race conditions.
     useEffect(() => {
-        if (!isPrivileged) return;
+        if (!isPrivileged || isLocal) return;
         syncIntervalRef.current = setInterval(() => {
             if (isSeekingRef.current) return;
-            if (isGDriveProxy) {
+            if (isNativePlayer) {
                 const t = nativeVideoRef.current?.currentTime || 0;
                 if (t > 0) syncProgress(t);
             } else {
@@ -386,7 +510,7 @@ const VideoPlayer = () => {
             }
         }, SYNC_INTERVAL_MS);
         return () => clearInterval(syncIntervalRef.current);
-    }, [isPrivileged, syncProgress, isGDriveProxy]);
+    }, [isPrivileged, isLocal, syncProgress, isNativePlayer]);
 
     // ── 7. Apply subtitle / audio tracks ─────────────────────────────────────
     useEffect(() => {
@@ -452,7 +576,7 @@ const VideoPlayer = () => {
             if (e.key === ' ' || e.key === 'Spacebar') {
                 e.preventDefault();
                 if (videoStateRef.current.isPlaying) {
-                    const t = isGDriveProxy
+                    const t = isNativePlayer
                         ? nativeVideoRef.current?.currentTime || 0
                         : playerRef.current?.getCurrentTime?.() || 0;
                     pauseVideo(t);
@@ -463,7 +587,7 @@ const VideoPlayer = () => {
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isPrivileged, isGDriveProxy, playVideo, pauseVideo]);
+    }, [isPrivileged, isNativePlayer, playVideo, pauseVideo]);
 
     const handleLoad = async (e) => {
         e.preventDefault();
@@ -505,6 +629,97 @@ const VideoPlayer = () => {
         setInputUrl('');
     };
 
+    const replaceLocalObjectUrl = useCallback((file, sessionId) => {
+        if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
+        const nextUrl = URL.createObjectURL(file);
+        localFileUrlRef.current = nextUrl;
+        localSessionRef.current = sessionId;
+        setLocalFileUrl(nextUrl);
+        setLocalFileError('');
+        setIsPlayerReady(false);
+        return nextUrl;
+    }, []);
+
+    const handleLocalFile = async event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+
+        const expected = localInputModeRef.current === 'match'
+            ? videoStateRef.current.localMedia
+            : null;
+        if (expected && file.size !== expected.size) {
+            setLocalFileError('That file does not match the host’s selection (file size differs).');
+            markLocalMediaNotReady(expected.sessionId);
+            return;
+        }
+
+        setIsFingerprinting(true);
+        setFingerprintProgress(1);
+        setLocalFileError('');
+        try {
+            const [fingerprint, duration] = await Promise.all([
+                fingerprintLocalFile(file, setFingerprintProgress),
+                readLocalVideoDuration(file),
+            ]);
+
+            if (expected) {
+                if (
+                    expected.sessionId !== videoStateRef.current.localMedia?.sessionId ||
+                    fingerprint !== expected.fingerprint ||
+                    file.size !== expected.size ||
+                    Math.abs(duration - expected.duration) > 0.25
+                ) {
+                    setLocalFileError('That is a different file. Choose the same video as the host.');
+                    markLocalMediaNotReady(expected.sessionId);
+                    return;
+                }
+                replaceLocalObjectUrl(file, expected.sessionId);
+                markLocalMediaReady({
+                    mediaSessionId: expected.sessionId,
+                    fingerprint,
+                    size: file.size,
+                    duration,
+                });
+                toast.success('Local file matched. You’re ready.');
+                return;
+            }
+
+            if (!isPrivileged) return;
+            const sessionId = `sampled-sha256-v1:${file.size}:${fingerprint}`;
+            const displayTitle = window.prompt('Choose a title for the room (your filename stays private):', 'Movie night')?.trim().slice(0, 100) || 'Local movie';
+            replaceLocalObjectUrl(file, sessionId);
+            try {
+                await selectLocalMedia({
+                    sessionId,
+                    fingerprint,
+                    // Never expose the device filename to the room by default.
+                    displayName: displayTitle,
+                    size: file.size,
+                    mimeType: file.type || 'application/octet-stream',
+                    duration,
+                });
+                toast.success('Local file selected. Waiting for everyone to match it.');
+            } catch (error) {
+                if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
+                localFileUrlRef.current = '';
+                localSessionRef.current = null;
+                setLocalFileUrl('');
+                throw error;
+            }
+        } catch (error) {
+            const message = error.message || 'Could not read this video file.';
+            setLocalFileError(message);
+            toast.error(message, { duration: 5000 });
+            if (expected?.sessionId) {
+                const unsupported = /format|decode|browser cannot read/i.test(error.message || '');
+                markLocalMediaStatus(expected.sessionId, unsupported ? 'UNSUPPORTED' : 'ERROR', error.message);
+            }
+        } finally {
+            setIsFingerprinting(false);
+        }
+    };
+
     const handleSubtitleUpload = (e) => {
         const files = [...e.target.files];
         if (!files.length) return;
@@ -526,15 +741,15 @@ const VideoPlayer = () => {
 
             {/* ── Control Bar (Host/Mod only) ─────────────────────────── */}
             {isPrivileged && (
-                <div className="flex flex-shrink-0 gap-2">
-                    <form onSubmit={handleLoad} className="flex flex-1 items-center gap-1.5 rounded-2xl border border-white/10 bg-black/80 p-1.5 shadow-xl shadow-black/30 transition-all">
+                <div className="flex flex-shrink-0 flex-wrap gap-2">
+                    <form onSubmit={handleLoad} className="flex min-w-0 basis-full items-center gap-1.5 rounded-2xl border border-white/10 bg-black/80 p-1.5 shadow-xl shadow-black/30 transition-all lg:basis-auto lg:flex-1">
                         <div className="relative flex flex-1 items-center">
                             <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                             <input
                                 type="text"
                                 value={inputUrl}
                                 onChange={e => setInputUrl(e.target.value)}
-                                placeholder="Paste YouTube, Vimeo, Google Drive, or direct video URL..."
+                                placeholder="Watch from Link — YouTube, Vimeo, Google Drive, or direct URL..."
                                 className="w-full bg-transparent py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-600 outline-none"
                             />
                         </div>
@@ -549,8 +764,28 @@ const VideoPlayer = () => {
                             </button>
                         </div>
                     </form>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            localInputModeRef.current = 'replace';
+                            localFileInputRef.current?.click();
+                        }}
+                        disabled={isFingerprinting}
+                        className="flex shrink-0 items-center gap-2 rounded-2xl border border-white/10 bg-black/80 px-3 text-xs font-bold text-white transition hover:bg-white/[0.06] disabled:opacity-50"
+                        title="Play a file that stays on each person’s device"
+                    >
+                        <FileVideo size={15} />
+                        <span className="hidden xl:inline">Watch Local File</span>
+                    </button>
                     {/* Source badge */}
                     {(() => {
+                        if (isLocal) return (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-violet-500/30 bg-violet-500/10 rounded-xl text-xs text-violet-300 shrink-0" title="This video stays on each person’s device">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isLocalReady ? 'bg-violet-400 animate-pulse' : 'bg-violet-700'}`} />
+                                <FileVideo size={13} />
+                                <span className="hidden sm:inline font-medium">Local</span>
+                            </div>
+                        );
                         if (isGDriveProxy) return (
                             <div className="flex items-center gap-1.5 px-3 py-2 border border-blue-500/30 bg-blue-500/10 rounded-xl text-xs text-blue-300 shrink-0" title="Streaming via Google Drive proxy">
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-blue-400 animate-pulse' : 'bg-blue-600'}`} />
@@ -583,6 +818,84 @@ const VideoPlayer = () => {
                             </div>
                         );
                     })()}
+                </div>
+            )}
+
+            <input
+                ref={localFileInputRef}
+                type="file"
+                className="hidden"
+                accept="video/mp4,video/webm,.mp4,.webm,.mkv"
+                onChange={handleLocalFile}
+            />
+
+            {isLocal && (
+                <div className="flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-violet-500/20 bg-violet-500/[0.07] px-3 py-2 text-xs">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <ShieldCheck size={15} className="shrink-0 text-violet-300" />
+                        <div className="min-w-0">
+                            <div className="truncate font-semibold text-zinc-200" title={videoState.localMedia.displayName}>
+                                {videoState.localMedia.displayName}
+                            </div>
+                            <div className="truncate text-[10px] text-zinc-500">
+                                {formatFileSize(videoState.localMedia.size)} · The file never leaves your device
+                            </div>
+                        </div>
+                    </div>
+                    <span className={`rounded-full border px-2.5 py-1 font-bold ${isLocalReady ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400' : 'border-white/10 bg-white/[0.03] text-zinc-400'}`}>
+                        {localReadiness.readyCount}/{localReadiness.totalCount} ready
+                    </span>
+                    {isLocalReady && <button
+                        type="button"
+                        onClick={async () => {
+                            await clock.sample(7);
+                            correctSynchronizedState(nativeVideoRef.current, playback, true);
+                            toast.success('Resynced to room time.');
+                        }}
+                        className="flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 font-bold text-zinc-300 hover:bg-white/[0.06]"
+                    ><RefreshCw size={12}/> Resync</button>}
+                    {isLocalReady && !isPrivileged && <button
+                        type="button"
+                        onClick={async () => {
+                            const video = nativeVideoRef.current;
+                            if (!video) return;
+                            try {
+                                correctSynchronizedState(video, playback, true);
+                                await video.play();
+                                if (playback?.status !== 'playing') video.pause();
+                                setAutoplayBlocked(false);
+                                toast.success('Playback enabled for this browser.');
+                            } catch {
+                                setAutoplayBlocked(true);
+                            }
+                        }}
+                        className="flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 font-bold text-zinc-300 hover:bg-white/[0.06]"
+                    ><Play size={12}/> Enable playback</button>}
+                    {isPrivileged && !everyoneReady && !videoState.isPlaying && (
+                        <button
+                            type="button"
+                            onClick={() => playVideo({ startAnyway: true })}
+                            className="rounded-xl border border-white/10 bg-white px-3 py-1.5 font-bold text-black transition hover:bg-zinc-200"
+                        >
+                            Start anyway
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {isFingerprinting && (
+                <div className="flex flex-shrink-0 items-center gap-3 rounded-2xl border border-white/10 bg-black/70 px-3 py-2 text-xs text-zinc-400">
+                    <span className="whitespace-nowrap">Checking file… {fingerprintProgress}%</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                        <div className="h-full rounded-full bg-violet-400 transition-all" style={{ width: `${fingerprintProgress}%` }} />
+                    </div>
+                </div>
+            )}
+
+            {localFileError && !isLocal && (
+                <div className="flex flex-shrink-0 items-center gap-2 rounded-2xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                    <AlertCircle size={14} className="shrink-0" />
+                    <span>{localFileError}</span>
                 </div>
             )}
 
@@ -623,7 +936,7 @@ const VideoPlayer = () => {
             <div ref={playerContainerRef} className="group relative min-h-0 flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl shadow-black/50">
                 <AnimatePresence mode="wait">
                     {!hasContent ? (
-                        <motion.div key="empty"
+                        <MotionDiv key="empty"
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                             className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.06),transparent_45%)] p-6 text-center">
                             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/60">
@@ -635,16 +948,16 @@ const VideoPlayer = () => {
                                     ? 'Paste a video URL in the bar above and click Play Now to begin syncing.'
                                     : 'Waiting for the host to start a video.'}
                             </p>
-                        </motion.div>
+                        </MotionDiv>
                     ) : (
-                        <motion.div key="player"
+                        <MotionDiv key="player"
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             className="absolute inset-0 w-full h-full">
 
                             {/* ── Loading Skeleton ─────────────────────────────── */}
                             <AnimatePresence>
-                                {!isPlayerReady && !playerError && (
-                                    <motion.div
+                                {!isPlayerReady && !playerError && (!isLocal || isLocalReady) && (
+                                    <MotionDiv
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         exit={{ opacity: 0 }}
@@ -655,7 +968,7 @@ const VideoPlayer = () => {
                                             <img src="/logo.png" alt="Loading" className="w-16 h-auto opacity-50 animate-bounce theme-invert transition-all" />
                                         </div>
                                         <h2 className="text-xl font-bold mb-2 animate-pulse" style={{ color: 'var(--text)' }}>
-                                            Buffering stream...
+                                            {isLocal ? 'Preparing local video…' : 'Buffering stream...'}
                                         </h2>
                                         {/* FIX #9: Real buffer fill bar for GDrive; indeterminate shimmer for others */}
                                         <div className="w-48 h-2 bg-white/10 rounded-full overflow-hidden mt-2">
@@ -671,23 +984,61 @@ const VideoPlayer = () => {
                                         {isGDriveProxy && bufferedPercent > 0 && (
                                             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{Math.round(bufferedPercent)}% buffered</p>
                                         )}
-                                    </motion.div>
+                                    </MotionDiv>
                                 )}
                             </AnimatePresence>
 
                             {/* ── Google Drive: native <video> ─────────────────── */}
-                            {isGDriveProxy && (
+                            {isLocal && !isLocalReady && (
+                                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black px-5">
+                                    <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-white/[0.035] p-6 text-center">
+                                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/25 bg-violet-500/10 text-violet-300">
+                                            <FileVideo size={25} />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-white">Choose the same local file</h3>
+                                        <p className="mt-2 text-sm leading-6 text-zinc-400">
+                                            {videoState.localMedia.selectedBy || 'The host'} selected <span className="font-semibold text-zinc-200">{videoState.localMedia.displayName}</span>. Choose your own copy to join playback.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            disabled={isFingerprinting}
+                                            onClick={() => {
+                                                localInputModeRef.current = 'match';
+                                                localFileInputRef.current?.click();
+                                            }}
+                                            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                                        >
+                                            <FolderOpen size={16} />
+                                            {isFingerprinting ? `Checking ${fingerprintProgress}%` : 'Choose matching file'}
+                                        </button>
+                                        {localFileError && (
+                                            <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
+                                                {localFileError}
+                                            </div>
+                                        )}
+                                        <div className="mt-5 flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] p-3 text-left text-xs leading-5 text-emerald-200">
+                                            <ShieldCheck size={15} className="mt-0.5 shrink-0" />
+                                            Only a sampled SHA-256 fingerprint and small metadata are shared. No video bytes are uploaded.
+                                        </div>
+                                        <p className="mt-3 text-[11px] leading-5 text-zinc-600">
+                                            MP4 with H.264/AAC is safest. WebM support depends on the browser; some MKV files and codecs will not play.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {isNativePlayer && (!isLocal || isLocalReady) && (
                                 <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                                     <video
                                         ref={nativeVideoRef}
-                                        key={playerUrl}
-                                        src={playerUrl}
+                                        key={isLocal ? videoState.localMedia.sessionId : playerUrl}
+                                        src={isLocal ? localFileUrl : playerUrl}
                                         controls
                                         preload="auto"
                                         controlsList="nodownload"
                                         style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                                         onLoadedMetadata={() => {
-                                            const stateTime = videoStateRef.current.playedSeconds || 0;
+                                            const stateTime = getExpectedPosition(videoStateRef.current);
                                             if (stateTime > 2 && nativeVideoRef.current) {
                                                 // FIX #5: Mark seek as pending — onCanPlay must wait for onSeeked
                                                 initialSeekDoneRef.current = false;
@@ -712,8 +1063,32 @@ const VideoPlayer = () => {
                                             });
                                             setPlayerError(null);
                                         }}
-                                        onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged) return; debouncePlay(); }}
-                                        onPause={() => { if (!isPrivileged) return; debouncePause(() => nativeVideoRef.current?.currentTime || 0); }}
+                                        onPlay={() => {
+                                            setAutoplayBlocked(false);
+                                            if (!isPrivileged) return;
+                                            if (isLocal && videoStateRef.current.isPlaying) return;
+                                            if (isLocal && !everyoneReady && !videoStateRef.current.isPlaying) {
+                                                nativeVideoRef.current?.pause();
+                                                toast.error('Not everyone is ready. Use “Start anyway” to continue.');
+                                                return;
+                                            }
+                                            if (isLocal && !videoStateRef.current.isPlaying) {
+                                                nativeVideoRef.current?.pause();
+                                                debouncePlay();
+                                                return;
+                                            }
+                                            debouncePlay();
+                                        }}
+                                        onPause={() => {
+                                            if (!isPrivileged || (isLocal && !videoStateRef.current.isPlaying)) return;
+                                            if (isLocal) {
+                                                const position = nativeVideoRef.current?.currentTime || 0;
+                                                nativeVideoRef.current?.play().catch(() => {});
+                                                pauseVideo(position);
+                                                return;
+                                            }
+                                            debouncePause(() => nativeVideoRef.current?.currentTime || 0);
+                                        }}
                                         onSeeking={() => { if (!isPrivileged) return; startSeekGuard(); }}
                                         onSeeked={() => {
                                             // FIX #5: Initial seek completed — now safe to autoplay.
@@ -731,12 +1106,19 @@ const VideoPlayer = () => {
                                                 return prev; // no state change — only reading current value
                                             });
                                             if (!isPrivileged) return;
+                                            if (isLocal && Math.abs((nativeVideoRef.current?.currentTime || 0) - getExpectedPosition(videoStateRef.current)) < 0.2) return;
                                             endSeekGuard(() => nativeVideoRef.current?.currentTime || 0);
                                         }}
                                         // FIX #6: Track buffering state on native <video> so drift
                                         // correction skips during stalls (same as ReactPlayer path).
-                                        onWaiting={() => { isBufferingRef.current = true; }}
-                                        onPlaying={() => { isBufferingRef.current = false; }}
+                                        onWaiting={() => {
+                                            isBufferingRef.current = true;
+                                            if (isLocal) markLocalMediaStatus(videoState.localMedia.sessionId, 'BUFFERING', 'Local player is buffering');
+                                        }}
+                                        onPlaying={() => {
+                                            isBufferingRef.current = false;
+                                            if (isLocal) markLocalMediaStatus(videoState.localMedia.sessionId, 'READY');
+                                        }}
                                         // FIX #9: Update buffer fill progress
                                         onTimeUpdate={() => {
                                             const v = nativeVideoRef.current;
@@ -748,6 +1130,11 @@ const VideoPlayer = () => {
                                             clearTimeout(retryTimerRef.current);
                                             const v = nativeVideoRef.current;
                                             const code = v?.error?.code;
+                                            if (isLocal) markLocalMediaStatus(
+                                                videoState.localMedia.sessionId,
+                                                code === 3 || code === 4 ? 'UNSUPPORTED' : 'ERROR',
+                                                code === 3 || code === 4 ? 'This browser cannot decode this file' : 'The local file could not be read'
+                                            );
                                             // MediaError codes: 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
                                             // FIX #3: Auto-retry up to 3× on transient network errors
                                             if (code === 2 && retryCountRef.current < 3) {
@@ -763,13 +1150,18 @@ const VideoPlayer = () => {
                                             }
                                             // FIX #2: Format-specific error messages
                                             if (code === 3) {
-                                                setPlayerError('This file format cannot be decoded by your browser. Use a .mp4 or .webm video for best compatibility.');
+                                                setPlayerError('This format or codec cannot be decoded by your browser. MP4 with H.264/AAC is the safest option.');
                                             } else if (code === 4) {
-                                                setPlayerError('Could not load this file. Make sure: ① it is a .mp4 or .webm video ② it is shared as "Anyone with the link" in Google Drive.');
+                                                setPlayerError(isLocal
+                                                    ? 'This local file format is not supported by your browser. Try an MP4 (H.264/AAC) or a compatible WebM.'
+                                                    : 'Could not load this file. Make sure it is an MP4 or WebM and is shared as “Anyone with the link” in Google Drive.');
                                             } else {
-                                                setPlayerError('Could not load Google Drive video. Make sure the file is shared as "Anyone with the link" in Google Drive.');
+                                                setPlayerError(isLocal
+                                                    ? 'Could not play this local file.'
+                                                    : 'Could not load Google Drive video. Make sure the file is shared as “Anyone with the link”.');
                                             }
                                         }}
+                                        onEnded={() => { if (isLocal && isPrivileged) endVideo(); }}
                                     />
                                     {/* FIX #8: Dual overlay — bottom covers desktop Chrome/Firefox seekbar,
                                         top covers iOS Safari controls (which appear at top of video) */}
@@ -803,7 +1195,7 @@ const VideoPlayer = () => {
                             )}
 
                             {/* ── YouTube / Vimeo / Archive / direct URL: ReactPlayer ──────── */}
-                            {!isGDriveProxy && playerUrl && (
+                            {!isLocal && !isGDriveProxy && playerUrl && (
                                 <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                                     <ReactPlayer
                                         ref={playerRef}
@@ -921,7 +1313,7 @@ const VideoPlayer = () => {
                                     {isFullscreen ? <Minimize size={18} className="text-white" /> : <Maximize size={18} className="text-white" />}
                                 </button>
                             )}
-                        </motion.div>
+                        </MotionDiv>
                     )}
                 </AnimatePresence>
             </div>

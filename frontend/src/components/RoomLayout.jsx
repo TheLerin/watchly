@@ -20,6 +20,8 @@ import ChatUI from './ChatUI';
 import UserQueueSidebar from './UserQueueSidebar';
 import VoiceRoom from './VoiceRoom';
 import VideoPlayer from './VideoPlayer';
+import ReadinessPanel from './player/ReadinessPanel';
+import ScreenShareAdapter from './player/ScreenShareAdapter';
 import { useRoom } from '../context/RoomContext';
 import { useTheme, THEME_META } from '../context/ThemeContext';
 import { BackgroundLayers } from './LandingPage';
@@ -263,18 +265,20 @@ const RoomLayout = () => {
         networkPingMs,
         networkQuality,
         measurePing,
+        joinRoom,
+        createRoom,
     } = useRoom();
     const { theme, setTheme } = useTheme();
     const [showUsersPanel, setShowUsersPanel] = useState(true);
     const [showMobileMembers, setShowMobileMembers] = useState(false);
     const [showMobileChat, setShowMobileChat] = useState(false);
+    const [joinNickname, setJoinNickname] = useState('');
+    const [joinError, setJoinError] = useState('');
+    const [joinErrorCode, setJoinErrorCode] = useState('');
+    const [isJoining, setIsJoining] = useState(false);
     const isPortrait = useOrientation();
     const isDesktop = useIsDesktop();
     const { heightPct, onDragStart } = useDragResize(52);
-
-    useEffect(() => {
-        if (!currentUser && !isRestoringSession) navigate('/', { replace: true });
-    }, [currentUser, isRestoringSession, navigate]);
 
     if (isRestoringSession) {
         return (
@@ -282,13 +286,72 @@ const RoomLayout = () => {
                 <BackgroundLayers />
                 <div className={`${panelClass} relative z-10 flex flex-col items-center gap-5 p-10`}>
                     <div className="h-12 w-12 rounded-full border-4 border-white/10 border-t-white" style={{ animation: 'spin 0.9s linear infinite' }} />
-                    <p className="text-sm font-semibold text-white">Restoring session...</p>
+                    <p className="text-sm font-semibold text-white">Starting room server…</p>
+                    <p className="max-w-xs text-center text-xs text-zinc-500">A sleeping room server can take about a minute. Watchly will keep retrying for up to 90 seconds.</p>
                 </div>
             </div>
         );
     }
 
-    if (!currentUser) return null;
+    if (!currentUser) return (
+        <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-black px-4">
+            <BackgroundLayers />
+            <form
+                className={`${panelClass} relative z-10 w-full max-w-md p-7`}
+                onSubmit={async event => {
+                    event.preventDefault();
+                    setJoinError('');
+                    setJoinErrorCode('');
+                    setIsJoining(true);
+                    try { await joinRoom(roomId.toUpperCase(), joinNickname.trim()); }
+                    catch (error) { setJoinError(error.message); setJoinErrorCode(error.code || ''); }
+                    finally { setIsJoining(false); }
+                }}
+            >
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Shared room</p>
+                <h1 className="mt-2 text-2xl font-bold text-white">Join {roomId.toUpperCase()}</h1>
+                <p className="mt-2 text-sm leading-6 text-zinc-400">Choose how your name appears. If this temporary room expired, we’ll tell you instead of creating a different room.</p>
+                <label className="mt-6 block text-xs font-semibold text-zinc-300" htmlFor="deep-link-nickname">Nickname</label>
+                <input
+                    id="deep-link-nickname"
+                    autoFocus
+                    maxLength={24}
+                    value={joinNickname}
+                    onChange={event => setJoinNickname(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none focus:border-white/30"
+                    placeholder="Your nickname"
+                />
+                {joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{joinError}</p>}
+                {joinErrorCode === 'ROOM_NOT_FOUND' && (
+                    <button
+                        type="button"
+                        disabled={!joinNickname.trim() || isJoining}
+                        onClick={async () => {
+                            setJoinError('');
+                            setJoinErrorCode('');
+                            setIsJoining(true);
+                            try {
+                                const created = await createRoom(joinNickname.trim());
+                                navigate(`/room/${created.roomId}`, { replace: true });
+                            } catch (error) {
+                                setJoinError(error.message);
+                                setJoinErrorCode(error.code || '');
+                            } finally {
+                                setIsJoining(false);
+                            }
+                        }}
+                        className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white disabled:opacity-40"
+                    >
+                        Create a new temporary room
+                    </button>
+                )}
+                <button disabled={!joinNickname.trim() || isJoining} className="mt-5 w-full rounded-xl bg-white px-4 py-3 font-bold text-black disabled:opacity-40">
+                    {isJoining ? 'Starting room server…' : 'Join room'}
+                </button>
+                <button type="button" onClick={() => navigate('/')} className="mt-3 w-full text-sm text-zinc-500 hover:text-white">Back home</button>
+            </form>
+        </div>
+    );
 
     const videoH = showMobileChat ? 100 - heightPct : 100;
 
@@ -349,6 +412,7 @@ const RoomLayout = () => {
                                         >
                                             <div className="max-h-[34vh] overflow-y-auto">
                                                 <UserQueueSidebar compact />
+                                                <ReadinessPanel />
                                             </div>
                                         </MotionDiv>
                                     )}
@@ -356,6 +420,7 @@ const RoomLayout = () => {
                             </section>
 
                             <VoiceRoom />
+                            <ScreenShareAdapter />
                             <div className="min-h-0 flex-1">
                                 <ChatUI />
                             </div>

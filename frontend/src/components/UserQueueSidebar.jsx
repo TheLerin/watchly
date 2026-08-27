@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
     ArrowRight,
+    CheckCircle2,
+    CircleDashed,
     Crown,
     MoreVertical,
     PlayCircle,
@@ -56,6 +58,7 @@ const UserQueueSidebar = ({ compact = false }) => {
         queue,
         removeFromQueue,
         playNext,
+        videoState,
     } = useRoom();
     const [openMenuId, setOpenMenuId] = useState(null);
     const isPrivileged = currentUser?.role === 'Host' || currentUser?.role === 'Moderator';
@@ -100,6 +103,12 @@ const UserQueueSidebar = ({ compact = false }) => {
                                             {role.icon}
                                             {role.label}
                                         </span>
+                                        {videoState.sourceType === 'local' && (
+                                            <span className={`ml-1 mt-1 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${user.localReady ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>
+                                                {user.localReady ? <CheckCircle2 size={10} /> : <CircleDashed size={10} />}
+                                                {user.localReady ? 'Ready' : 'Not ready'}
+                                            </span>
+                                        )}
                                     </div>
                                     {canManage && (
                                         <button

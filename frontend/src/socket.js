@@ -7,7 +7,8 @@ const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 export const socket = io(SOCKET_URL, {
     autoConnect: false,         // Only connect when explicitly joining a room
-    reconnectionAttempts: 10,   // Give up after 10 retries (~30s with backoff)
+    reconnectionAttempts: 24,   // Render free instances can take close to a minute to wake.
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
+    timeout: 10000,
 });

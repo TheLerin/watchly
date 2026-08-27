@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { RoomProvider } from './context/RoomContext';
+import { RoomProvider, useRoom } from './context/RoomContext';
 import { ThemeProvider } from './context/ThemeContext';
 import LandingPage from './components/LandingPage';
 import RoomLayout from './components/RoomLayout';
@@ -65,6 +65,15 @@ function KickHandler() {
   return null;
 }
 
+function ProtocolGuard({ children }) {
+  const { protocolMismatch } = useRoom();
+  if (!protocolMismatch) return children;
+  return <div className="flex min-h-screen items-center justify-center bg-black p-6 text-center text-white">
+    <div><h1 className="text-2xl font-bold">Update required</h1><p className="mt-2 text-zinc-400">Watchly changed while this page was open.</p>
+      <button className="mt-5 rounded-xl bg-white px-5 py-3 font-bold text-black" onClick={() => window.location.reload()}>Refresh Watchly</button></div>
+  </div>;
+}
+
 function App() {
   return (
     // BUG-01: Router wraps RoomProvider so useNavigate works everywhere
@@ -73,10 +82,10 @@ function App() {
         <Router>
           <RoomProvider>
             <KickHandler />
-            <Routes>
+            <ProtocolGuard><Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/room/:roomId" element={<RoomLayout />} />
-            </Routes>
+            </Routes></ProtocolGuard>
             {/* ISSUE-26: Toaster must be inside the tree so toasts render */}
             <Toaster
               position="bottom-center"

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: watchly-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        sync: false
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_SHARED_SECRET
+        sync: false
+      - key: TURN_USERNAME_PREFIX
+        value: watchly
+      - key: TURN_TTL_SECONDS
+        value: 3600

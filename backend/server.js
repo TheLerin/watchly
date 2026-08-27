@@ -3,37 +3,86 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const axios = require('axios');
+const crypto = require('crypto');
+const { PROTOCOL_VERSION } = require('./validators');
 
-const FRONTEND_URL = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const splitEnvList = (value) => (value || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+const FRONTEND_ORIGINS = splitEnvList(process.env.CORS_ORIGIN || 'http://localhost:5173');
+const CORS_ORIGIN = FRONTEND_ORIGINS.includes('*') ? '*' : FRONTEND_ORIGINS;
 
 const app = express();
-app.use(cors({ origin: FRONTEND_URL }));
+app.use(cors({ origin: CORS_ORIGIN }));
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: FRONTEND_URL,
+        origin: CORS_ORIGIN,
         methods: ['GET', 'POST']
     },
     maxHttpBufferSize: 1e6  // S6: explicit 1 MB limit (Socket.IO default)
 });
 
-// ── Local BitTorrent Tracker ────────────────────────────────────────────────
+// â”€â”€ Local BitTorrent Tracker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Removed: We now use public WebTorrent trackers to support Vercel/Render serverless.
 
 // In-memory store
 // rooms[roomId] = { users: [], videoState: {...}, queue: [], kickedUserIds: Set }
-const rooms = {};
+// User supplied room codes must never become object prototype keys.
+const rooms = new Map();
+
+const PUBLIC_STUN_URLS = [
+    'stun:stun.l.google.com:19302',
+    'stun:stun1.l.google.com:19302'
+];
+
+const turnIsReady = () => Boolean(splitEnvList(process.env.TURN_URLS).length && process.env.TURN_SHARED_SECRET);
+
+const buildIceConfig = (memberId = null) => {
+    const turnUrls = splitEnvList(process.env.TURN_URLS);
+    const iceServers = [{ urls: PUBLIC_STUN_URLS }];
+    let username = '';
+    let credential = '';
+    let expiresAt = null;
+
+    // coturn's REST API credential mechanism. The shared secret never leaves
+    // the backend; authenticated room members receive unique short-lived credentials.
+    if (memberId && turnUrls.length && process.env.TURN_SHARED_SECRET) {
+        const ttlSeconds = Math.min(86400, Math.max(300, Number(process.env.TURN_TTL_SECONDS) || 3600));
+        const expiry = Math.floor(Date.now() / 1000) + ttlSeconds;
+        const prefix = (process.env.TURN_USERNAME_PREFIX || 'watchly').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const subject = String(memberId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+        username = `${expiry}:${prefix || 'watchly'}-${subject}`;
+        credential = crypto
+            .createHmac('sha1', process.env.TURN_SHARED_SECRET)
+            .update(username)
+            .digest('base64');
+        expiresAt = expiry * 1000;
+    }
+
+    if (turnUrls.length && username && credential) {
+        iceServers.push({ urls: turnUrls, username, credential });
+    }
+
+    return {
+        iceServers,
+        turnConfigured: iceServers.length > 1,
+        turnAvailable: turnIsReady(),
+        expiresAt
+    };
+};
 
 // P2: Periodically evict stale rooms where all users disconnected uncleanly.
 // Without this, crashed browser sessions leave ghost rooms forever.
 setInterval(() => {
-    for (const [roomId, room] of Object.entries(rooms)) {
+    for (const [roomId, room] of rooms) {
         const hasConnected = room.users.some(u => u.connected);
         if (!hasConnected) {
             console.log(`GC: cleaning stale room ${roomId}`);
-            delete rooms[roomId];
+            rooms.delete(roomId);
         }
     }
 }, 5 * 60 * 1000).unref();
@@ -42,12 +91,30 @@ app.get('/', (req, res) => {
     res.send('Watchly API is running');
 });
 
-// ── Google Drive Proxy ──────────────────────────────────────────────────────
+app.get('/api/ice-config', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    // Public callers receive STUN only. TURN credentials are issued through the
+    // authenticated Socket.IO room membership event below.
+    res.json(buildIceConfig());
+});
 
-const gdriveCache    = new Map(); // id → { url, cookieJar, timestamp }
-const gdriveInFlight = new Map(); // id → Promise<{url,cookieJar}|null>  — FIX #2: dedup concurrent requests
+app.get('/api/health', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+        ok: true,
+        protocolVersion: PROTOCOL_VERSION,
+        uptimeSeconds: Math.floor(process.uptime()),
+        activeRooms: rooms.size,
+        turnReady: turnIsReady()
+    });
+});
 
-// FIX #6: 20-min TTL — Google session tokens expire in ~15–30 min; 1-hour TTL caused mass expiry races
+// â”€â”€ Google Drive Proxy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const gdriveCache    = new Map(); // id â†’ { url, cookieJar, timestamp }
+const gdriveInFlight = new Map(); // id â†’ Promise<{url,cookieJar}|null>  â€” FIX #2: dedup concurrent requests
+
+// FIX #6: 20-min TTL â€” Google session tokens expire in ~15â€“30 min; 1-hour TTL caused mass expiry races
 const CACHE_TTL_MS = 20 * 60 * 1000;
 
 setInterval(() => {
@@ -57,7 +124,7 @@ setInterval(() => {
     }
 }, 10 * 60 * 1000).unref();
 
-// FIX #10: Proxy CORS can safely be wildcard — no user auth cookies traverse this route
+// FIX #10: Proxy CORS can safely be wildcard â€” no user auth cookies traverse this route
 app.options('/api/proxy/gdrive', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -94,12 +161,12 @@ app.all('/api/proxy/gdrive', async (req, res) => {
             try { hop.data.destroy(); } catch (_) {}
             return res.end();
         }
-        // FIX #11: Inactivity timer — reset on each data chunk; abort if idle for STREAM_IDLE_MS
+        // FIX #11: Inactivity timer â€” reset on each data chunk; abort if idle for STREAM_IDLE_MS
         let idleTimer = null;
         const resetIdle = () => {
             clearTimeout(idleTimer);
             idleTimer = setTimeout(() => {
-                console.log(`GDrive: stream idle ${STREAM_IDLE_MS}ms — aborting`);
+                console.log(`GDrive: stream idle ${STREAM_IDLE_MS}ms â€” aborting`);
                 try { hop.data.destroy(); } catch (_) {}
                 if (!res.writableEnded) res.end();
             }, STREAM_IDLE_MS);
@@ -112,7 +179,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
         req.on('close', () => { clearTimeout(idleTimer); try { hop.data.destroy(); } catch (_) {} });
     };
 
-    // FIX #7: Cap at 64 KB — enough to find any confirm token / form field in the HTML
+    // FIX #7: Cap at 64 KB â€” enough to find any confirm token / form field in the HTML
     const readBodyText = async (stream) => {
         const chunks = []; let total = 0; const MAX = 64 * 1024;
         for await (const c of stream) {
@@ -130,35 +197,35 @@ app.all('/api/proxy/gdrive', async (req, res) => {
         if (req.headers.range)   headers['Range']  = req.headers.range;
         const hop = await axios({ method: req.method, url, responseType: 'stream', headers, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
         if (hop.status < 400 && !(hop.headers['content-type'] || '').includes('text/html')) {
-            console.log(`GDrive: resolved stream (${hop.status}) → ${url.slice(0, 80)}`);
+            console.log(`GDrive: resolved stream (${hop.status}) â†’ ${url.slice(0, 80)}`);
             streamResponse(hop); return true;
         }
         try { hop.data.destroy(); } catch (_) {}
         return false;
     };
 
-    // ── 1. Cache hit ─────────────────────────────────────────────────────────
+    // â”€â”€ 1. Cache hit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const cached = gdriveCache.get(id);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
         try {
             const ok = await tryStreamResolved(cached.url, cached.cookieJar);
             if (ok) return;
-            console.log('GDrive: CACHE STALE — clearing');
+            console.log('GDrive: CACHE STALE â€” clearing');
             gdriveCache.delete(id);
         } catch { gdriveCache.delete(id); }
     }
 
-    // ── 2. FIX #2: Wait for any in-flight resolution for the same ID ─────────
+    // â”€â”€ 2. FIX #2: Wait for any in-flight resolution for the same ID â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (gdriveInFlight.has(id)) {
         console.log(`GDrive: waiting for in-flight resolution of ${id}`);
         try {
             const entry = await gdriveInFlight.get(id);
             if (entry) { const ok = await tryStreamResolved(entry.url, entry.cookieJar); if (ok) return; }
         } catch (_) {}
-        // in-flight failed — fall through to our own attempt
+        // in-flight failed â€” fall through to our own attempt
     }
 
-    // ── 3. Fresh resolution ───────────────────────────────────────────────────
+    // â”€â”€ 3. Fresh resolution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // FIX #4: Removed duplicate strategy (both /uc entries hit the same endpoint with the same result)
     const startUrls = [
         `https://drive.google.com/uc?export=download&id=${id}&confirm=t`,
@@ -211,7 +278,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
                 try { hop.data.destroy(); } catch (_) {}
                 url = loc.startsWith('http') ? loc : `https://drive.google.com${loc}`;
                 rangeAttached = true; // FIX #1: past the entry-point, safe to send Range now
-                console.log(`GDrive hop (${status}) → ${url.slice(0, 100)}`);
+                console.log(`GDrive hop (${status}) â†’ ${url.slice(0, 100)}`);
                 continue;
             }
 
@@ -226,7 +293,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 
             if (status === 403 || status === 404) {
                 try { hop.data.destroy(); } catch (_) {}
-                console.log(`GDrive: ${status} from ${url.slice(0, 80)} — trying next strategy`);
+                console.log(`GDrive: ${status} from ${url.slice(0, 80)} â€” trying next strategy`);
                 break;
             }
 
@@ -247,7 +314,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
                 }
 
                 const lm = html.match(/href="(https:\/\/drive\.usercontent\.google\.com\/download[^"]+)"/i);
-                if (lm) { url = lm[1].replace(/&amp;/g, '&'); rangeAttached = true; console.log(`GDrive: usercontent link in HTML → ${url.slice(0, 100)}`); continue; }
+                if (lm) { url = lm[1].replace(/&amp;/g, '&'); rangeAttached = true; console.log(`GDrive: usercontent link in HTML â†’ ${url.slice(0, 100)}`); continue; }
 
                 const fm = html.match(/action="(https?:\/\/[^"]*download[^"]*confirm=[^"]*)"/i)
                          || html.match(/action="([^"]*\/download[^"]*confirm=[^"]*)"/i);
@@ -255,7 +322,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
                     url = fm[1].replace(/&amp;/g, '&');
                     if (!url.startsWith('http')) url = 'https://drive.google.com' + url;
                     rangeAttached = true;
-                    console.log(`GDrive: form action fallback → ${url.slice(0, 100)}`);
+                    console.log(`GDrive: form action fallback â†’ ${url.slice(0, 100)}`);
                     continue;
                 }
 
@@ -271,7 +338,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
         console.log(`GDrive: startUrl exhausted (${startUrl.slice(0, 60)}), trying next...`);
     } catch (err) {
         if (res.headersSent) { gdriveInFlight.delete(id); rejectInFlight(new Error('failed')); break; }
-        console.log(`GDrive: startUrl threw: ${err.message} — trying next...`);
+        console.log(`GDrive: startUrl threw: ${err.message} â€” trying next...`);
     }
     }
 
@@ -288,7 +355,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 
 
 
-// ISSUE-34: Global Express error handler — catches any unhandled route errors
+// ISSUE-34: Global Express error handler â€” catches any unhandled route errors
 // and returns a clean JSON response instead of leaking stack traces.
 // Must be registered before server.listen so it's in the middleware chain.
 app.use((err, req, res, next) => {
@@ -298,394 +365,9 @@ app.use((err, req, res, next) => {
     }
 });
 
-// S3: Shared rate-limit map keyed by userId so multi-tab users share one bucket
-const messageRateLimitMap = new Map(); // userId -> lastMessageTime
-
-// FIX #8: Periodically purge stale rate-limit entries so the Map doesn't
-// grow unbounded when users crash without clean disconnects.
-setInterval(() => {
-    const now = Date.now();
-    for (const [key, time] of messageRateLimitMap) {
-        if (now - time > 60000) messageRateLimitMap.delete(key);
-    }
-}, 60 * 1000).unref();
-
-io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
-
-    socket.on('join_room', ({ roomId, nickname, userId }) => {
-        // FIX #18: Validate roomId format to prevent memory pollution
-        if (!roomId || typeof roomId !== 'string' || roomId.length > 20 || !/^[a-zA-Z0-9_-]+$/.test(roomId)) {
-            socket.emit('error_message', { message: 'Invalid room code format.' });
-            return;
-        }
-        // Sanitize nickname: strip HTML tags, limit length, provide fallback
-        nickname = (typeof nickname === 'string' ? nickname : '').replace(/<[^>]*>/g, '').trim().slice(0, 24) || 'Anonymous';
-        // Validate userId
-        if (!userId || typeof userId !== 'string') userId = Math.random().toString(36).substring(2, 15);
-
-        socket.join(roomId);
-
-        if (!rooms[roomId]) {
-            rooms[roomId] = {
-                users: [],
-                videoState: {
-                    url: '',
-                    magnetURI: '',
-                    isPlaying: false,
-                    playedSeconds: 0,
-                    updatedAt: Date.now(),
-                    seekVersion: 0
-                },
-                queue: [],
-                kickedUserIds: new Set(),
-                chatHistory: []
-            };
-        }
-
-        // BUG-02: Reject reconnection from banned users
-        if (rooms[roomId].kickedUserIds.has(userId)) {
-            socket.emit('user_kicked');
-            return;
-        }
-
-        const existingUser = rooms[roomId].users.find(u => u.userId === userId);
-        let user;
-
-        if (existingUser) {
-            // Reconnect: Update socket ID but keep role
-            existingUser.id = socket.id;
-            existingUser.nickname = nickname; // In case they changed it
-            existingUser.connected = true;
-            user = existingUser;
-            console.log(`${nickname} (${socket.id}) rejoined room ${roomId} as ${user.role}`);
-        } else {
-            // Limit max users per room to prevent abuse
-            const connectedCount = rooms[roomId].users.filter(u => u.connected).length;
-            if (connectedCount >= 50) {
-                socket.emit('error_message', { message: 'Room is full (max 50 users).' });
-                return;
-            }
-            // New connection
-            const role = rooms[roomId].users.length === 0 ? 'Host' : 'Viewer';
-            user = { id: socket.id, userId, nickname, role, connected: true };
-            rooms[roomId].users.push(user);
-            console.log(`${nickname} (${socket.id}) joined room ${roomId} as ${role}`);
-        }
-
-        socket.roomId = roomId;
-        socket.userId = userId;
-
-        socket.emit('room_joined', {
-            user,
-            existingUsers: rooms[roomId].users.filter(u => u.connected),
-            videoState: rooms[roomId].videoState,
-            queue: rooms[roomId].queue,
-            chatHistory: rooms[roomId].chatHistory || []
-        });
-
-        socket.to(roomId).emit('user_joined', user);
-    });
-
-    // ISSUE-33 / S3: Chat rate limit — minimum 500ms between messages per userId.
-    // Using a shared map (keyed by userId) so a user with multiple tabs can't
-    // bypass the limit by opening extra connections.
-    socket.on('send_message', ({ roomId, message }) => {
-        const now = Date.now();
-        const key = socket.userId || socket.id;
-        if (now - (messageRateLimitMap.get(key) || 0) < 500) return; // silently drop spam
-        messageRateLimitMap.set(key, now);
-
-        // Validate message payload
-        if (!message || typeof message.text !== 'string') return;
-        // Server-side length enforcement (client also limits to 500)
-        message.text = message.text.slice(0, 500);
-        if (!message.text.trim()) return; // reject empty messages
-        
-        // Store in room's chat history so it survives page refreshes
-        if (rooms[roomId]) {
-            if (!rooms[roomId].chatHistory) rooms[roomId].chatHistory = [];
-            rooms[roomId].chatHistory.push(message);
-            if (rooms[roomId].chatHistory.length > 100) {
-                rooms[roomId].chatHistory.shift();
-            }
-        }
-        
-        // Broadcast to everyone in room EXCEPT the sender
-        // (sender already added the message locally via setMessages)
-        socket.to(roomId).emit('receive_message', message);
-    });
-
-    // --- ROLE MANAGEMENT ---
-
-    const getUserInRoom = (sId, rId) => {
-        if (!rooms[rId] || !rooms[rId].users) return null;
-        return rooms[rId].users.find(u => u.id === sId);
-    };
-
-    socket.on('promote_to_moderator', ({ roomId, targetId }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        const target = getUserInRoom(targetId, roomId);
-        if (sender && target && sender.role === 'Host' && target.role === 'Viewer') {
-            target.role = 'Moderator';
-            io.to(roomId).emit('role_updated', { userId: targetId, newRole: 'Moderator' });
-        }
-    });
-
-    socket.on('demote_to_viewer', ({ roomId, targetId }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        const target = getUserInRoom(targetId, roomId);
-        if (sender && target && sender.role === 'Host' && target.role === 'Moderator') {
-            target.role = 'Viewer';
-            io.to(roomId).emit('role_updated', { userId: targetId, newRole: 'Viewer' });
-        }
-    });
-
-    socket.on('transfer_host', ({ roomId, targetId }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        const target = getUserInRoom(targetId, roomId);
-        if (sender && target && sender.role === 'Host') {
-            sender.role = 'Moderator';
-            target.role = 'Host';
-            io.to(roomId).emit('role_updated', { userId: socket.id, newRole: 'Moderator' });
-            io.to(roomId).emit('role_updated', { userId: targetId, newRole: 'Host' });
-        }
-    });
-
-    // FIX #12: kick_user now also looks up by userId so reconnected users
-    // (who got a new socket ID) can still be kicked.
-    socket.on('kick_user', ({ roomId, targetId }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        // Try socket-ID lookup first, then fall back to userId lookup
-        let target = getUserInRoom(targetId, roomId);
-        if (!target && rooms[roomId]) {
-            target = rooms[roomId].users.find(u => u.userId === targetId);
-        }
-        if (!sender || !target) return;
-        const canKick = sender.role === 'Host' || (sender.role === 'Moderator' && target.role === 'Viewer');
-        if (canKick) {
-            // BUG-02: Record the userId in the ban list before removing from users array
-            if (rooms[roomId]) rooms[roomId].kickedUserIds.add(target.userId);
-
-            // B1 FIX: Fetch the actual Socket object and emit directly.
-            const targetSocket = io.sockets.sockets.get(target.id);
-            if (targetSocket) {
-                targetSocket.emit('user_kicked');
-                targetSocket.leave(roomId);
-                targetSocket.roomId = null;
-            }
-
-            if (rooms[roomId] && rooms[roomId].users) {
-                rooms[roomId].users = rooms[roomId].users.filter(u => u.id !== target.id);
-            }
-            io.to(roomId).emit('user_left', target.id);
-
-            if (rooms[roomId] && rooms[roomId].users.length === 0) {
-                delete rooms[roomId];
-            }
-        }
-    });
-
-    // --- VIDEO SYNC MANAGEMENT ---
-
-    // Play a video immediately (replaces current)
-    socket.on('change_video', ({ roomId, url, magnetURI }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
-            if (rooms[roomId]) {
-                // S4: Reject non-HTTP URLs to prevent javascript:/data: injection.
-                // Torrent magnet URIs are passed via the magnetURI field, not url.
-                if (url && !/^https?:\/\//i.test(url)) {
-                    console.warn(`change_video: rejected non-HTTP url from ${sender.nickname}`);
-                    return;
-                }
-                const newState = { url: url || '', magnetURI: magnetURI || '', isPlaying: true, playedSeconds: 0, updatedAt: Date.now(), seekVersion: 0 };
-                rooms[roomId].videoState = newState;
-                io.to(roomId).emit('video_changed', newState);
-                console.log(`Video changed in ${roomId} to URL:${url || 'P2P'}`);
-            }
-        }
-    });
-
-    // Host periodically syncs playback position
-    socket.on('sync_progress', ({ roomId, playedSeconds }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
-            if (rooms[roomId]) {
-                rooms[roomId].videoState.playedSeconds = playedSeconds;
-                rooms[roomId].videoState.updatedAt = Date.now();
-                // Broadcast drift correction to viewers (they only act if drift > threshold).
-                // SeekVersion is NOT incremented here, to prevent viewers from reloading chunks continuously.
-                socket.to(roomId).emit('video_progress', { playedSeconds, seekVersion: rooms[roomId].videoState.seekVersion });
-            }
-        }
-    });
-
-    // Add to queue — pushes to the end of the queue
-    socket.on('add_to_queue', ({ roomId, url, magnetURI, label }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
-            // FIX #14: Validate URL scheme — same check as change_video (S4)
-            if (url && !/^https?:\/\//i.test(url)) {
-                console.warn(`add_to_queue: rejected non-HTTP url from ${sender.nickname}`);
-                return;
-            }
-            if (rooms[roomId]) {
-                // FIX #11: Use randomized ID to prevent collisions when two users add in the same ms
-                const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, url: url || '', magnetURI: magnetURI || '', label: label || url || 'Unnamed' };
-                rooms[roomId].queue.push(item);
-                io.to(roomId).emit('queue_updated', rooms[roomId].queue);
-                console.log(`${sender.nickname} added to queue in ${roomId}: ${item.label}`);
-            }
-        }
-    });
-
-    // Remove item from queue
-    socket.on('remove_from_queue', ({ roomId, itemId }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
-            if (rooms[roomId]) {
-                rooms[roomId].queue = rooms[roomId].queue.filter(i => i.id !== itemId);
-                io.to(roomId).emit('queue_updated', rooms[roomId].queue);
-            }
-        }
-    });
-
-    // Play next in queue
-    socket.on('play_next', ({ roomId }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
-            if (rooms[roomId] && rooms[roomId].queue.length > 0) {
-                const next = rooms[roomId].queue.shift();
-                const newState = { url: next.url, magnetURI: next.magnetURI, isPlaying: true, playedSeconds: 0, updatedAt: Date.now(), seekVersion: 0 };
-                rooms[roomId].videoState = newState;
-                io.to(roomId).emit('video_changed', newState);
-                io.to(roomId).emit('queue_updated', rooms[roomId].queue);
-                console.log(`Playing next in queue for room ${roomId}: ${next.label}`);
-            }
-        }
-    });
-
-    socket.on('play_video', ({ roomId }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
-            if (rooms[roomId] && !rooms[roomId].videoState.isPlaying) {
-                rooms[roomId].videoState.isPlaying = true;
-                rooms[roomId].videoState.updatedAt = Date.now();
-                socket.to(roomId).emit('video_played');
-            }
-        }
-    });
-
-    socket.on('pause_video', ({ roomId, playedSeconds }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
-            if (rooms[roomId]) {
-                rooms[roomId].videoState.isPlaying = false;
-                rooms[roomId].videoState.updatedAt = Date.now();
-                if (playedSeconds !== undefined) {
-                    rooms[roomId].videoState.playedSeconds = playedSeconds;
-                }
-                socket.to(roomId).emit('video_paused', { playedSeconds: rooms[roomId].videoState.playedSeconds });
-            }
-        }
-    });
-
-    socket.on('seek_video', ({ roomId, playedSeconds }) => {
-        const sender = getUserInRoom(socket.id, roomId);
-        if (sender && (sender.role === 'Host' || sender.role === 'Moderator')) {
-            if (rooms[roomId]) {
-                rooms[roomId].videoState.playedSeconds = playedSeconds;
-                rooms[roomId].videoState.updatedAt = Date.now();
-                // FIX: Increment seekVersion so all clients know this is a deliberate seek, not drift
-                rooms[roomId].videoState.seekVersion = (rooms[roomId].videoState.seekVersion || 0) + 1;
-                // FIX #5: Broadcast seekVersion so viewers accept it directly
-                // instead of blindly incrementing their own copy.
-                socket.to(roomId).emit('video_seeked', {
-                    playedSeconds,
-                    seekVersion: rooms[roomId].videoState.seekVersion
-                });
-            }
-        }
-    });
-
-    // --- VOICE / WEBRTC ---
-    socket.on('network_ping', (_payload, callback) => {
-        if (typeof callback === 'function') {
-            callback({ serverTime: Date.now() });
-        }
-    });
-
-    socket.on('toggle_voice', ({ roomId, isVoiceActive, isMuted }) => {
-        const user = getUserInRoom(socket.id, roomId);
-        if (user) {
-            user.isVoiceActive = isVoiceActive;
-            user.isMuted = isMuted;
-            io.to(roomId).emit('voice_updated', { userId: user.id, isVoiceActive, isMuted });
-        }
-    });
-
-    socket.on('webrtc_offer', ({ targetSocketId, offer }) => {
-        socket.to(targetSocketId).emit('webrtc_offer', {
-            senderSocketId: socket.id,
-            offer
-        });
-    });
-
-    socket.on('webrtc_answer', ({ targetSocketId, answer }) => {
-        socket.to(targetSocketId).emit('webrtc_answer', {
-            senderSocketId: socket.id,
-            answer
-        });
-    });
-
-    socket.on('webrtc_ice_candidate', ({ targetSocketId, candidate }) => {
-        socket.to(targetSocketId).emit('webrtc_ice_candidate', {
-            senderSocketId: socket.id,
-            candidate
-        });
-    });
-
-    // --- DISCONNECT HANDLING ---
-
-    const handleDisconnect = () => {
-        const roomId = socket.roomId;
-        const userId = socket.userId;
-        if (roomId && rooms[roomId] && rooms[roomId].users) {
-            const user = rooms[roomId].users.find(u => u.userId === userId);
-            // Guard: skip if already processed (leave_room + disconnect both call this)
-            if (user && user.connected) {
-                user.connected = false;
-                socket.to(roomId).emit('user_left', socket.id);
-                console.log(`User ${user.nickname || socket.id} disconnected from room ${roomId}`);
-
-                const remainingConnected = rooms[roomId].users.filter(u => u.connected);
-                if (remainingConnected.length === 0) {
-                    delete rooms[roomId];
-                } else if (user.role === 'Host') {
-                    // ISSUE-36: Auto-promote next user when Host leaves so room stays functional
-                    const nextHost =
-                        remainingConnected.find(u => u.role === 'Moderator') ||
-                        remainingConnected[0];
-                    nextHost.role = 'Host';
-                    io.to(roomId).emit('role_updated', { userId: nextHost.id, newRole: 'Host' });
-                    console.log(`Auto-promoted ${nextHost.nickname} to Host in room ${roomId}`);
-                }
-            }
-        }
-    };
-
-    socket.on('leave_room', handleDisconnect);
-    socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-        handleDisconnect();
-        // S3: Clean up the rate-limit entry for this user on disconnect
-        if (socket.userId) messageRateLimitMap.delete(socket.userId);
-    });
-});
+require('./realtime')({ io, rooms, buildIceConfig });
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
-

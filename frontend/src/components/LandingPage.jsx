@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { useRoom } from '../context/RoomContext';
 
 const MotionArticle = motion.article;
@@ -126,7 +127,7 @@ const roomEvents = [
 
 const LandingPage = () => {
     const navigate = useNavigate();
-    const { joinRoom, currentUser, roomId } = useRoom();
+    const { createRoom, joinRoom, currentUser, roomId } = useRoom();
     const [nickname, setNickname] = useState('');
     const [joinCode, setJoinCode] = useState('');
     const [activeTab, setActiveTab] = useState('create');
@@ -136,14 +137,16 @@ const LandingPage = () => {
         if (currentUser && roomId) navigate(`/room/${roomId}`);
     }, [currentUser, roomId, navigate]);
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!nickname.trim()) return;
-        joinRoom(Math.random().toString(36).substring(2, 9).toUpperCase(), nickname.trim());
+        try { await createRoom(nickname.trim()); }
+        catch (error) { toast.error(error.message); }
     };
 
-    const handleJoin = () => {
+    const handleJoin = async () => {
         if (!nickname.trim() || !joinCode.trim()) return;
-        joinRoom(joinCode.trim().toUpperCase(), nickname.trim());
+        try { await joinRoom(joinCode.trim().toUpperCase(), nickname.trim()); }
+        catch (error) { toast.error(error.message); }
     };
 
     const handleKey = (e) => {
