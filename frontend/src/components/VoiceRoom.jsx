@@ -30,7 +30,7 @@ const formatCallDuration = seconds => {
 
 const MotionDiv = motion.div;
 
-const VoiceRoom = () => {
+const VoiceRoom = ({ variant = 'classic', className = '' }) => {
     const {
         roomId,
         currentUser,
@@ -571,7 +571,10 @@ const VoiceRoom = () => {
         : { background: 'var(--accent-soft)', color: 'var(--text-sub)', border: '1px solid var(--glass-border)' };
 
     return (
-        <div className="shrink-0 overflow-hidden rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl">
+        <div
+            className={`room-voice shrink-0 overflow-hidden rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}
+            data-room-variant={variant}
+        >
             <div className="hidden">
                 {Object.entries(remoteStreams).map(([peerId]) => (
                     <audio

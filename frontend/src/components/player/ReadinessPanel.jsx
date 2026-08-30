@@ -11,11 +11,11 @@ const META = {
     SELECT_FILE: ['Select file', 'text-zinc-400', FileQuestion]
 };
 
-export default function ReadinessPanel() {
+export default function ReadinessPanel({ variant = 'classic', className = '' }) {
     const { users, localReadiness, mediaDescriptor, currentUser, controllerMemberId, requestControl } = useRoom();
     if (!mediaDescriptor) return null;
     return (
-        <section className="border-t border-white/10 p-3" aria-label="Local file readiness">
+        <section className={`room-readiness border-t border-white/10 p-3 ${className}`} data-room-variant={variant} aria-label="Local file readiness">
             <div className="mb-2 flex justify-between text-xs font-bold text-zinc-400">
                 <span>Local file readiness</span><span>{localReadiness.readyCount}/{localReadiness.totalCount}</span>
             </div>

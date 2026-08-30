@@ -23,10 +23,11 @@ import VideoPlayer from './VideoPlayer';
 import ReadinessPanel from './player/ReadinessPanel';
 import ScreenShareAdapter from './player/ScreenShareAdapter';
 import { useRoom } from '../context/RoomContext';
-import { useTheme, THEME_META } from '../context/ThemeContext';
+import { useTheme, THEME_META, ROOM_APPEARANCE_META } from '../context/ThemeContext';
 import { BackgroundLayers } from './LandingPage';
 import toast from 'react-hot-toast';
 import { NETWORK_QUALITY_META, formatPing } from '../utils/networkQuality';
+import './room-theater.css';
 
 const MotionDiv = motion.div;
 const MotionSpan = motion.span;
@@ -46,9 +47,9 @@ function useOrientation() {
 }
 
 function useIsDesktop() {
-    const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
+    const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1180);
     useEffect(() => {
-        const update = () => setIsDesktop(window.innerWidth >= 1024);
+        const update = () => setIsDesktop(window.innerWidth >= 1180);
         window.addEventListener('resize', update, { passive: true });
         return () => window.removeEventListener('resize', update);
     }, []);
@@ -92,15 +93,41 @@ function useDragResize(def = 45) {
 
 const panelClass = 'rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl';
 
-const ThemePicker = ({ theme, setTheme, onClose }) => (
+const ThemePicker = ({ theme, setTheme, roomAppearance, setRoomAppearance }) => (
     <MotionDiv
         initial={{ opacity: 0, scale: 0.96, y: -8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: -8 }}
         transition={{ type: 'spring', damping: 22, stiffness: 320 }}
-        className="absolute right-0 top-full z-50 mt-2 w-56 rounded-2xl border border-white/10 bg-black p-3 shadow-2xl shadow-black/60"
+        className="room-settings-popover absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-white/10 bg-black p-3 shadow-2xl shadow-black/60"
     >
-        <p className="mb-3 px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Theme</p>
+        <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Room appearance</p>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+            {Object.entries(ROOM_APPEARANCE_META).map(([id, meta]) => (
+                <button
+                    type="button"
+                    key={id}
+                    aria-pressed={roomAppearance === id}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setRoomAppearance(id);
+                    }}
+                    className="rounded-xl border p-2.5 text-left transition hover:bg-white/[0.06]"
+                    style={{
+                        background: roomAppearance === id ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.02)',
+                        borderColor: roomAppearance === id ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)',
+                    }}
+                >
+                    <span className="flex items-center justify-between text-xs font-bold text-zinc-100">
+                        {meta.label}
+                        {roomAppearance === id && <Check size={12} className="text-emerald-400" />}
+                    </span>
+                    <span className="mt-1 block text-[10px] leading-4 text-zinc-500">{meta.description}</span>
+                </button>
+            ))}
+        </div>
+
+        <p className="mb-3 border-t border-white/10 px-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Color theme</p>
         <div className="grid grid-cols-2 gap-2">
             {Object.entries(THEME_META).map(([id, meta]) => (
                 <button
@@ -108,7 +135,6 @@ const ThemePicker = ({ theme, setTheme, onClose }) => (
                     onClick={(e) => {
                         e.stopPropagation();
                         setTheme(id);
-                        onClose();
                     }}
                     className="flex flex-col items-center gap-2 rounded-xl border p-2.5 transition hover:bg-white/[0.04]"
                     style={{
@@ -133,7 +159,7 @@ const ThemePicker = ({ theme, setTheme, onClose }) => (
     </MotionDiv>
 );
 
-const Header = ({ roomId, theme, setTheme, leaveRoom, navigate, isConnected, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
+const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, leaveRoom, navigate, isConnected, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
     const [showSettings, setShowSettings] = useState(false);
     const [copied, setCopied] = useState(false);
     const ref = useRef(null);
@@ -158,7 +184,7 @@ const Header = ({ roomId, theme, setTheme, leaveRoom, navigate, isConnected, net
     const connectionLabel = isConnected ? formatPing(networkPingMs) : 'Offline';
 
     return (
-        <header className="relative z-40 h-16 flex-none border-b border-white/10 bg-black/75 backdrop-blur-xl">
+        <header className="room-header relative z-40 h-16 flex-none border-b border-white/10 bg-black/75 backdrop-blur-xl">
             <div className="mx-auto flex h-full max-w-[1800px] items-center justify-between px-3 sm:px-5">
                 <div className="flex min-w-0 items-center gap-3">
                     <button onClick={() => navigate('/')} className="flex shrink-0 items-center gap-2.5">
@@ -210,12 +236,19 @@ const Header = ({ roomId, theme, setTheme, leaveRoom, navigate, isConnected, net
                         <button
                             onClick={() => setShowSettings(s => !s)}
                             className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-zinc-400 transition hover:border-white/25 hover:text-white"
-                            title="Theme settings"
+                            title="Room settings"
                         >
                             <Settings size={16} />
                         </button>
                         <AnimatePresence>
-                            {showSettings && <ThemePicker theme={theme} setTheme={setTheme} onClose={() => setShowSettings(false)} />}
+                            {showSettings && (
+                                <ThemePicker
+                                    theme={theme}
+                                    setTheme={setTheme}
+                                    roomAppearance={roomAppearance}
+                                    setRoomAppearance={setRoomAppearance}
+                                />
+                            )}
                         </AnimatePresence>
                     </div>
 
@@ -268,7 +301,8 @@ const RoomLayout = () => {
         joinRoom,
         createRoom,
     } = useRoom();
-    const { theme, setTheme } = useTheme();
+    const { theme, setTheme, roomAppearance, setRoomAppearance } = useTheme();
+    const ambientTargetRef = useRef(null);
     const [showUsersPanel, setShowUsersPanel] = useState(true);
     const [showMobileMembers, setShowMobileMembers] = useState(false);
     const [showMobileChat, setShowMobileChat] = useState(false);
@@ -356,13 +390,29 @@ const RoomLayout = () => {
     const videoH = showMobileChat ? 100 - heightPct : 100;
 
     return (
-        <div className="relative h-[100dvh] w-full overflow-hidden bg-black text-white">
-            <BackgroundLayers />
+        <div
+            ref={ambientTargetRef}
+            className="room-shell relative h-[100dvh] w-full overflow-hidden bg-black text-white"
+            data-room-appearance={roomAppearance}
+        >
+            <div className="classic-room-background"><BackgroundLayers /></div>
+            <div className="cinematic-room-environment" aria-hidden="true">
+                <div className="cinematic-ceiling">
+                    <i /><i /><i /><i /><i />
+                </div>
+                <div className="cinematic-wall cinematic-wall-left" />
+                <div className="cinematic-wall cinematic-wall-right" />
+                <div className="cinematic-back-wall" />
+                <div className="cinematic-floor" />
+                <div className="cinematic-ambient-wash" />
+            </div>
             <div className="relative z-10 flex h-full w-full flex-col">
                 <Header
                     roomId={roomId}
                     theme={theme}
                     setTheme={setTheme}
+                    roomAppearance={roomAppearance}
+                    setRoomAppearance={setRoomAppearance}
                     leaveRoom={leaveRoom}
                     navigate={navigate}
                     isConnected={isConnected}
@@ -374,9 +424,9 @@ const RoomLayout = () => {
                 />
 
                 {isDesktop ? (
-                    <div className="mx-auto grid h-[calc(100dvh-64px)] w-full max-w-[1800px] grid-cols-[minmax(0,1fr)_360px] gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_400px] xl:gap-4 xl:p-4">
-                        <main className={`${panelClass} min-h-0 overflow-hidden p-3 xl:p-4`}>
-                            <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="room-desktop-workspace mx-auto grid h-[calc(100dvh-64px)] w-full max-w-[1800px] gap-3 p-3 xl:gap-4 xl:p-4">
+                        <main className={`room-player-zone ${panelClass} min-h-0 overflow-hidden p-3 xl:p-4`}>
+                            <div className="classic-player-heading mb-3 flex items-center justify-between gap-3">
                                 <div className="min-w-0">
                                     <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">Now watching</p>
                                     <h1 className="truncate text-base font-semibold text-white">Shared room playback</h1>
@@ -386,13 +436,17 @@ const RoomLayout = () => {
                                     Synced
                                 </div>
                             </div>
-                            <div className="h-[calc(100%-52px)] min-h-0">
-                                <VideoPlayer />
+                            <div className="room-video-stage h-[calc(100%-52px)] min-h-0">
+                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} />
+                                <div className="cinematic-screen-reflection" aria-hidden="true" />
+                                <div className="cinematic-sofa" aria-hidden="true">
+                                    <img src="/assets/sofa-couple.png" alt="" />
+                                </div>
                             </div>
                         </main>
 
-                        <aside className="flex min-h-0 flex-col gap-3">
-                            <section className={`${panelClass} overflow-hidden`}>
+                        <aside className="room-right-rail flex min-h-0 flex-col gap-3">
+                            <section className={`room-members-group ${panelClass} overflow-hidden`}>
                                 <PanelHeader
                                     icon={<Users size={15} className="text-zinc-400" />}
                                     title="Members & Queue"
@@ -411,18 +465,20 @@ const RoomLayout = () => {
                                             className="overflow-hidden"
                                         >
                                             <div className="max-h-[34vh] overflow-y-auto">
-                                                <UserQueueSidebar compact />
-                                                <ReadinessPanel />
+                                                <UserQueueSidebar compact variant={roomAppearance} />
+                                                <ReadinessPanel variant={roomAppearance} />
                                             </div>
                                         </MotionDiv>
                                     )}
                                 </AnimatePresence>
                             </section>
 
-                            <VoiceRoom />
-                            <ScreenShareAdapter />
-                            <div className="min-h-0 flex-1">
-                                <ChatUI />
+                            <section className="room-voice-share-group">
+                                <VoiceRoom variant={roomAppearance} />
+                                <ScreenShareAdapter variant={roomAppearance} />
+                            </section>
+                            <div className="room-chat-group min-h-0 flex-1">
+                                <ChatUI variant={roomAppearance} />
                             </div>
                         </aside>
                     </div>
@@ -433,7 +489,7 @@ const RoomLayout = () => {
                             style={isPortrait ? { height: `${videoH}%` } : { height: '55vw', maxHeight: '60vh' }}
                         >
                             <div className="absolute inset-2">
-                                <VideoPlayer />
+                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} />
                             </div>
 
                             {isPortrait && (
@@ -467,15 +523,15 @@ const RoomLayout = () => {
                                         {showUsersPanel && (
                                             <MotionDiv initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
                                                 <div className="max-h-32 overflow-y-auto">
-                                                    <UserQueueSidebar compact />
+                                                    <UserQueueSidebar compact variant={roomAppearance} />
                                                 </div>
                                             </MotionDiv>
                                         )}
                                     </AnimatePresence>
                                 </section>
-                                <VoiceRoom />
+                                <VoiceRoom variant={roomAppearance} />
                                 <div className="min-h-0 flex-1">
-                                    <ChatUI />
+                                    <ChatUI variant={roomAppearance} />
                                 </div>
                             </div>
                         )}
@@ -504,7 +560,7 @@ const RoomLayout = () => {
                                         </button>
                                     </div>
                                     <div className="min-h-0 flex-1">
-                                        <ChatUI hideHeader />
+                                        <ChatUI hideHeader variant={roomAppearance} />
                                     </div>
                                 </MotionDiv>
                             )}
@@ -539,8 +595,8 @@ const RoomLayout = () => {
                                             </button>
                                         </div>
                                         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                                            <VoiceRoom />
-                                            <UserQueueSidebar compact />
+                                            <VoiceRoom variant={roomAppearance} />
+                                            <UserQueueSidebar compact variant={roomAppearance} />
                                         </div>
                                     </MotionDiv>
                                 </>

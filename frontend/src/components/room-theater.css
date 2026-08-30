@@ -1,0 +1,476 @@
+.room-shell {
+    --cinema-left-rail: clamp(218px, 16vw, 272px);
+    --cinema-rail-gap: clamp(14px, 1.25vw, 22px);
+    --video-rgb: 88, 82, 72;
+    isolation: isolate;
+}
+
+.classic-room-background,
+.cinematic-room-environment {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.cinematic-room-environment,
+.cinematic-now-watching,
+.cinematic-watch-controls-heading,
+.cinematic-screen-reflection,
+.cinematic-sofa {
+    display: none;
+}
+
+.room-desktop-workspace {
+    grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+@media (min-width: 1280px) {
+    .room-shell[data-room-appearance="classic"] .room-desktop-workspace {
+        grid-template-columns: minmax(0, 1fr) 400px;
+    }
+}
+
+.room-voice-share-group {
+    display: contents;
+}
+
+.room-video-player[data-room-appearance="classic"]>.video-player-controls {
+    display: contents;
+}
+
+.room-shell[data-room-appearance="cinematic"] {
+    background:
+        radial-gradient(circle at 50% 37%, rgba(var(--video-rgb), 0.08), transparent 35%),
+        #030303;
+}
+
+.room-shell[data-room-appearance="cinematic"] .classic-room-background {
+    display: none;
+}
+
+.room-shell[data-room-appearance="cinematic"] .cinematic-room-environment {
+    display: block;
+    overflow: hidden;
+    background: #030303;
+}
+
+.cinematic-back-wall {
+    position: absolute;
+    inset: 0 7% 38%;
+    background:
+        radial-gradient(ellipse at 50% 48%, rgba(var(--video-rgb), 0.14), transparent 52%),
+        linear-gradient(180deg, #11100f 0%, #080707 68%, #050505 100%);
+    box-shadow: inset 0 -48px 90px rgba(0, 0, 0, 0.78);
+}
+
+.cinematic-wall {
+    position: absolute;
+    inset-block: 0 27%;
+    width: 23%;
+    opacity: 0.94;
+}
+
+.cinematic-wall-left {
+    left: 0;
+    clip-path: polygon(0 0, 100% 11%, 100% 100%, 0 86%);
+    background: linear-gradient(90deg, #020202 8%, #0b0909 72%, rgba(var(--video-rgb), 0.07));
+    border-right: 1px solid rgba(255, 255, 255, 0.025);
+}
+
+.cinematic-wall-right {
+    right: 0;
+    clip-path: polygon(0 11%, 100% 0, 100% 86%, 0 100%);
+    background: linear-gradient(270deg, #020202 8%, #0b0909 72%, rgba(var(--video-rgb), 0.07));
+    border-left: 1px solid rgba(255, 255, 255, 0.025);
+}
+
+.cinematic-ceiling {
+    position: absolute;
+    inset: 0 8% auto;
+    height: 30%;
+    clip-path: polygon(0 0, 100% 0, 87% 100%, 13% 100%);
+    background:
+        repeating-linear-gradient(90deg, transparent 0 13%, rgba(255, 255, 255, 0.018) 13.2% 13.35%, transparent 13.55% 20%),
+        linear-gradient(180deg, #0a0909, #060606 72%, transparent);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+}
+
+.cinematic-ceiling i {
+    position: absolute;
+    top: 35%;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(255, 241, 213, 0.5);
+    box-shadow: 0 0 13px rgba(255, 230, 190, 0.24);
+}
+
+.cinematic-ceiling i:nth-child(1) {
+    left: 12%;
+}
+
+.cinematic-ceiling i:nth-child(2) {
+    left: 31%;
+}
+
+.cinematic-ceiling i:nth-child(3) {
+    left: 50%;
+}
+
+.cinematic-ceiling i:nth-child(4) {
+    left: 69%;
+}
+
+.cinematic-ceiling i:nth-child(5) {
+    left: 88%;
+}
+
+.cinematic-floor {
+    position: absolute;
+    inset: 55% 0 0;
+    clip-path: polygon(13% 0, 87% 0, 100% 100%, 0 100%);
+    background:
+        linear-gradient(90deg, transparent 49.85%, rgba(255, 255, 255, 0.022) 50%, transparent 50.15%),
+        repeating-linear-gradient(168deg, transparent 0 72px, rgba(255, 255, 255, 0.016) 73px, transparent 74px),
+        radial-gradient(ellipse at 50% 3%, rgba(var(--video-rgb), 0.11), transparent 47%),
+        linear-gradient(180deg, #080707 0%, #030303 72%);
+    box-shadow: inset 0 54px 90px rgba(0, 0, 0, 0.55);
+}
+
+.cinematic-ambient-wash {
+    position: absolute;
+    left: 23%;
+    right: 23%;
+    top: 18%;
+    height: 52%;
+    border-radius: 46%;
+    background: radial-gradient(ellipse, rgba(var(--video-rgb), 0.12), transparent 67%);
+    filter: blur(36px);
+    opacity: 0.8;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-header {
+    width: calc(100% - 28px);
+    max-width: 1760px;
+    margin: 12px auto 0;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 18px;
+    background: rgba(5, 5, 5, 0.68);
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.3), inset 0 1px rgba(255, 255, 255, 0.035);
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-desktop-workspace {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) clamp(310px, 24vw, 370px);
+    gap: clamp(12px, 1.1vw, 18px);
+    padding-top: clamp(10px, 1.1vw, 16px);
+    padding-bottom: clamp(10px, 1.1vw, 16px);
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-player-zone {
+    position: relative;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+.room-shell[data-room-appearance="cinematic"] .classic-player-heading {
+    display: none;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-video-stage {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+}
+
+.room-video-player[data-room-appearance="cinematic"] {
+    display: grid;
+    grid-template-columns: var(--cinema-left-rail) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    gap: var(--cinema-rail-gap);
+    perspective: 1200px;
+}
+
+.room-video-player[data-room-appearance="cinematic"]>.video-player-controls {
+    min-width: 0;
+    overflow: hidden auto;
+    padding: clamp(8px, 1.1vh, 14px) 2px clamp(84px, 12vh, 118px);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.13) transparent;
+}
+
+.room-video-player[data-room-appearance="cinematic"] .cinematic-now-watching,
+.room-video-player[data-room-appearance="cinematic"] .cinematic-watch-controls-heading {
+    display: flex;
+    flex-direction: column;
+}
+
+.cinematic-now-watching {
+    gap: 5px;
+    padding: 15px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 20px;
+    background: linear-gradient(145deg, rgba(24, 23, 21, 0.82), rgba(4, 4, 4, 0.7));
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24), inset 0 1px rgba(255, 255, 255, 0.035);
+    backdrop-filter: blur(18px);
+}
+
+.cinematic-now-watching>span,
+.cinematic-watch-controls-heading>span {
+    color: #8f8d89;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.cinematic-now-watching strong {
+    overflow: hidden;
+    color: #f4f1eb;
+    font-size: 14px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cinematic-now-watching small,
+.cinematic-watch-controls-heading small {
+    color: #66635f;
+    font-size: 10px;
+}
+
+.cinematic-watch-controls-heading {
+    gap: 3px;
+    padding: 4px 4px 0;
+}
+
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls>.flex.flex-shrink-0.flex-wrap.gap-2 {
+    flex-direction: column;
+}
+
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls form,
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls>.flex.flex-shrink-0.flex-wrap.gap-2>button {
+    width: 100%;
+}
+
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+    padding: 8px;
+    border-radius: 18px;
+    background: rgba(4, 4, 4, 0.68);
+}
+
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls form>div:last-child {
+    width: 100%;
+}
+
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls form button {
+    flex: 1;
+    padding-inline: 9px;
+}
+
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls>.flex.flex-shrink-0.flex-wrap.gap-2>button {
+    min-height: 42px;
+    justify-content: center;
+    border-radius: 16px;
+    background: rgba(4, 4, 4, 0.68);
+}
+
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls>div:not(.cinematic-now-watching):not(.cinematic-watch-controls-heading),
+.room-video-player[data-room-appearance="cinematic"] .video-player-controls>form {
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.room-video-player[data-room-appearance="cinematic"]>.room-player-surface {
+    align-self: start;
+    width: 100%;
+    max-height: calc(100% - clamp(120px, 18vh, 176px));
+    aspect-ratio: 16 / 9;
+    margin-top: clamp(18px, 4vh, 42px);
+    border-color: rgba(255, 255, 255, 0.15);
+    border-radius: 9px;
+    background: #000;
+    box-shadow:
+        0 28px 70px rgba(0, 0, 0, 0.72),
+        0 0 48px rgba(var(--video-rgb), 0.16),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+        inset 0 0 20px rgba(255, 255, 255, 0.018);
+    transform: translateZ(-30px) translateY(-4px) scale(0.92) rotateX(1deg);
+    transform-origin: 50% 12%;
+    z-index: 2;
+}
+
+.room-shell[data-room-appearance="cinematic"] .cinematic-screen-reflection {
+    display: block;
+    position: absolute;
+    z-index: 0;
+    left: calc(var(--cinema-left-rail) + var(--cinema-rail-gap));
+    right: 0;
+    top: clamp(330px, 51vh, 500px);
+    height: clamp(90px, 16vh, 148px);
+    background: radial-gradient(ellipse at 50% 0, rgba(var(--video-rgb), 0.11), transparent 68%);
+    filter: blur(18px);
+    transform: perspective(480px) rotateX(66deg) scaleX(0.8);
+    transform-origin: top;
+    opacity: 0.72;
+}
+
+.room-shell[data-room-appearance="cinematic"] .cinematic-sofa {
+    display: block;
+    position: absolute;
+    z-index: 6;
+    left: calc(var(--cinema-left-rail) + var(--cinema-rail-gap) + (100% - var(--cinema-left-rail) - var(--cinema-rail-gap)) / 2);
+    bottom: clamp(78px, 12.5vh, 122px);
+    width: clamp(252px, 34.5%, 454px);
+    transform: translateX(-50%);
+    pointer-events: none;
+    filter: drop-shadow(0 24px 30px rgba(0, 0, 0, 0.72));
+}
+
+.cinematic-sofa img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-right-rail {
+    gap: clamp(9px, 1vh, 13px);
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-members-group,
+.room-shell[data-room-appearance="cinematic"] .room-voice-share-group,
+.room-shell[data-room-appearance="cinematic"] .room-chat {
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: linear-gradient(150deg, rgba(20, 19, 18, 0.78), rgba(3, 3, 3, 0.68));
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25), inset 0 1px rgba(255, 255, 255, 0.035);
+    backdrop-filter: blur(20px);
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-members-group {
+    max-height: 29vh;
+    border-radius: 21px;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-members-group>div:last-child>div {
+    max-height: 23vh;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-voice-share-group {
+    display: block;
+    flex: none;
+    overflow: hidden;
+    border-radius: 21px;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-voice,
+.room-shell[data-room-appearance="cinematic"] .room-screen-share {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-screen-share {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 11px 16px;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-chat-group {
+    min-height: 180px;
+}
+
+.room-shell[data-room-appearance="cinematic"] .room-chat {
+    border-radius: 21px;
+}
+
+@media (min-width: 1180px) and (max-width: 1320px) {
+    .room-shell {
+        --cinema-left-rail: 205px;
+        --cinema-rail-gap: 12px;
+    }
+
+    .room-shell[data-room-appearance="cinematic"] .room-desktop-workspace {
+        grid-template-columns: minmax(0, 1fr) 300px;
+        padding-inline: 10px;
+    }
+
+    .room-video-player[data-room-appearance="cinematic"] .video-player-controls {
+        gap: 8px;
+    }
+
+    .room-shell[data-room-appearance="cinematic"] .cinematic-sofa {
+        width: 36%;
+    }
+}
+
+@media (max-width: 1179px) {
+
+    .room-shell[data-room-appearance="cinematic"] .cinematic-room-environment,
+    .room-shell[data-room-appearance="cinematic"] .cinematic-now-watching,
+    .room-shell[data-room-appearance="cinematic"] .cinematic-watch-controls-heading,
+    .room-shell[data-room-appearance="cinematic"] .cinematic-screen-reflection,
+    .room-shell[data-room-appearance="cinematic"] .cinematic-sofa {
+        display: none;
+    }
+
+    .room-shell[data-room-appearance="cinematic"] .classic-room-background {
+        display: block;
+    }
+
+    .room-shell[data-room-appearance="cinematic"] .room-header {
+        width: auto;
+        max-width: none;
+        margin: 0;
+        border-width: 0 0 1px;
+        border-radius: 0;
+        background: rgba(0, 0, 0, 0.75);
+        box-shadow: none;
+    }
+
+    .room-video-player[data-room-appearance="cinematic"] {
+        display: flex;
+        perspective: none;
+    }
+
+    .room-video-player[data-room-appearance="cinematic"]>.video-player-controls {
+        display: contents;
+    }
+
+    .room-video-player[data-room-appearance="cinematic"]>.room-player-surface {
+        align-self: auto;
+        width: auto;
+        max-height: none;
+        aspect-ratio: auto;
+        margin-top: 0;
+        border-color: rgba(255, 255, 255, 0.1);
+        border-radius: 24px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        transform: none;
+    }
+}
+
+@media (max-width: 520px) {
+    .room-settings-popover {
+        position: fixed;
+        top: 68px;
+        right: 8px;
+        width: min(288px, calc(100vw - 16px));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .room-video-player[data-room-appearance="cinematic"]>.room-player-surface {
+        transition: none;
+    }
+}

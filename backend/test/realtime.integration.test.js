@@ -63,6 +63,11 @@ test('create, join, expiration error, readiness and controller-only playback', a
 
     const otherHost = await connect();
     const otherRoom = await emit(otherHost, 'room:create', { nickname: 'Other', protocolVersion: 2 });
+    const noMediaCommand = await emit(otherHost, 'playback:command', {
+        commandId: 'no_media_command_1', action: 'PAUSE'
+    });
+    assert.equal(noMediaCommand.error.code, 'INVALID_COMMAND');
+    assert.equal((await emit(otherHost, 'room:snapshot', {})).ok, true);
     const staleReady = await emit(otherHost, 'media:ready', { mediaId, status: 'READY', fingerprint: 'a'.repeat(64), size: 100, duration: 10 });
     assert.equal(staleReady.error.code, 'STALE_MEDIA');
     let crossRoomSignal = false;

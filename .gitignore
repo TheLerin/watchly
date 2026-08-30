@@ -14,3 +14,5 @@ backend/gdrive-html-dump.html
 backend/gdrive-trace.js
 backend/test-*.js
 *.zip
+*visual-verification*.png
+

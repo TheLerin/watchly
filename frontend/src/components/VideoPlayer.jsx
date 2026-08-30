@@ -1,11 +1,25 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import ReactPlayer from 'react-player/lazy'; // FIX #3: lazy import loads only the needed adapter, not all adapters
 import { useRoom } from '../context/RoomContext';
-import { Play, Link as LinkIcon, Lock, AlertCircle, Plus, ChevronDown, Mic, Subtitles as SubtitlesIcon, FolderOpen, Maximize, Minimize, RefreshCw, FileVideo, ShieldCheck } from 'lucide-react';
+import { Play, Link as LinkIcon, Lock, AlertCircle, FolderOpen, Maximize, Minimize, RefreshCw, FileVideo, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { fingerprintLocalFile, formatFileSize, readLocalVideoDuration } from '../utils/localMedia';
 import useSynchronizedMedia from '../hooks/useSynchronizedMedia';
+import useVideoAmbientLight from '../hooks/useVideoAmbientLight';
+import MediaTrackControls from './player/MediaTrackControls';
+import MediaInfoPanel from './player/MediaInfoPanel';
+import { inspectLocalMedia } from '../utils/mediaInspector';
+import { parseSubtitleFile } from '../utils/subtitleParser';
+import { extractMatroskaSubtitle } from '../utils/matroskaSubtitles';
+import { createLocalRemuxSession, getRemuxEligibility } from '../utils/localMediaRemux';
+import {
+    applyAudioTrack,
+    applySubtitleTrack,
+    attachExternalSubtitleTracks,
+    discoverMediaTracks,
+    getMediaSourceCapabilities,
+} from '../utils/mediaTracks';
 
 // How often the host reports playback position (ms)
 const SYNC_INTERVAL_MS = 1500;
@@ -14,6 +28,20 @@ const HARD_DRIFT_THRESHOLD = 1.25;
 const SOFT_DRIFT_THRESHOLD = 0.18;
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const MotionDiv = motion.div;
+const AUDIO_LANGUAGE_PREFERENCE = 'watchly-preferred-audio-language';
+const SUBTITLE_LANGUAGE_PREFERENCE = 'watchly-preferred-subtitle-language';
+
+const readLanguagePreference = key => {
+    try { return window.localStorage.getItem(key) || ''; }
+    catch { return ''; }
+};
+
+const writeLanguagePreference = (key, value) => {
+    try {
+        if (value) window.localStorage.setItem(key, value);
+        else window.localStorage.removeItem(key);
+    } catch { /* storage can be disabled */ }
+};
 
 function rewriteGDriveUrl(url) {
     if (!url) return url;
@@ -82,61 +110,9 @@ async function resolveArchiveUrl(url) {
     return url; // Fall back to original URL if resolution fails
 }
 
-// Sub-components defined OUTSIDE VideoPlayer so they never remount on re-render
-
-const SubtitleMenu = ({ activeSubtitle, setActiveSubtitle, subtitleTracks, showSubMenu, setShowSubMenu, setShowAudioMenu }) => (
-    <div className="relative">
-        <button onClick={() => { setShowSubMenu(p => !p); setShowAudioMenu(false); }}
-            className="flex items-center gap-1.5 px-3 py-1 text-xs text-gray-300 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors" style={{ background: 'var(--panel-bg)', borderColor: 'var(--border-color)', color: 'var(--text)' }}>
-            <SubtitlesIcon size={13} />
-            {activeSubtitle === -1 ? 'Subs Off' : (subtitleTracks.find(t => t.index === activeSubtitle)?.label || `Track ${activeSubtitle + 1}`)}
-            <ChevronDown size={11} />
-        </button>
-        <AnimatePresence>
-            {showSubMenu && (
-                <MotionDiv initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    className="absolute top-full left-0 mt-1 bg-black/80 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40" style={{ background: 'var(--glass-bg-strong)', borderColor: 'var(--glass-border)' }}>
-                    <button onClick={() => { setActiveSubtitle(-1); setShowSubMenu(false); }}
-                        className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === -1 ? 'font-bold' : ''}`} style={{ color: activeSubtitle === -1 ? 'var(--text)' : 'var(--text-sub)' }}>Off</button>
-                    {subtitleTracks.map(t => (
-                        <button key={t.index} onClick={() => { setActiveSubtitle(t.index); setShowSubMenu(false); }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeSubtitle === t.index ? 'font-bold' : ''}`} style={{ color: activeSubtitle === t.index ? 'var(--text)' : 'var(--text-sub)' }}>
-                            {t.label}{t.language ? ` (${t.language})` : ''}
-                        </button>
-                    ))}
-                </MotionDiv>
-            )}
-        </AnimatePresence>
-    </div>
-);
-
-const AudioMenu = ({ activeAudio, setActiveAudio, audioTracks, showAudioMenu, setShowAudioMenu, setShowSubMenu }) => (
-    <div className="relative">
-        <button onClick={() => { setShowAudioMenu(p => !p); setShowSubMenu(false); }}
-            className="flex items-center gap-1.5 px-3 py-1 text-xs text-gray-300 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors" style={{ background: 'var(--panel-bg)', borderColor: 'var(--border-color)', color: 'var(--text)' }}>
-            <Mic size={13} />
-            {audioTracks.find(t => t.index === activeAudio)?.label || `Audio ${activeAudio + 1}`}
-            <ChevronDown size={11} />
-        </button>
-        <AnimatePresence>
-            {showAudioMenu && (
-                <MotionDiv initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    className="absolute top-full left-0 mt-1 bg-black/80 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-40" style={{ background: 'var(--glass-bg-strong)', borderColor: 'var(--glass-border)' }}>
-                    {audioTracks.map(t => (
-                        <button key={t.index} onClick={() => { setActiveAudio(t.index); setShowAudioMenu(false); }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-white/5 ${activeAudio === t.index ? 'font-bold' : ''}`} style={{ color: activeAudio === t.index ? 'var(--text)' : 'var(--text-sub)' }}>
-                            {t.label}{t.language ? ` (${t.language})` : ''}
-                        </button>
-                    ))}
-                </MotionDiv>
-            )}
-        </AnimatePresence>
-    </div>
-);
-
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VideoPlayer = () => {
+const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' }) => {
     const {
         videoState, currentUser, localReadiness, controllerMemberId, playback, clock, isConnected,
         loadVideo, addToQueue,
@@ -148,13 +124,21 @@ const VideoPlayer = () => {
     const playerRef          = useRef(null);
     const nativeVideoRef     = useRef(null);
     const playerContainerRef = useRef(null);
-    const subtitleInputRef   = useRef(null);
     const localFileInputRef  = useRef(null);
     const localInputModeRef  = useRef('match');
     const syncIntervalRef    = useRef(null);
     const localFileUrlRef    = useRef('');
     const localSessionRef    = useRef(null);
     const wasConnectedRef    = useRef(isConnected);
+    const externalSubtitlesRef = useRef([]);
+    const embeddedSubtitlesRef = useRef([]);
+    const embeddedSubtitleAbortRef = useRef(null);
+    const localFileRef = useRef(null);
+    const localRemuxSessionRef = useRef(null);
+    const localPlaybackSwitchRef = useRef(false);
+    const remuxGenerationRef = useRef(0);
+    const remuxFailureIdsRef = useRef(new Set());
+    const localInspectionBySessionRef = useRef(new Map());
 
     const isSeekingRef     = useRef(false);
     const seekEndTimerRef  = useRef(null);
@@ -182,9 +166,6 @@ const VideoPlayer = () => {
     const videoStateRef = useRef(videoState);
     useEffect(() => { videoStateRef.current = videoState; }, [videoState]);
 
-    // FIX #15: ref for the track toolbar so we can detect outside clicks
-    const trackToolbarRef = useRef(null);
-
     // ── State ─────────────────────────────────────────────────────────────────
     const [inputUrl, setInputUrl]           = useState('');
     const [isPlayerReady, setIsPlayerReady] = useState(false);
@@ -193,34 +174,31 @@ const VideoPlayer = () => {
     const [bufferedPercent, setBufferedPercent] = useState(0);
     const [subtitleTracks, setSubtitleTracks] = useState([]);
     const [audioTracks, setAudioTracks]     = useState([]);
-    const [activeSubtitle, setActiveSubtitle] = useState(-1);
-    const [activeAudio, setActiveAudio]     = useState(0);
-    const [showSubMenu, setShowSubMenu]     = useState(false);
-    const [showAudioMenu, setShowAudioMenu] = useState(false);
+    const [externalSubtitles, setExternalSubtitles] = useState([]);
+    const [embeddedSubtitles, setEmbeddedSubtitles] = useState([]);
+    const [activeSubtitleId, setActiveSubtitleId] = useState(null);
+    const [activeAudioId, setActiveAudioId] = useState(null);
+    const [activeMediaElement, setActiveMediaElement] = useState(null);
+    const [mediaInspection, setMediaInspection] = useState(null);
+    const [mediaInspectionError, setMediaInspectionError] = useState('');
+    const [isInspectingMedia, setIsInspectingMedia] = useState(false);
+    const [subtitleLoadingId, setSubtitleLoadingId] = useState(null);
     const [isFullscreen, setIsFullscreen]   = useState(false);
     const [autoplayBlocked, setAutoplayBlocked] = useState(false);
     const [localFileUrl, setLocalFileUrl] = useState('');
+    const [localPlaybackUrl, setLocalPlaybackUrl] = useState('');
+    const [audioSwitchStatus, setAudioSwitchStatus] = useState(null);
+    const [remuxFailureVersion, setRemuxFailureVersion] = useState(0);
     const [fingerprintProgress, setFingerprintProgress] = useState(0);
     const [isFingerprinting, setIsFingerprinting] = useState(false);
     const [localFileError, setLocalFileError] = useState('');
+    useVideoAmbientLight(activeMediaElement, ambientTargetRef);
 
     // ── Fullscreen Listeners ──────────────────────────────────────────────────
     useEffect(() => {
         const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
         document.addEventListener('fullscreenchange', handleFullscreenChange);
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    }, []);
-
-    // FIX #15: Close subtitle/audio menus when clicking outside the track toolbar
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (trackToolbarRef.current && !trackToolbarRef.current.contains(e.target)) {
-                setShowSubMenu(false);
-                setShowAudioMenu(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
     const toggleFullscreen = () => {
@@ -240,12 +218,29 @@ const VideoPlayer = () => {
     const isNativePlayer = isLocal || isGDriveProxy;
     const hasContent    = isLocal || !!(videoState.url || videoState.magnetURI);
     const isYouTube     = !!(playerUrl && (playerUrl.includes('youtube.com') || playerUrl.includes('youtu.be')));
+    const isVimeo       = !!(playerUrl && playerUrl.includes('vimeo.com'));
     const isArchive     = !!(playerUrl && playerUrl.includes('archive.org'));
     const isLocalReady  = isLocal && !!localFileUrl && localSessionRef.current === videoState.localMedia?.sessionId;
+    const nowWatchingLabel = isLocal
+        ? videoState.localMedia?.displayName
+        : rawUrl
+            ? (() => {
+                try { return new URL(rawUrl).hostname.replace(/^www\./, ''); }
+                catch { return 'Shared movie'; }
+            })()
+            : 'Waiting for a movie';
     const { apply: applySynchronizedState, correct: correctSynchronizedState } = useSynchronizedMedia({ clock, durationSec: videoState.localMedia?.duration || Infinity });
 
+    const isPlatformEmbed = isYouTube || isVimeo;
+    const mediaCapabilities = useMemo(() => getMediaSourceCapabilities({
+        isLocal,
+        isPlatformEmbed,
+        mediaElement: activeMediaElement,
+        inspectionResult: mediaInspection,
+    }), [activeMediaElement, isLocal, isPlatformEmbed, mediaInspection]);
+
     useEffect(() => {
-        if (!isLocal || !isLocalReady || !playback || !nativeVideoRef.current) return;
+        if (!isLocal || !isLocalReady || !playback || !nativeVideoRef.current || localPlaybackSwitchRef.current) return;
         applySynchronizedState(nativeVideoRef.current, playback);
     }, [isLocal, isLocalReady, playback, applySynchronizedState]);
     useEffect(() => {
@@ -263,7 +258,7 @@ const VideoPlayer = () => {
     useEffect(() => {
         if (!isLocal || !isLocalReady || !playback) return undefined;
         const correct = (force = false) => {
-            if (!isBufferingRef.current) correctSynchronizedState(nativeVideoRef.current, playback, force);
+            if (!isBufferingRef.current && !localPlaybackSwitchRef.current) correctSynchronizedState(nativeVideoRef.current, playback, force);
         };
         const interval = setInterval(correct, 1000);
         const visible = () => { if (document.visibilityState === 'visible') correct(true); };
@@ -273,6 +268,7 @@ const VideoPlayer = () => {
     useEffect(() => {
         if (!isLocal || !isLocalReady || !playback) return undefined;
         const report = () => {
+            if (localPlaybackSwitchRef.current) return;
             const video = nativeVideoRef.current;
             if (!video) return;
             sendPlaybackTelemetry({
@@ -307,6 +303,225 @@ const VideoPlayer = () => {
         videoState.localMedia,
     ]);
 
+    useEffect(() => {
+        externalSubtitlesRef.current = externalSubtitles;
+    }, [externalSubtitles]);
+
+    useEffect(() => {
+        embeddedSubtitlesRef.current = embeddedSubtitles;
+    }, [embeddedSubtitles]);
+
+    const attachedSubtitles = useMemo(
+        () => [...embeddedSubtitles, ...externalSubtitles],
+        [embeddedSubtitles, externalSubtitles]
+    );
+
+    const clearExternalSubtitles = useCallback(() => {
+        externalSubtitlesRef.current.forEach(track => {
+            try { URL.revokeObjectURL(track.src); } catch { /* already released */ }
+        });
+        externalSubtitlesRef.current = [];
+        setExternalSubtitles([]);
+        setActiveSubtitleId(null);
+    }, []);
+
+    const clearEmbeddedSubtitles = useCallback(() => {
+        embeddedSubtitleAbortRef.current?.abort();
+        embeddedSubtitleAbortRef.current = null;
+        embeddedSubtitlesRef.current.forEach(track => {
+            try { URL.revokeObjectURL(track.src); } catch { /* already released */ }
+        });
+        embeddedSubtitlesRef.current = [];
+        setEmbeddedSubtitles([]);
+        setSubtitleLoadingId(null);
+        setActiveSubtitleId(null);
+    }, []);
+
+    const cacheLocalInspection = useCallback((sessionId, result) => {
+        const cache = localInspectionBySessionRef.current;
+        cache.delete(sessionId);
+        cache.set(sessionId, result);
+        while (cache.size > 6) {
+            cache.delete(cache.keys().next().value);
+        }
+    }, []);
+
+    const refreshMediaTracks = useCallback((mediaElement = activeMediaElement) => {
+        // The revision invalidates memoized discovery after a remux attempt is
+        // marked unavailable; the actual failed IDs live in the ref.
+        void remuxFailureVersion;
+        const isMatroska = /matroska/i.test(mediaInspection?.container || '');
+        const inspectionForTracks = mediaInspection ? {
+            ...mediaInspection,
+            audioTracks: mediaInspection.audioTracks?.map(track => ({
+                ...track,
+                remuxable: isMatroska &&
+                    !remuxFailureIdsRef.current.has(String(track.id)) &&
+                    getRemuxEligibility(mediaInspection, track).supported,
+            })),
+        } : null;
+        if (!(mediaElement instanceof HTMLMediaElement)) {
+            setAudioTracks(inspectionForTracks?.audioTracks?.map((track, index) => ({
+                ...track,
+                id: `detected-audio:${track.id ?? index}`,
+                inspectedTrackId: track.id ?? index,
+                browserIndex: null,
+                switchable: Boolean(track.remuxable),
+                switchMethod: track.remuxable ? 'remux' : 'unavailable',
+                origin: 'detected',
+            })) || []);
+            setSubtitleTracks([]);
+            return;
+        }
+        const discovered = discoverMediaTracks({
+            mediaElement,
+            inspectionResult: inspectionForTracks,
+            attachedSubtitles,
+        });
+        setAudioTracks(discovered.audioTracks);
+        setSubtitleTracks(discovered.subtitleTracks);
+        setActiveAudioId(previous => {
+            if (previous && discovered.audioTracks.some(track => track.id === previous && track.switchable)) return previous;
+            const preferredLanguage = readLanguagePreference(AUDIO_LANGUAGE_PREFERENCE);
+            return discovered.audioTracks.find(track => track.switchable && track.language === preferredLanguage && track.support !== 'unsupported')?.id
+                || discovered.audioTracks.find(track => track.switchable && track.default && track.support !== 'unsupported')?.id
+                || discovered.audioTracks.find(track => track.switchable && track.support !== 'unsupported')?.id
+                || null;
+        });
+        setActiveSubtitleId(previous => {
+            if (previous && discovered.subtitleTracks.some(track => track.id === previous)) return previous;
+            const preferredLanguage = readLanguagePreference(SUBTITLE_LANGUAGE_PREFERENCE);
+            return discovered.subtitleTracks.find(track => (
+                track.browserIndex !== null && track.language === preferredLanguage
+            ))?.id || discovered.subtitleTracks.find(track => track.browserIndex !== null && track.forced)?.id || null;
+        });
+    }, [activeMediaElement, attachedSubtitles, mediaInspection, remuxFailureVersion]);
+
+    useEffect(() => {
+        if (!(activeMediaElement instanceof HTMLMediaElement)) return undefined;
+        return attachExternalSubtitleTracks(activeMediaElement, attachedSubtitles, () => {
+            window.setTimeout(() => refreshMediaTracks(activeMediaElement), 0);
+        });
+    }, [activeMediaElement, attachedSubtitles, refreshMediaTracks]);
+
+    useEffect(() => {
+        if (!(activeMediaElement instanceof HTMLMediaElement)) {
+            refreshMediaTracks(null);
+            return undefined;
+        }
+        const refresh = () => refreshMediaTracks(activeMediaElement);
+        const textTracks = activeMediaElement.textTracks;
+        const browserAudioTracks = activeMediaElement.audioTracks;
+        textTracks?.addEventListener?.('addtrack', refresh);
+        textTracks?.addEventListener?.('removetrack', refresh);
+        browserAudioTracks?.addEventListener?.('addtrack', refresh);
+        browserAudioTracks?.addEventListener?.('removetrack', refresh);
+        refresh();
+        const delayedRefresh = window.setTimeout(refresh, 250);
+        return () => {
+            window.clearTimeout(delayedRefresh);
+            textTracks?.removeEventListener?.('addtrack', refresh);
+            textTracks?.removeEventListener?.('removetrack', refresh);
+            browserAudioTracks?.removeEventListener?.('addtrack', refresh);
+            browserAudioTracks?.removeEventListener?.('removetrack', refresh);
+        };
+    }, [activeMediaElement, refreshMediaTracks]);
+
+    useEffect(() => {
+        const selectedTrack = audioTracks.find(track => track.id === activeAudioId) || null;
+        applyAudioTrack(activeMediaElement, selectedTrack);
+    }, [activeAudioId, activeMediaElement, audioTracks]);
+
+    useEffect(() => {
+        if (!isLocalReady || !mediaInspection || !localFileRef.current || !/^detected-audio:/.test(activeAudioId || '')) return undefined;
+        if (!/matroska/i.test(mediaInspection.container || '')) return undefined;
+        const inspectedTrackId = String(activeAudioId).replace(/^detected-audio:/, '');
+        const inspectedTrack = mediaInspection.audioTracks?.find(track => String(track.id) === inspectedTrackId);
+        if (!inspectedTrack || remuxFailureIdsRef.current.has(inspectedTrackId)) return undefined;
+        const eligibility = getRemuxEligibility(mediaInspection, inspectedTrack);
+        if (!eligibility.supported) return undefined;
+
+        const seekVersion = videoState.seekVersion ?? 0;
+        const existing = localRemuxSessionRef.current;
+        if (existing && String(existing.audioTrackId) === inspectedTrackId && existing.seekVersion === seekVersion) return undefined;
+
+        const generation = ++remuxGenerationRef.current;
+        let canceled = false;
+        let pendingSession = null;
+        const prepare = async () => {
+            const targetTime = Math.max(0, getExpectedPosition(videoStateRef.current));
+            localPlaybackSwitchRef.current = true;
+            setAudioSwitchStatus({ status: 'preparing', trackId: activeAudioId, label: inspectedTrack.label });
+            setPlayerError(null);
+            setIsPlayerReady(false);
+            await localRemuxSessionRef.current?.dispose();
+            localRemuxSessionRef.current = null;
+
+            try {
+                pendingSession = await createLocalRemuxSession({
+                    file: localFileRef.current,
+                    inspection: mediaInspection,
+                    audioTrackId: inspectedTrack.id,
+                    startTime: targetTime,
+                    duration: videoState.localMedia?.duration || mediaInspection.duration,
+                    getCurrentTime: () => nativeVideoRef.current?.currentTime || targetTime,
+                    onStatus: status => {
+                        if (!canceled && generation === remuxGenerationRef.current && status.status === 'error') {
+                            setAudioSwitchStatus({ status: 'error', trackId: activeAudioId, label: inspectedTrack.label, message: status.error?.message });
+                        }
+                    },
+                });
+                pendingSession.seekVersion = seekVersion;
+                if (canceled || generation !== remuxGenerationRef.current) {
+                    await pendingSession.dispose();
+                    return;
+                }
+                localRemuxSessionRef.current = pendingSession;
+                setLocalPlaybackUrl(pendingSession.url);
+                await pendingSession.ready;
+                if (canceled || generation !== remuxGenerationRef.current) return;
+                setAudioSwitchStatus({ status: 'ready', trackId: activeAudioId, label: inspectedTrack.label });
+            } catch (error) {
+                if (canceled || generation !== remuxGenerationRef.current || error?.name === 'AbortError') return;
+                // A runtime MSE/mux failure is generally a pipeline capability
+                // failure, not a reason to cascade through every language.
+                mediaInspection.audioTracks?.forEach(track => remuxFailureIdsRef.current.add(String(track.id)));
+                setRemuxFailureVersion(value => value + 1);
+                setAudioSwitchStatus({
+                    status: 'error',
+                    trackId: activeAudioId,
+                    label: inspectedTrack.label,
+                    message: error.message || 'This audio track cannot be remuxed safely.',
+                });
+                toast.error(`${inspectedTrack.label}: ${error.message || 'audio switching is unavailable'}`, { duration: 6000 });
+                await pendingSession?.dispose();
+                if (localRemuxSessionRef.current === pendingSession) localRemuxSessionRef.current = null;
+                setLocalPlaybackUrl(localFileUrlRef.current);
+                window.setTimeout(() => { localPlaybackSwitchRef.current = false; }, 0);
+            }
+        };
+        void prepare();
+
+        return () => {
+            canceled = true;
+            if (generation === remuxGenerationRef.current) remuxGenerationRef.current += 1;
+            if (pendingSession && localRemuxSessionRef.current !== pendingSession) void pendingSession.dispose();
+        };
+    }, [
+        activeAudioId,
+        getExpectedPosition,
+        isLocalReady,
+        mediaInspection,
+        remuxFailureVersion,
+        videoState.localMedia?.duration,
+        videoState.seekVersion,
+    ]);
+
+    useEffect(() => {
+        const selectedTrack = subtitleTracks.find(track => track.id === activeSubtitleId) || null;
+        applySubtitleTrack(activeMediaElement, selectedTrack);
+    }, [activeMediaElement, activeSubtitleId, subtitleTracks]);
+
     // ── 1. Reset on URL change ────────────────────────────────────────────────
     useEffect(() => {
         const localSessionId = videoState.localMedia?.sessionId || null;
@@ -325,10 +540,22 @@ const VideoPlayer = () => {
         setIsPlayerReady(activeLocalVideoIsReady);
         setPlayerError(null);
         setAutoplayBlocked(false);
+        setActiveMediaElement(null);
+        void localRemuxSessionRef.current?.dispose();
+        localRemuxSessionRef.current = null;
+        localPlaybackSwitchRef.current = false;
+        remuxFailureIdsRef.current.clear();
+        setRemuxFailureVersion(value => value + 1);
+        setAudioSwitchStatus(null);
+        clearExternalSubtitles();
+        clearEmbeddedSubtitles();
         setSubtitleTracks([]);
         setAudioTracks([]);
-        setActiveSubtitle(-1);
-        setActiveAudio(0);
+        setActiveSubtitleId(null);
+        setActiveAudioId(null);
+        const cachedInspection = localSessionId ? localInspectionBySessionRef.current.get(localSessionId) : null;
+        setMediaInspection(cachedInspection?.inspection || null);
+        setMediaInspectionError(cachedInspection?.error || '');
         setBufferedPercent(0);
         lastSyncedPosRef.current = 0;
         isBufferingRef.current   = false;
@@ -349,7 +576,9 @@ const VideoPlayer = () => {
             localFileUrlRef.current = '';
         }
         localSessionRef.current = null;
+        localFileRef.current = null;
         setLocalFileUrl('');
+        setLocalPlaybackUrl('');
         setLocalFileError('');
         setFingerprintProgress(0);
     }, [videoState.localMedia?.sessionId]);
@@ -359,18 +588,20 @@ const VideoPlayer = () => {
             URL.revokeObjectURL(localFileUrlRef.current);
             localFileUrlRef.current = '';
         }
+        localFileRef.current = null;
+        void localRemuxSessionRef.current?.dispose();
+        localRemuxSessionRef.current = null;
     }, []);
 
-    // ── Revoke subtitle Object URLs on unmount ────────────────────────────────
-    useEffect(() => {
-        return () => {
-            subtitleTracks.forEach(t => {
-                if (t.src && !t.isNative) {
-                    try { URL.revokeObjectURL(t.src); } catch { /* already revoked */ }
-                }
-            });
-        };
-    }, [subtitleTracks]);
+    useEffect(() => () => {
+        externalSubtitlesRef.current.forEach(track => {
+            try { URL.revokeObjectURL(track.src); } catch { /* already released */ }
+        });
+        embeddedSubtitleAbortRef.current?.abort();
+        embeddedSubtitlesRef.current.forEach(track => {
+            try { URL.revokeObjectURL(track.src); } catch { /* already released */ }
+        });
+    }, []);
 
     // ── 2. Drift correction – ReactPlayer viewers ─────────────────────────────
     // BUG-I FIX: Guard against buffering. When the player is stalled, seeking
@@ -404,7 +635,7 @@ const VideoPlayer = () => {
     // Guard with isPlayerReady so we don't seek before video is loaded
     // FIX #6: Also guard with isBufferingRef — same protection as ReactPlayer path
     useEffect(() => {
-        if (!isNativePlayer || isPrivileged || !nativeVideoRef.current || !isPlayerReady || (isLocal && !isLocalReady)) return;
+        if (!isNativePlayer || isPrivileged || !nativeVideoRef.current || !isPlayerReady || (isLocal && !isLocalReady) || localPlaybackSwitchRef.current) return;
         if (isBufferingRef.current) return; // FIX #6: skip during buffer stall
         const stateTime   = getExpectedPosition(videoState);
         const currentTime = nativeVideoRef.current.currentTime || 0;
@@ -478,18 +709,7 @@ const VideoPlayer = () => {
             playerRef.current.seekTo(stateTime, 'seconds');
         }
         const internal = playerRef.current?.getInternalPlayer?.();
-        if (internal instanceof HTMLVideoElement) {
-            const tTracks = [...(internal.textTracks || [])].map((t, i) => ({
-                label: t.label || t.language || `Track ${i + 1}`,
-                language: t.language, kind: t.kind, index: i, isNative: true,
-            }));
-            const aTracks = [...(internal.audioTracks || [])].map((t, i) => ({
-                label: t.label || t.language || `Audio ${i + 1}`,
-                language: t.language, index: i,
-            }));
-            setSubtitleTracks(prev => prev.some(t => !t.isNative) ? prev : tTracks);
-            if (aTracks.length > 0) setAudioTracks(aTracks);
-        }
+        setActiveMediaElement(internal instanceof HTMLMediaElement ? internal : null);
     }, []);
 
     // ── 6. Host progress sync interval (ReactPlayer + GDrive host) ───────────
@@ -511,19 +731,6 @@ const VideoPlayer = () => {
         }, SYNC_INTERVAL_MS);
         return () => clearInterval(syncIntervalRef.current);
     }, [isPrivileged, isLocal, syncProgress, isNativePlayer]);
-
-    // ── 7. Apply subtitle / audio tracks ─────────────────────────────────────
-    useEffect(() => {
-        const internal = playerRef.current?.getInternalPlayer?.();
-        if (!(internal instanceof HTMLVideoElement) || !internal.textTracks) return;
-        [...internal.textTracks].forEach((t, i) => { t.mode = i === activeSubtitle ? 'showing' : 'hidden'; });
-    }, [activeSubtitle]);
-
-    useEffect(() => {
-        const internal = playerRef.current?.getInternalPlayer?.();
-        if (!(internal instanceof HTMLVideoElement) || !internal.audioTracks) return;
-        [...internal.audioTracks].forEach((t, i) => { t.enabled = i === activeAudio; });
-    }, [activeAudio]);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     // P5 FIX: Wrap all helper functions in useCallback so they are stable across renders.
@@ -630,11 +837,15 @@ const VideoPlayer = () => {
     };
 
     const replaceLocalObjectUrl = useCallback((file, sessionId) => {
+        void localRemuxSessionRef.current?.dispose();
+        localRemuxSessionRef.current = null;
         if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
         const nextUrl = URL.createObjectURL(file);
         localFileUrlRef.current = nextUrl;
+        localFileRef.current = file;
         localSessionRef.current = sessionId;
         setLocalFileUrl(nextUrl);
+        setLocalPlaybackUrl(nextUrl);
         setLocalFileError('');
         setIsPlayerReady(false);
         return nextUrl;
@@ -655,13 +866,30 @@ const VideoPlayer = () => {
         }
 
         setIsFingerprinting(true);
+        setIsInspectingMedia(true);
         setFingerprintProgress(1);
         setLocalFileError('');
         try {
-            const [fingerprint, duration] = await Promise.all([
+            const [fingerprint, durationOutcome, inspectionOutcome] = await Promise.all([
                 fingerprintLocalFile(file, setFingerprintProgress),
-                readLocalVideoDuration(file),
+                readLocalVideoDuration(file)
+                    .then(duration => ({ duration, error: null }))
+                    .catch(error => ({ duration: null, error })),
+                inspectLocalMedia(file)
+                    .then(inspection => ({ inspection, error: '' }))
+                    .catch(error => ({
+                        inspection: null,
+                        error: error?.message || 'Could not inspect this media file.',
+                    })),
             ]);
+            const duration = durationOutcome.duration || inspectionOutcome.inspection?.duration;
+            if (!Number.isFinite(duration) || duration <= 0) {
+                throw durationOutcome.error || new Error('Watchly could not determine this movie’s duration.');
+            }
+
+            const inspection = inspectionOutcome.inspection
+                ? { ...inspectionOutcome.inspection, duration: inspectionOutcome.inspection.duration || duration }
+                : null;
 
             if (expected) {
                 if (
@@ -674,7 +902,13 @@ const VideoPlayer = () => {
                     markLocalMediaNotReady(expected.sessionId);
                     return;
                 }
+                cacheLocalInspection(expected.sessionId, {
+                    inspection,
+                    error: inspectionOutcome.error,
+                });
                 replaceLocalObjectUrl(file, expected.sessionId);
+                setMediaInspection(inspection);
+                setMediaInspectionError(inspectionOutcome.error);
                 markLocalMediaReady({
                     mediaSessionId: expected.sessionId,
                     fingerprint,
@@ -688,6 +922,10 @@ const VideoPlayer = () => {
             if (!isPrivileged) return;
             const sessionId = `sampled-sha256-v1:${file.size}:${fingerprint}`;
             const displayTitle = window.prompt('Choose a title for the room (your filename stays private):', 'Movie night')?.trim().slice(0, 100) || 'Local movie';
+            cacheLocalInspection(sessionId, {
+                inspection,
+                error: inspectionOutcome.error,
+            });
             replaceLocalObjectUrl(file, sessionId);
             try {
                 await selectLocalMedia({
@@ -699,12 +937,17 @@ const VideoPlayer = () => {
                     mimeType: file.type || 'application/octet-stream',
                     duration,
                 });
+                setMediaInspection(inspection);
+                setMediaInspectionError(inspectionOutcome.error);
                 toast.success('Local file selected. Waiting for everyone to match it.');
             } catch (error) {
+                localInspectionBySessionRef.current.delete(sessionId);
                 if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
                 localFileUrlRef.current = '';
                 localSessionRef.current = null;
+                localFileRef.current = null;
                 setLocalFileUrl('');
+                setLocalPlaybackUrl('');
                 throw error;
             }
         } catch (error) {
@@ -717,27 +960,137 @@ const VideoPlayer = () => {
             }
         } finally {
             setIsFingerprinting(false);
+            setIsInspectingMedia(false);
         }
     };
 
-    const handleSubtitleUpload = (e) => {
-        const files = [...e.target.files];
-        if (!files.length) return;
-        e.target.value = '';
-        const baseIndex = Date.now();
-        const tracks = files.map((file, i) => ({
-            kind: 'subtitles', src: URL.createObjectURL(file),
-            srcLang: `track${i}`, label: file.name.replace(/\.[^.]+$/, ''),
-            default: i === 0, isNative: false, index: baseIndex + i,
+    const handleSubtitleFiles = useCallback(async files => {
+        const parsedTracks = [];
+        for (const [index, file] of files.entries()) {
+            try {
+                const parsed = await parseSubtitleFile(file);
+                parsedTracks.push({
+                    ...parsed,
+                    blob: undefined,
+                    id: `external-subtitle:${Date.now()}:${index}:${Math.random().toString(36).slice(2, 8)}`,
+                    src: URL.createObjectURL(parsed.blob),
+                    origin: 'external',
+                });
+            } catch (error) {
+                toast.error(`${file.name}: ${error.message}`, { duration: 5000 });
+            }
+        }
+        if (!parsedTracks.length) return;
+        setExternalSubtitles(previous => [...previous, ...parsedTracks]);
+        setActiveSubtitleId(parsedTracks[0].id);
+        writeLanguagePreference(SUBTITLE_LANGUAGE_PREFERENCE, parsedTracks[0].language);
+        toast.success(`Loaded ${parsedTracks.length} subtitle track${parsedTracks.length === 1 ? '' : 's'}`, { icon: '🗒️' });
+        if (parsedTracks.some(track => track.limited)) {
+            toast('ASS/SSA timing and text were loaded. Advanced styling is not preserved.', { icon: 'ℹ️', duration: 5000 });
+        }
+    }, []);
+
+    const removeExternalSubtitle = useCallback(trackId => {
+        setExternalSubtitles(previous => previous.filter(track => {
+            if (track.id !== trackId) return true;
+            try { URL.revokeObjectURL(track.src); } catch { /* already released */ }
+            return false;
         }));
-        setSubtitleTracks(prev => [...prev.filter(t => t.isNative), ...tracks]);
-        setActiveSubtitle(tracks[0].index);
-        toast.success(`Loaded ${files.length} subtitle track(s)`, { icon: '🗒️' });
-    };
+        setActiveSubtitleId(previous => previous === trackId ? null : previous);
+    }, []);
+
+    const handleAudioChange = useCallback(trackId => {
+        const track = audioTracks.find(candidate => candidate.id === trackId);
+        if (!track?.switchable || track.support === 'unsupported') return;
+        setActiveAudioId(trackId);
+        writeLanguagePreference(AUDIO_LANGUAGE_PREFERENCE, track.language);
+    }, [audioTracks]);
+
+    const handleSubtitleChange = useCallback(async trackId => {
+        embeddedSubtitleAbortRef.current?.abort();
+        embeddedSubtitleAbortRef.current = null;
+        if (!trackId) {
+            setSubtitleLoadingId(null);
+            setActiveSubtitleId(null);
+            writeLanguagePreference(SUBTITLE_LANGUAGE_PREFERENCE, '');
+            return;
+        }
+
+        const track = subtitleTracks.find(candidate => candidate.id === trackId);
+        if (!track?.switchable) return;
+        if (!track.requiresPreparation) {
+            setActiveSubtitleId(trackId);
+            writeLanguagePreference(SUBTITLE_LANGUAGE_PREFERENCE, track.language);
+            return;
+        }
+
+        const file = localFileRef.current;
+        const sessionId = localSessionRef.current;
+        if (!file || !sessionId) {
+            toast.error('Choose your local movie file before loading its embedded subtitles.');
+            return;
+        }
+
+        const controller = new AbortController();
+        embeddedSubtitleAbortRef.current = controller;
+        setSubtitleLoadingId(trackId);
+        toast.loading(`Loading ${track.label} subtitles…`, { id: 'embedded-subtitle' });
+        try {
+            const extracted = await extractMatroskaSubtitle(file, track.trackNumber ?? track.id, { signal: controller.signal });
+            if (controller.signal.aborted || localSessionRef.current !== sessionId) return;
+            const preparedTrack = {
+                ...track,
+                ...extracted,
+                blob: undefined,
+                src: URL.createObjectURL(extracted.blob),
+                origin: 'embedded',
+                prepared: true,
+                requiresPreparation: false,
+            };
+            setEmbeddedSubtitles(previous => {
+                previous.filter(candidate => candidate.id === trackId).forEach(candidate => {
+                    try { URL.revokeObjectURL(candidate.src); } catch { /* already released */ }
+                });
+                return [...previous.filter(candidate => candidate.id !== trackId), preparedTrack];
+            });
+            setActiveSubtitleId(trackId);
+            writeLanguagePreference(SUBTITLE_LANGUAGE_PREFERENCE, track.language);
+            toast.success(`${track.label} subtitles ready · ${extracted.cueCount} cues`, { id: 'embedded-subtitle' });
+            if (extracted.limited) {
+                toast('Embedded ASS/SSA styling is simplified to safe timing and text.', { icon: 'ℹ️', duration: 5000 });
+            }
+        } catch (error) {
+            if (error?.name !== 'AbortError') {
+                writeLanguagePreference(SUBTITLE_LANGUAGE_PREFERENCE, '');
+                toast.error(error.message || 'Could not load embedded subtitles.', { id: 'embedded-subtitle', duration: 6000 });
+            }
+        } finally {
+            if (embeddedSubtitleAbortRef.current === controller) embeddedSubtitleAbortRef.current = null;
+            setSubtitleLoadingId(current => current === trackId ? null : current);
+        }
+    }, [subtitleTracks]);
+
+    useEffect(() => {
+        if (activeSubtitleId || subtitleLoadingId || !isLocalReady) return;
+        const preferredLanguage = readLanguagePreference(SUBTITLE_LANGUAGE_PREFERENCE);
+        if (!preferredLanguage) return;
+        const preferredTrack = subtitleTracks.find(track => track.switchable && track.language === preferredLanguage);
+        if (preferredTrack) void handleSubtitleChange(preferredTrack.id);
+    }, [activeSubtitleId, handleSubtitleChange, isLocalReady, subtitleLoadingId, subtitleTracks]);
 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
-        <div className="flex h-full w-full flex-col gap-3">
+        <div className={`room-video-player flex h-full w-full flex-col gap-3 ${className}`} data-room-appearance={appearance}>
+            <div className="video-player-controls flex min-h-0 flex-col gap-3">
+                <div className="cinematic-now-watching" aria-live="polite">
+                    <span>Now Watching</span>
+                    <strong title={nowWatchingLabel}>{nowWatchingLabel}</strong>
+                    <small>{hasContent ? 'Synchronized for everyone' : 'Choose a source to begin'}</small>
+                </div>
+                <div className="cinematic-watch-controls-heading">
+                    <span>Watch Controls</span>
+                    <small>{isPrivileged ? 'Host controls' : 'Synced viewing'}</small>
+                </div>
 
             {/* ── Control Bar (Host/Mod only) ─────────────────────────── */}
             {isPrivileged && (
@@ -825,7 +1178,7 @@ const VideoPlayer = () => {
                 ref={localFileInputRef}
                 type="file"
                 className="hidden"
-                accept="video/mp4,video/webm,.mp4,.webm,.mkv"
+                accept="video/*,.mkv,.mov,.m4v,.ogv,.ts,.m2ts"
                 onChange={handleLocalFile}
             />
 
@@ -899,41 +1252,29 @@ const VideoPlayer = () => {
                 </div>
             )}
 
-            {/* ── Track toolbar ─────────────────────────────────────────── */}
-            {hasContent && (subtitleTracks.length > 0 || audioTracks.length > 0 || isPrivileged) && (
-                <div ref={trackToolbarRef} className="flex flex-shrink-0 flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-black/70 p-2">
-                    <span className="text-xs font-semibold text-zinc-500">Tracks:</span>
-                    {subtitleTracks.length > 0 && (
-                        <SubtitleMenu
-                            activeSubtitle={activeSubtitle} setActiveSubtitle={setActiveSubtitle}
-                            subtitleTracks={subtitleTracks} showSubMenu={showSubMenu}
-                            setShowSubMenu={setShowSubMenu} setShowAudioMenu={setShowAudioMenu}
-                        />
-                    )}
-                    {audioTracks.length > 0 && (
-                        <AudioMenu
-                            activeAudio={activeAudio} setActiveAudio={setActiveAudio}
-                            audioTracks={audioTracks} showAudioMenu={showAudioMenu}
-                            setShowAudioMenu={setShowAudioMenu} setShowSubMenu={setShowSubMenu}
-                        />
-                    )}
-                    {isPrivileged && (
-                        <>
-                            <div className="w-px h-4 bg-white/10 mx-1" />
-                            <button onClick={() => subtitleInputRef.current?.click()}
-                                className="flex items-center gap-1.5 px-3 py-1 text-xs text-gray-300 border border-white/10 rounded-lg transition-colors hover:bg-white/5"
-                                style={{ background: 'var(--panel-bg)' }}>
-                                <Plus size={12} /> Add Subs (.vtt, .srt)
-                            </button>
-                            <input type="file" ref={subtitleInputRef} className="hidden"
-                                accept=".vtt,.srt,.ass,.ssa" multiple onChange={handleSubtitleUpload} />
-                        </>
-                    )}
-                </div>
+            {hasContent && (
+                <MediaTrackControls
+                    variant={appearance}
+                    audioTracks={audioTracks}
+                    subtitleTracks={subtitleTracks}
+                    activeAudioId={activeAudioId}
+                    activeSubtitleId={activeSubtitleId}
+                    capabilities={mediaCapabilities}
+                    inspection={mediaInspection}
+                    inspectionError={mediaInspectionError}
+                    isInspecting={isInspectingMedia}
+                    audioSwitchStatus={audioSwitchStatus}
+                    subtitleLoadingId={subtitleLoadingId}
+                    onAudioChange={handleAudioChange}
+                    onSubtitleChange={handleSubtitleChange}
+                    onSubtitleFiles={handleSubtitleFiles}
+                    onRemoveSubtitle={removeExternalSubtitle}
+                />
             )}
+            </div>
 
             {/* ── Player ────────────────────────────────────────────────── */}
-            <div ref={playerContainerRef} className="group relative min-h-0 flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl shadow-black/50">
+            <div ref={playerContainerRef} className="room-player-surface group relative min-h-0 flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl shadow-black/50">
                 <AnimatePresence mode="wait">
                     {!hasContent ? (
                         <MotionDiv key="empty"
@@ -945,7 +1286,9 @@ const VideoPlayer = () => {
                             <h2 className="mb-2 text-xl font-semibold text-white">No video playing</h2>
                             <p className="max-w-sm text-sm leading-6 text-zinc-500">
                                 {isPrivileged
-                                    ? 'Paste a video URL in the bar above and click Play Now to begin syncing.'
+                                    ? appearance === 'cinematic'
+                                        ? 'Choose a source in Watch Controls to begin syncing.'
+                                        : 'Paste a video URL in the bar above and click Play Now to begin syncing.'
                                     : 'Waiting for the host to start a video.'}
                             </p>
                         </MotionDiv>
@@ -1032,12 +1375,13 @@ const VideoPlayer = () => {
                                     <video
                                         ref={nativeVideoRef}
                                         key={isLocal ? videoState.localMedia.sessionId : playerUrl}
-                                        src={isLocal ? localFileUrl : playerUrl}
+                                        src={isLocal ? localPlaybackUrl : playerUrl}
                                         controls
                                         preload="auto"
                                         controlsList="nodownload"
                                         style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                                         onLoadedMetadata={() => {
+                                            setActiveMediaElement(nativeVideoRef.current);
                                             const stateTime = getExpectedPosition(videoStateRef.current);
                                             if (stateTime > 2 && nativeVideoRef.current) {
                                                 // FIX #5: Mark seek as pending — onCanPlay must wait for onSeeked
@@ -1050,7 +1394,7 @@ const VideoPlayer = () => {
                                             // *previous* state value instead of the stale closure
                                             // 'isPlayerReady'. Two rapid onCanPlay calls both saw
                                             // wasReady=false and called play() twice.
-                                            setIsPlayerReady(prev => {
+                                             setIsPlayerReady(prev => {
                                                 // FIX #5: Only autoplay if the initial seek has already completed
                                                 // (or no seek was needed). Prevents playing from position 0
                                                 // then visibly jumping to the correct position.
@@ -1059,12 +1403,16 @@ const VideoPlayer = () => {
                                                         if (err.name === 'NotAllowedError') setAutoplayBlocked(true);
                                                     });
                                                 }
-                                                return true;
-                                            });
+                                                 return true;
+                                             });
+                                            if (localPlaybackSwitchRef.current && initialSeekDoneRef.current) {
+                                                localPlaybackSwitchRef.current = false;
+                                            }
                                             setPlayerError(null);
                                         }}
                                         onPlay={() => {
                                             setAutoplayBlocked(false);
+                                            if (localPlaybackSwitchRef.current) return;
                                             if (!isPrivileged) return;
                                             if (isLocal && videoStateRef.current.isPlaying) return;
                                             if (isLocal && !everyoneReady && !videoStateRef.current.isPlaying) {
@@ -1080,6 +1428,7 @@ const VideoPlayer = () => {
                                             debouncePlay();
                                         }}
                                         onPause={() => {
+                                            if (localPlaybackSwitchRef.current) return;
                                             if (!isPrivileged || (isLocal && !videoStateRef.current.isPlaying)) return;
                                             if (isLocal) {
                                                 const position = nativeVideoRef.current?.currentTime || 0;
@@ -1089,7 +1438,7 @@ const VideoPlayer = () => {
                                             }
                                             debouncePause(() => nativeVideoRef.current?.currentTime || 0);
                                         }}
-                                        onSeeking={() => { if (!isPrivileged) return; startSeekGuard(); }}
+                                        onSeeking={() => { if (localPlaybackSwitchRef.current || !isPrivileged) return; startSeekGuard(); }}
                                         onSeeked={() => {
                                             // FIX #5: Initial seek completed — now safe to autoplay.
                                             // FIX #1-code: onSeeked fires before the isPlayerReady state
@@ -1097,6 +1446,7 @@ const VideoPlayer = () => {
                                             // Use functional setState to read the CURRENT value without
                                             // a stale closure — return prev unchanged so state won't update.
                                             initialSeekDoneRef.current = true;
+                                            if (localPlaybackSwitchRef.current) localPlaybackSwitchRef.current = false;
                                             setIsPlayerReady(prev => {
                                                 if (prev && videoStateRef.current.isPlaying && nativeVideoRef.current?.paused) {
                                                     nativeVideoRef.current.play().catch((err) => {
@@ -1113,11 +1463,11 @@ const VideoPlayer = () => {
                                         // correction skips during stalls (same as ReactPlayer path).
                                         onWaiting={() => {
                                             isBufferingRef.current = true;
-                                            if (isLocal) markLocalMediaStatus(videoState.localMedia.sessionId, 'BUFFERING', 'Local player is buffering');
+                                            if (isLocal && !localPlaybackSwitchRef.current) markLocalMediaStatus(videoState.localMedia.sessionId, 'BUFFERING', 'Local player is buffering');
                                         }}
                                         onPlaying={() => {
                                             isBufferingRef.current = false;
-                                            if (isLocal) markLocalMediaStatus(videoState.localMedia.sessionId, 'READY');
+                                            if (isLocal && !localPlaybackSwitchRef.current) markLocalMediaStatus(videoState.localMedia.sessionId, 'READY');
                                         }}
                                         // FIX #9: Update buffer fill progress
                                         onTimeUpdate={() => {
@@ -1127,6 +1477,7 @@ const VideoPlayer = () => {
                                             }
                                         }}
                                         onError={() => {
+                                            if (localPlaybackSwitchRef.current) return;
                                             clearTimeout(retryTimerRef.current);
                                             const v = nativeVideoRef.current;
                                             const code = v?.error?.code;
@@ -1150,10 +1501,10 @@ const VideoPlayer = () => {
                                             }
                                             // FIX #2: Format-specific error messages
                                             if (code === 3) {
-                                                setPlayerError('This format or codec cannot be decoded by your browser. MP4 with H.264/AAC is the safest option.');
+                                                setPlayerError(mediaInspection?.compatibility?.message || 'This format or codec cannot be decoded by your browser. MP4 with H.264/AAC is the safest option.');
                                             } else if (code === 4) {
                                                 setPlayerError(isLocal
-                                                    ? 'This local file format is not supported by your browser. Try an MP4 (H.264/AAC) or a compatible WebM.'
+                                                    ? (mediaInspection?.compatibility?.message || 'This local file format is not supported by your browser. Try an MP4 (H.264/AAC) or a compatible WebM.')
                                                     : 'Could not load this file. Make sure it is an MP4 or WebM and is shared as “Anyone with the link” in Google Drive.');
                                             } else {
                                                 setPlayerError(isLocal
@@ -1219,14 +1570,11 @@ const VideoPlayer = () => {
                                         onBufferEnd={() => { isBufferingRef.current = false; }}
                                         config={{
                                             youtube: { playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 } },
-                                            file: {
-                                                attributes: isArchive
-                                                    ? { preload: 'auto' }
+                                             file: {
+                                                 attributes: isArchive
+                                                     ? { preload: 'auto' }
                                                     : { preload: 'auto', crossOrigin: 'anonymous' },
-                                                tracks: subtitleTracks
-                                                    .filter(t => !t.isNative)
-                                                    .map(t => ({ kind: 'subtitles', src: t.src, srcLang: t.srcLang, label: t.label, default: t.default }))
-                                            }
+                                             }
                                         }}
                                     />
 
@@ -1266,7 +1614,34 @@ const VideoPlayer = () => {
                             {playerError && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/90 px-6">
                                     <AlertCircle size={36} className="text-red-400 mb-3" />
+                                    {isLocal && mediaInspection && (
+                                        <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.12em] text-zinc-100">
+                                            {mediaInspection.compatibility?.status === 'partial'
+                                                ? 'This file is partially supported'
+                                                : mediaInspection.compatibility?.status === 'unknown'
+                                                    ? 'Playback compatibility uncertain'
+                                                    : 'This file cannot play as-is'}
+                                        </h3>
+                                    )}
                                     <p className="text-gray-200 text-sm text-center font-medium mb-3">{playerError}</p>
+                                    {isLocal && mediaInspection && (
+                                        <div className="mb-3 max-h-[45%] w-full max-w-md overflow-y-auto rounded-xl border border-white/10 bg-white/[0.03] p-2 text-left">
+                                            <MediaInfoPanel inspection={mediaInspection} inspectionError={mediaInspectionError} />
+                                        </div>
+                                    )}
+                                    {isLocal && localPlaybackUrl && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPlayerError(null);
+                                                setIsPlayerReady(false);
+                                                nativeVideoRef.current?.load();
+                                            }}
+                                            className="mb-4 flex items-center gap-2 rounded-xl border border-white/15 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                                        >
+                                            <RefreshCw size={14} /> Try Anyway
+                                        </button>
+                                    )}
                                     {/* Retry button */}
                                     {isPrivileged && rawUrl && (
                                         <button

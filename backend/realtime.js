@@ -623,7 +623,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (!room || !user || room.controllerMemberId !== user.userId) {
                 return callback?.(protocolError('NOT_CONTROLLER', 'Only the current controller can change playback.'));
             }
-            if (payload.mediaId !== room.media?.mediaId || !validCommandId(payload.commandId) ||
+            if (!room.media || payload.mediaId !== room.media.mediaId || !validCommandId(payload.commandId) ||
                 !['PLAY', 'PAUSE', 'SEEK', 'ENDED'].includes(payload.action) ||
                 (payload.action === 'SEEK' && !finiteNonNegative(payload.positionSec))) {
                 return callback?.(protocolError('INVALID_COMMAND', 'The playback command is invalid.'));

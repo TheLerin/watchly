@@ -4,7 +4,7 @@ import useScreenShare from '../../hooks/useScreenShare';
 import { useRoom } from '../../context/RoomContext';
 import { socket } from '../../socket';
 
-export default function ScreenShareAdapter() {
+export default function ScreenShareAdapter({ variant = 'classic', className = '' }) {
     const { currentUser, controllerMemberId } = useRoom();
     const [iceServers, setIceServers] = useState([{ urls: 'stun:stun.l.google.com:19302' }]);
     const [iceWarning, setIceWarning] = useState('');
@@ -25,8 +25,8 @@ export default function ScreenShareAdapter() {
         videoRef.current.srcObject = remoteStream;
         if (remoteStream) videoRef.current.play().catch(() => setPlayBlocked(true));
     }, [remoteStream]);
-    if (!supported) return <p className="p-3 text-xs text-zinc-500">Screen sharing is not supported by this browser.</p>;
-    return <section className="rounded-xl border border-white/10 p-3">
+    if (!supported) return <p className={`room-screen-share p-3 text-xs text-zinc-500 ${className}`} data-room-variant={variant}>Screen sharing is not supported by this browser.</p>;
+    return <section className={`room-screen-share rounded-xl border border-white/10 p-3 ${className}`} data-room-variant={variant}>
         {remoteStream && <div className="relative mb-2"><video ref={videoRef} autoPlay playsInline controls className="w-full rounded-lg" />
             {playBlocked && <button onClick={() => videoRef.current?.play().then(() => setPlayBlocked(false))} className="absolute inset-0 bg-black/70 font-bold text-white">Click to enable shared playback</button>}</div>}
         {currentUser?.userId === controllerMemberId && <button onClick={async () => { setError(''); try { if (sharing) stop(); else await start(); } catch (e) { setError(e.name === 'NotAllowedError' ? 'Screen permission was denied. Nothing was shared; try again only when ready.' : e.message); } }} className="flex items-center gap-2 text-xs font-bold text-zinc-300">

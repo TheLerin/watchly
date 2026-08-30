@@ -34,7 +34,7 @@ const Avatar = ({ nickname, role }) => {
     );
 };
 
-const ChatUI = ({ hideHeader = false }) => {
+const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => {
     const { messages, sendMessage, currentUser } = useRoom();
     const [input, setInput] = useState('');
     const [sent, setSent] = useState(false);
@@ -58,7 +58,10 @@ const ChatUI = ({ hideHeader = false }) => {
     const isMe = (msg) => !msg.isSystem && msg.nickname === currentUser?.nickname;
 
     return (
-        <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl">
+        <div
+            className={`room-chat flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}
+            data-room-variant={variant}
+        >
             {!hideHeader && (
                 <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-3">
                     <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-zinc-400">

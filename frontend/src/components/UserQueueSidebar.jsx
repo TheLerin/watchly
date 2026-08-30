@@ -47,7 +47,7 @@ const ActionItem = ({ icon, label, danger, onClick }) => (
     </button>
 );
 
-const UserQueueSidebar = ({ compact = false }) => {
+const UserQueueSidebar = ({ compact = false, variant = 'classic', className = '' }) => {
     const {
         users,
         currentUser,
@@ -70,7 +70,10 @@ const UserQueueSidebar = ({ compact = false }) => {
     }, []);
 
     return (
-        <div className={`flex flex-col ${compact ? '' : 'h-full gap-3'}`}>
+        <div
+            className={`room-members-queue flex flex-col ${compact ? '' : 'h-full gap-3'} ${className}`}
+            data-room-variant={variant}
+        >
             <section className={compact ? '' : 'flex min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/70'}>
                 <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
                     <div>

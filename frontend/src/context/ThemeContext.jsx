@@ -9,6 +9,19 @@ export const THEME_META = {
     'glass-light': { label: 'Light Glass',  emoji: '☀️', orb: ['#eee','#ccc'] },
 };
 
+export const ROOM_APPEARANCE_META = {
+    cinematic: {
+        label: 'Cinematic',
+        description: 'Immersive theater room',
+    },
+    classic: {
+        label: 'Classic',
+        description: 'Original dashboard room',
+    },
+};
+
+const ROOM_APPEARANCE_STORAGE_KEY = 'watchly-room-appearance';
+
 export const ThemeProvider = ({ children }) => {
     const [theme, setThemeState] = useState(() => {
         const s = localStorage.getItem('watchly-theme');
@@ -16,10 +29,21 @@ export const ThemeProvider = ({ children }) => {
         return 'glass-dark'; // default
     });
 
+    const [roomAppearance, setRoomAppearanceState] = useState(() => {
+        const savedAppearance = localStorage.getItem(ROOM_APPEARANCE_STORAGE_KEY);
+        return ROOM_APPEARANCE_META[savedAppearance] ? savedAppearance : 'cinematic';
+    });
+
     const setTheme = (t) => {
         if (!THEME_META[t]) t = 'glass-dark';
         setThemeState(t);
         localStorage.setItem('watchly-theme', t);
+    };
+
+    const setRoomAppearance = (appearance) => {
+        const nextAppearance = ROOM_APPEARANCE_META[appearance] ? appearance : 'cinematic';
+        setRoomAppearanceState(nextAppearance);
+        localStorage.setItem(ROOM_APPEARANCE_STORAGE_KEY, nextAppearance);
     };
 
     useEffect(() => {
@@ -35,7 +59,7 @@ export const ThemeProvider = ({ children }) => {
     const isDark = theme === 'glass-dark';
 
     return (
-        <ThemeContext.Provider value={{ theme, setTheme, isDark }}>
+        <ThemeContext.Provider value={{ theme, setTheme, isDark, roomAppearance, setRoomAppearance }}>
             {children}
         </ThemeContext.Provider>
     );
