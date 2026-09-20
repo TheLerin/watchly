@@ -59,9 +59,12 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
         removeFromQueue,
         playNext,
         videoState,
+        controllerMemberId,
+        requestControl,
     } = useRoom();
     const [openMenuId, setOpenMenuId] = useState(null);
-    const isPrivileged = currentUser?.role === 'Host' || currentUser?.role === 'Moderator';
+    const isPrivileged = currentUser?.userId === controllerMemberId;
+    const canRequestControl = !isPrivileged && ['Host', 'Moderator'].includes(currentUser?.role);
 
     useEffect(() => {
         const close = () => setOpenMenuId(null);
@@ -83,6 +86,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                 </div>
 
                 <div className="space-y-1 overflow-y-auto p-2">
+                    {canRequestControl && <button type="button" onClick={requestControl} className="mb-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-zinc-300">Take playback control</button>}
                     {users.map(user => {
                         const isMe = currentUser?.id === user.id;
                         const canManage = currentUser && !isMe && (

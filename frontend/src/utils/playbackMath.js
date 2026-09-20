@@ -14,5 +14,5 @@ export const correctionForDrift = driftSec => {
 };
 
 export const shouldApplyPlaybackSequence = (lastSeq, nextSeq, force = false) => (
-    force || (Number.isInteger(nextSeq) && nextSeq > lastSeq)
+    Number.isInteger(nextSeq) && (nextSeq > lastSeq || (force && nextSeq === lastSeq))
 );

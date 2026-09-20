@@ -28,3 +28,12 @@ test('scheduled pause preserves playback progress through its effective deadline
     assert.equal(paused.positionSec, 6.75);
     assert.equal(paused.effectiveAtServerMs, 2750);
 });
+
+test('playing again after reaching the end restarts from zero', () => {
+    for (const status of ['paused', 'playing']) {
+        const next = reduceCommand({ playback: { ...createPlayback(0), status, positionSec: 20 },
+            action: 'PLAY', now: 1000, effectiveAt: 1750, memberId: 'controller', durationSec: 20 });
+        assert.equal(next.status, 'playing');
+        assert.equal(next.positionSec, 0);
+    }
+});

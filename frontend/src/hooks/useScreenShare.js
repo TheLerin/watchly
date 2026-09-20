@@ -78,8 +78,8 @@ export default function useScreenShare(iceServers) {
         const ice = ({ senderSocketId, candidate }) => peers.current.get(senderSocketId)?.addIceCandidate(candidate).catch(() => {});
         const stopped = () => close(false);
         const unavailable = value => setWarning(value.message);
-        socket.on('screen:offer', offer); socket.on('screen:answer', answer); socket.on('screen:ice', ice); socket.on('screen:stopped', stopped); socket.on('screen:unavailable', unavailable);
-        return () => { socket.off('screen:offer', offer); socket.off('screen:answer', answer); socket.off('screen:ice', ice); socket.off('screen:stopped', stopped); socket.off('screen:unavailable', unavailable); close(false); };
+        socket.on('screen:offer', offer); socket.on('screen:answer', answer); socket.on('screen:ice', ice); socket.on('screen:stopped', stopped); socket.on('screen:unavailable', unavailable); socket.on('disconnect', stopped);
+        return () => { socket.off('screen:offer', offer); socket.off('screen:answer', answer); socket.off('screen:ice', ice); socket.off('screen:stopped', stopped); socket.off('screen:unavailable', unavailable); socket.off('disconnect', stopped); close(false); };
     }, [close, connection]);
     return { supported: Boolean(navigator.mediaDevices?.getDisplayMedia), sharing, remoteStream, status, warning, start, stop: close };
 }

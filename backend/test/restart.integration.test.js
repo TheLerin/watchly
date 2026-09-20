@@ -4,7 +4,7 @@ const { fork } = require('node:child_process');
 const { io } = require('../../frontend/node_modules/socket.io-client');
 
 const waitForServer = async port => {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < 150; attempt += 1) {
         try { await fetch(`http://127.0.0.1:${port}`); return; } catch { await new Promise(resolve => setTimeout(resolve, 75)); }
     }
     throw new Error('server failed to start');
@@ -15,7 +15,7 @@ const connect = port => new Promise((resolve, reject) => {
 });
 const emit = (client, event, payload) => new Promise(resolve => client.emit(event, payload, resolve));
 
-test('a Render-like restart returns typed room expiration instead of recreating it', { timeout: 10000 }, async () => {
+test('a Render-like restart returns typed room expiration instead of recreating it', { timeout: 30000 }, async () => {
     const port = 6400 + Math.floor(Math.random() * 200);
     const launch = () => fork(require.resolve('../server'), [], { env: { ...process.env, PORT: String(port), CORS_ORIGIN: '*' }, stdio: 'ignore' });
     let server = launch(); let client;

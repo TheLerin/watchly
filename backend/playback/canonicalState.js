@@ -24,7 +24,7 @@ const reduceCommand = ({ playback, action, positionSec, now, effectiveAt, member
     const current = canonicalPosition(playback, Math.max(now, effectiveAt), durationSec);
     const position = action === 'SEEK'
         ? clamp(positionSec, 0, durationSec)
-        : current;
+        : action === 'PLAY' && current >= durationSec ? 0 : current;
     return {
         seq: playback.seq + 1,
         status: action === 'PLAY' ? 'playing' : action === 'PAUSE' || action === 'ENDED' ? 'paused' : playback.status,

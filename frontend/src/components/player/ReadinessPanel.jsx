@@ -12,15 +12,13 @@ const META = {
 };
 
 export default function ReadinessPanel({ variant = 'classic', className = '' }) {
-    const { users, localReadiness, mediaDescriptor, currentUser, controllerMemberId, requestControl } = useRoom();
+    const { users, localReadiness, mediaDescriptor } = useRoom();
     if (!mediaDescriptor) return null;
     return (
         <section className={`room-readiness border-t border-white/10 p-3 ${className}`} data-room-variant={variant} aria-label="Local file readiness">
             <div className="mb-2 flex justify-between text-xs font-bold text-zinc-400">
                 <span>Local file readiness</span><span>{localReadiness.readyCount}/{localReadiness.totalCount}</span>
             </div>
-            {currentUser?.userId !== controllerMemberId && ['Host', 'Moderator'].includes(currentUser?.role) &&
-                <button onClick={requestControl} className="mb-3 rounded-lg border border-white/10 px-2 py-1 text-xs font-bold text-zinc-300">Take playback control</button>}
             <div className="space-y-2">
                 {users.map(user => {
                     const state = localReadiness.statuses?.[user.userId] || { status: 'SELECT_FILE' };

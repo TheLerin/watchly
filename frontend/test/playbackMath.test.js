@@ -22,5 +22,7 @@ test('sequence gate rejects duplicate and out-of-order playback states', () => {
     assert.equal(shouldApplyPlaybackSequence(4, 5), true);
     assert.equal(shouldApplyPlaybackSequence(4, 4), false);
     assert.equal(shouldApplyPlaybackSequence(4, 3), false);
-    assert.equal(shouldApplyPlaybackSequence(4, 3, true), true);
+    assert.equal(shouldApplyPlaybackSequence(4, 3, true), false);
+    assert.equal(shouldApplyPlaybackSequence(4, 4, true), true);
+    assert.equal(shouldApplyPlaybackSequence(4, undefined, true), false);
 });

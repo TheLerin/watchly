@@ -160,7 +160,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         isVoiceActive: Boolean(user.isVoiceActive),
         isMuted: Boolean(user.isMuted),
         joinedAt: user.joinedAt,
-        localReady: room.videoState.sourceType === 'local'
+        localReady: room.media || room.videoState.sourceType === 'local'
             ? room.localReadyUserIds.has(user.userId)
             : null
     });
@@ -322,6 +322,12 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (!validRoomCode(roomId)) {
                 return rejectRoom('INVALID_ROOM_CODE', 'Room codes contain exactly seven letters or numbers.');
             }
+            const boundRoom = rooms.get(socket.data.roomId);
+            const boundUser = getUserBySocket(boundRoom, socket.id);
+            if (boundUser && (creating || roomId !== socket.data.roomId ||
+                typeof payload.resumeToken !== 'string' || tokenHash(payload.resumeToken) !== boundUser.resumeTokenHash)) {
+                return rejectRoom('ALREADY_IN_ROOM', 'Leave the current room before entering another room.');
+            }
             if (creating) rooms.set(roomId, createRoom(roomId));
             const room = rooms.get(roomId);
             if (!room) {
@@ -357,7 +363,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 room.users.push(user);
                 room.mediaStatuses.set(user.userId, { status: room.media ? 'SELECT_FILE' : 'NOT_REQUIRED', reason: null });
                 if (creating) room.controllerMemberId = user.userId;
-            } else {
+            } else if (user.id !== socket.id || !user.connected) {
                 const leaseTimer = hostLeaseTimers.get(roomId);
                 if (user.userId === room.controllerMemberId && leaseTimer) {
                     clearTimeout(leaseTimer);
@@ -405,9 +411,9 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             callback?.(joined);
             socket.to(roomId).emit('user_joined', {
                 ...publicUser(room, user),
-                localReady: room.videoState.sourceType === 'local' ? false : null
+                localReady: room.media || room.videoState.sourceType === 'local' ? false : null
             });
-            if (room.videoState.sourceType === 'local') emitReadiness(roomId, room);
+            if (room.media || room.videoState.sourceType === 'local') emitReadiness(roomId, room);
         };
 
         socket.on('room:create', (payload, callback) => enterRoom(payload, callback, true));
@@ -476,6 +482,10 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 if (sender.role === 'Host' && target.role === 'Moderator') {
                     target.role = 'Viewer';
                     io.to(roomId).emit('role_updated', { userId: target.id, newRole: 'Viewer' });
+                    if (room.controllerMemberId === target.userId) {
+                        room.controllerMemberId = sender.userId;
+                        io.to(roomId).emit('control:changed', { controllerMemberId: sender.userId, reason: 'CONTROLLER_DEMOTED' });
+                    }
                 }
             });
         });
@@ -483,6 +493,9 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         socket.on('transfer_host', ({ roomId, targetId } = {}) => {
             roleAction(roomId, targetId, (room, sender, target) => {
                 if (sender.role !== 'Host') return;
+                clearTimeout(hostLeaseTimers.get(roomId));
+                hostLeaseTimers.delete(roomId);
+                room.controllerLeaseUntil = null;
                 sender.role = 'Moderator';
                 target.role = 'Host';
                 room.controllerMemberId = target.userId;
@@ -538,7 +551,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 });
             }
             io.to(roomId).emit('user_left', target.id);
-            if (room.videoState.sourceType === 'local') emitReadiness(roomId, room);
+            if (room.media || room.videoState.sourceType === 'local') emitReadiness(roomId, room);
         });
 
         const controller = roomId => {
@@ -560,6 +573,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             }
             room.controllerMemberId = user.userId;
             room.controllerLeaseUntil = null;
+            clearTimeout(hostLeaseTimers.get(socket.data.roomId));
+            hostLeaseTimers.delete(socket.data.roomId);
             io.to(socket.data.roomId).emit('control:changed', { controllerMemberId: user.userId, reason: 'CONTROL_REQUESTED' });
             callback?.({ ok: true });
         });
@@ -653,7 +668,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                     positionSec: Number(payload.positionSec), now,
                     effectiveAt: now + 750, memberId: user.userId, durationSec
                 }),
-                commandId: payload.commandId
+                commandId: payload.commandId,
+                action: payload.action
             };
             room.recentCommandIds.set(payload.commandId, room.playback);
             while (room.recentCommandIds.size > 100) room.recentCommandIds.delete(room.recentCommandIds.keys().next().value);
@@ -675,6 +691,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         });
 
         const mediaEventIsCurrent = (room, payload = {}) => {
+            // Never let delayed URL-player events overwrite a local-file session.
+            if (room.media) return false;
             if (room.videoState.sourceType === 'local') {
                 if (payload.mediaSessionId !== room.videoState.localMedia?.sessionId) return false;
             }
@@ -693,6 +711,10 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 return;
             }
             const { room } = access;
+            room.media = null;
+            room.mediaStatuses.clear();
+            room.playback = createPlayback();
+            room.recentCommandIds.clear();
             room.localReadyUserIds.clear();
             room.videoState = {
                 sourceType: 'remote',
@@ -856,6 +878,10 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             const access = controller(roomId);
             if (!access || access.room.queue.length === 0) return;
             const next = access.room.queue.shift();
+            access.room.media = null;
+            access.room.mediaStatuses.clear();
+            access.room.playback = createPlayback();
+            access.room.recentCommandIds.clear();
             access.room.localReadyUserIds.clear();
             access.room.videoState = {
                 sourceType: 'remote',
@@ -1010,14 +1036,13 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             socket.to(roomId).emit('user_left', socket.id);
 
             const remaining = room.users.filter(item => item.connected);
-            if (remaining.length === 0) {
-                scheduleRoomCleanup(roomId, room);
-                return;
-            }
+            if (remaining.length === 0) scheduleRoomCleanup(roomId, room);
             if (user.userId === room.controllerMemberId) {
-                advancePlayback(room);
-                room.videoState.isPlaying = false;
-                io.to(roomId).emit('video_paused', snapshot(room));
+                if (!room.media) {
+                    advancePlayback(room);
+                    room.videoState.isPlaying = false;
+                    io.to(roomId).emit('video_paused', snapshot(room));
+                }
                 if (room.media) {
                     const now = Date.now();
                     room.playback = {
@@ -1035,7 +1060,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 });
                 const timer = setTimeout(() => {
                     hostLeaseTimers.delete(roomId);
-                    if (user.connected || rooms.get(roomId) !== room) return;
+                    if (user.connected || rooms.get(roomId) !== room || room.controllerMemberId !== user.userId) return;
                     const candidates = room.users.filter(item => item.connected).sort((a, b) => a.joinedAt - b.joinedAt);
                     const nextHost = candidates.find(item => item.role === 'Moderator') || candidates[0];
                     if (!nextHost) return;
@@ -1049,7 +1074,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 timer.unref?.();
                 hostLeaseTimers.set(roomId, timer);
             }
-            if (room.videoState.sourceType === 'local') emitReadiness(roomId, room);
+            if (room.media || room.videoState.sourceType === 'local') emitReadiness(roomId, room);
         };
 
         socket.on('leave_room', () => {

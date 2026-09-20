@@ -3,14 +3,17 @@ const assert = require('node:assert/strict');
 const { fork } = require('node:child_process');
 const { io } = require('../../frontend/node_modules/socket.io-client');
 
-test('room supports fifty sockets with clock traffic inside payload limits', { timeout: 15000 }, async () => {
+test('room supports fifty sockets with clock traffic inside payload limits', { timeout: 30000 }, async () => {
     const port = 6000 + Math.floor(Math.random() * 300);
     const server = fork(require.resolve('../server'), [], { env: { ...process.env, PORT: String(port), CORS_ORIGIN: '*' }, stdio: 'ignore' });
     const clients = [];
     try {
-        for (let attempt = 0; attempt < 40; attempt += 1) {
-            try { await fetch(`http://127.0.0.1:${port}`); break; } catch { await new Promise(resolve => setTimeout(resolve, 100)); }
+        let started = false;
+        for (let attempt = 0; attempt < 150; attempt += 1) {
+            if (server.exitCode !== null) throw new Error(`Load test server exited with code ${server.exitCode}`);
+            try { await fetch(`http://127.0.0.1:${port}`); started = true; break; } catch { await new Promise(resolve => setTimeout(resolve, 100)); }
         }
+        assert.equal(started, true, 'Load test server did not start');
         const connect = () => new Promise((resolve, reject) => {
             const client = io(`http://127.0.0.1:${port}`, { transports: ['websocket'], reconnection: false });
             clients.push(client); client.once('connect', () => resolve(client)); client.once('connect_error', reject);

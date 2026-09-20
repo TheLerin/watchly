@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { socket } from '../socket';
 
 const epochNow = () => performance.timeOrigin + performance.now();
@@ -39,5 +39,7 @@ export default function useServerClock(enabled) {
         return () => { clearInterval(interval); document.removeEventListener('visibilitychange', visible); };
     }, [enabled, sample]);
 
-    return { ...quality, sample, serverNow: () => epochNow() + offsetRef.current, toLocalDelay: serverMs => serverMs - (epochNow() + offsetRef.current) };
+    const serverNow = useCallback(() => epochNow() + offsetRef.current, []);
+    const toLocalDelay = useCallback(serverMs => serverMs - serverNow(), [serverNow]);
+    return useMemo(() => ({ ...quality, sample, serverNow, toLocalDelay }), [quality, sample, serverNow, toLocalDelay]);
 }

@@ -1,5 +1,34 @@
 # React + Vite
 
+## Playback regression checks
+
+Install dependencies in both `frontend` and `backend`, then run from `frontend`:
+
+```sh
+npm test
+npm run lint
+npm run build
+npm run test:browser
+```
+
+Run `npm test` from `backend` for Socket.IO integration, controller permissions,
+source switching, reconnect, restart, and load tests.
+
+The browser test starts and stops its own frontend/backend on available local
+ports. It uses independent host, viewer, and late-join browser sessions with the
+bundled video fixture. It checks link controls, scheduled local playback, paused
+and playing seeks, drift below 300 ms, late joins, reconnect readiness, replay
+after the end, and switching back to a link. It also checks moderator and queue
+permissions, kick recovery, invalid saved sessions, and screen-share stability
+using a generated canvas stream (no desktop capture). No external video service
+is needed.
+
+The test uses installed Chrome/Edge on Windows, or Playwright Chromium elsewhere
+(`npx playwright install chromium`). Set `BROWSER_EXECUTABLE` to select another
+Chromium executable. Autoplay is enabled for deterministic sync testing; browser
+autoplay rejection also has a unit test. This does not replace checks on real
+mobile devices, external video providers, or unsupported local codecs.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
