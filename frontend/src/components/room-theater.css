@@ -90,6 +90,10 @@
 }
 
 .room-shell[data-room-appearance="cinematic"] .cinematic-room-environment {
+    --theater-inner-left: 14.5%;
+    --theater-inner-right: 85.5%;
+    --theater-back-floor: 84%;
+    --theater-side-floor: 94%;
     display: block;
     overflow: hidden;
     background: #030304;
@@ -99,17 +103,19 @@
 .room-shell[data-room-appearance="cinematic"] .cinematic-room-environment::after {
     position: absolute;
     z-index: 2;
-    inset: 0;
+    top: 0;
+    bottom: calc(100% - var(--theater-back-floor));
+    width: 1px;
     content: '';
-    background: linear-gradient(180deg, rgb(183 195 216 / 13%), rgb(183 195 216 / 5%) 72%, transparent 84%);
+    background: linear-gradient(180deg, rgb(183 195 216 / 13%), rgb(183 195 216 / 5%) 72%, transparent);
 }
 
 .room-shell[data-room-appearance="cinematic"] .cinematic-room-environment::before {
-    clip-path: polygon(18% 0, calc(18% + 1px) 0, calc(12% + 1px) 84%, 12% 84%);
+    left: var(--theater-inner-left);
 }
 
 .room-shell[data-room-appearance="cinematic"] .cinematic-room-environment::after {
-    clip-path: polygon(calc(82% - 1px) 0, 82% 0, 88% 84%, calc(88% - 1px) 84%);
+    left: var(--theater-inner-right);
 }
 
 .theater-back-wall,
@@ -120,7 +126,12 @@
 
 .theater-back-wall {
     inset: 0;
-    clip-path: polygon(18% 0, 82% 0, 88% 84%, 12% 84%);
+    clip-path: polygon(
+        var(--theater-inner-left) 0,
+        var(--theater-inner-right) 0,
+        var(--theater-inner-right) var(--theater-back-floor),
+        var(--theater-inner-left) var(--theater-back-floor)
+    );
     background:
         radial-gradient(ellipse 58% 56% at 19% 44%, rgb(40 58 66 / 12%), transparent 70%),
         radial-gradient(ellipse 58% 56% at 81% 44%, rgb(63 48 70 / 12%), transparent 70%),
@@ -135,17 +146,34 @@
 }
 
 .theater-wall-left {
-    clip-path: polygon(0 0, 18% 0, 12% 84%, 0 94%);
+    clip-path: polygon(
+        0 0,
+        var(--theater-inner-left) 0,
+        var(--theater-inner-left) var(--theater-back-floor),
+        0 var(--theater-side-floor)
+    );
 }
 
 .theater-wall-right {
-    clip-path: polygon(82% 0, 100% 0, 100% 94%, 88% 84%);
+    clip-path: polygon(
+        var(--theater-inner-right) 0,
+        100% 0,
+        100% var(--theater-side-floor),
+        var(--theater-inner-right) var(--theater-back-floor)
+    );
     background: linear-gradient(270deg, #030304, #0e0b13 14%, #070709 30%);
 }
 
 .theater-floor {
     inset: 0;
-    clip-path: polygon(12% 84%, 88% 84%, 100% 94%, 100% 100%, 0 100%, 0 94%);
+    clip-path: polygon(
+        var(--theater-inner-left) var(--theater-back-floor),
+        var(--theater-inner-right) var(--theater-back-floor),
+        100% var(--theater-side-floor),
+        100% 100%,
+        0 100%,
+        0 var(--theater-side-floor)
+    );
     background: linear-gradient(180deg, #08090c 81%, #07070a 92%, #020203 100%);
 }
 

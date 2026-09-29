@@ -69,6 +69,27 @@ const ready = async url => {
  assert.ok(stage.width > 800, 'the theater screen should use the available wall space');
  assert.equal(await host.locator('.theater-side-wall').count(), 2);
  assert.equal(await host.locator('.theater-floor').count(), 1);
+ const roomGeometry = await host.evaluate(() => {
+  const polygon = selector => getComputedStyle(document.querySelector(selector)).clipPath
+   .match(/^polygon\((.*)\)$/)[1].split(',').map(value => {
+    const [x, y] = value.trim().split(/\s+/).map(parseFloat);
+    return { x, y };
+   });
+  return {
+   back: polygon('.theater-back-wall'),
+   left: polygon('.theater-wall-left'),
+   right: polygon('.theater-wall-right'),
+   floor: polygon('.theater-floor'),
+  };
+ });
+ assert.equal(roomGeometry.back[0].x, roomGeometry.back[3].x, 'left room corner should be vertical');
+ assert.equal(roomGeometry.back[1].x, roomGeometry.back[2].x, 'right room corner should be vertical');
+ assert.deepEqual(roomGeometry.left[1], roomGeometry.back[0]);
+ assert.deepEqual(roomGeometry.left[2], roomGeometry.back[3]);
+ assert.deepEqual(roomGeometry.right[0], roomGeometry.back[1]);
+ assert.deepEqual(roomGeometry.right[3], roomGeometry.back[2]);
+ assert.deepEqual(roomGeometry.floor[0], roomGeometry.back[3]);
+ assert.deepEqual(roomGeometry.floor[1], roomGeometry.back[2]);
  await host.getByRole('button', { name: 'Watch controls' }).click();
  await host.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await host.getByRole('button',{name:'Play Now',exact:true}).click();
