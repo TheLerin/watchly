@@ -387,8 +387,6 @@ const RoomLayout = () => {
         </div>
     );
 
-    const videoH = showMobileChat ? 100 - heightPct : 100;
-
     return (
         <div
             ref={ambientTargetRef}
@@ -396,16 +394,7 @@ const RoomLayout = () => {
             data-room-appearance={roomAppearance}
         >
             <div className="classic-room-background"><BackgroundLayers /></div>
-            <div className="cinematic-room-environment" aria-hidden="true">
-                <div className="cinematic-ceiling">
-                    <i /><i /><i /><i /><i />
-                </div>
-                <div className="cinematic-wall cinematic-wall-left" />
-                <div className="cinematic-wall cinematic-wall-right" />
-                <div className="cinematic-back-wall" />
-                <div className="cinematic-floor" />
-                <div className="cinematic-ambient-wash" />
-            </div>
+            <div className="cinematic-room-environment" aria-hidden="true" />
             <div className="relative z-10 flex h-full w-full flex-col">
                 <Header
                     roomId={roomId}
@@ -437,8 +426,13 @@ const RoomLayout = () => {
                                 </div>
                             </div>
                             <div className="room-video-stage h-[calc(100%-52px)] min-h-0">
+                                <div className="video-ambient-light" aria-hidden="true">
+                                    <span className="video-ambient-top" />
+                                    <span className="video-ambient-left" />
+                                    <span className="video-ambient-right" />
+                                    <span className="video-ambient-bottom" />
+                                </div>
                                 <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} />
-                                <div className="cinematic-screen-reflection" aria-hidden="true" />
                                 <div className="cinematic-sofa" aria-hidden="true">
                                     <img src="/assets/sofa-couple.png" alt="" />
                                 </div>
@@ -483,17 +477,14 @@ const RoomLayout = () => {
                         </aside>
                     </div>
                 ) : (
-                    <div className={isPortrait ? 'relative flex flex-1 flex-col overflow-hidden p-2' : 'flex flex-1 flex-col overflow-hidden'}>
-                        <div
-                            className={isPortrait ? `${panelClass} relative flex-shrink-0 overflow-hidden p-2` : 'relative w-full shrink-0 p-2'}
-                            style={isPortrait ? { height: `${videoH}%` } : { height: '55vw', maxHeight: '60vh' }}
-                        >
-                            <div className="absolute inset-2">
+                    <div className="room-mobile-workspace relative flex flex-1 flex-col p-2" data-orientation={isPortrait ? 'portrait' : 'landscape'}>
+                        <div className="room-mobile-player relative w-full shrink-0">
+                            <div className="room-mobile-player-inner relative">
                                 <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} />
                             </div>
 
                             {isPortrait && (
-                                <div className="absolute right-4 z-20 flex flex-col gap-3" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
+                                <div className="fixed right-4 z-20 flex flex-col gap-3" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
                                     {[
                                         { icon: <Menu size={19} />, label: 'Room', fn: () => setShowMobileMembers(true) },
                                         { icon: <MessageSquare size={19} />, label: 'Chat', fn: () => setShowMobileChat(true) },
@@ -524,12 +515,14 @@ const RoomLayout = () => {
                                             <MotionDiv initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
                                                 <div className="max-h-32 overflow-y-auto">
                                                     <UserQueueSidebar compact variant={roomAppearance} />
+                                                    <ReadinessPanel variant={roomAppearance} />
                                                 </div>
                                             </MotionDiv>
                                         )}
                                     </AnimatePresence>
                                 </section>
                                 <VoiceRoom variant={roomAppearance} />
+                                <ScreenShareAdapter variant={roomAppearance} />
                                 <div className="min-h-0 flex-1">
                                     <ChatUI variant={roomAppearance} />
                                 </div>
@@ -543,7 +536,7 @@ const RoomLayout = () => {
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: '100%' }}
                                     transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                                    className="absolute inset-x-0 bottom-0 z-30 flex flex-col rounded-t-3xl border-t border-white/10 bg-black/95 shadow-2xl shadow-black backdrop-blur-xl"
+                                    className="fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-3xl border-t border-white/10 bg-black/95 shadow-2xl shadow-black backdrop-blur-xl"
                                     style={{ height: `${heightPct}%`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
                                 >
                                     <div
@@ -573,7 +566,7 @@ const RoomLayout = () => {
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         exit={{ opacity: 0 }}
-                                        className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm"
+                                        className="fixed inset-0 z-30 bg-black/70 backdrop-blur-sm"
                                         onClick={() => setShowMobileMembers(false)}
                                     />
                                     <MotionDiv
@@ -581,7 +574,7 @@ const RoomLayout = () => {
                                         animate={{ y: 0 }}
                                         exit={{ y: '100%' }}
                                         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                                        className="absolute inset-x-0 bottom-0 z-40 flex max-h-[76vh] flex-col rounded-t-3xl border-t border-white/10 bg-black/95 shadow-2xl shadow-black backdrop-blur-xl"
+                                        className="fixed inset-x-0 bottom-0 z-40 flex max-h-[76vh] flex-col rounded-t-3xl border-t border-white/10 bg-black/95 shadow-2xl shadow-black backdrop-blur-xl"
                                         style={{ height: '68vh', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
                                     >
                                         <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
@@ -596,7 +589,9 @@ const RoomLayout = () => {
                                         </div>
                                         <div className="min-h-0 flex-1 overflow-y-auto p-3">
                                             <VoiceRoom variant={roomAppearance} />
+                                            <ScreenShareAdapter variant={roomAppearance} />
                                             <UserQueueSidebar compact variant={roomAppearance} />
+                                            <ReadinessPanel variant={roomAppearance} />
                                         </div>
                                     </MotionDiv>
                                 </>

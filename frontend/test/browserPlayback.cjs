@@ -56,12 +56,15 @@ const ready = async url => {
  await viewer.getByPlaceholder('ROOM CODE').fill(roomId);
  await viewer.locator('.room-launcher-submit').click();
  await viewer.waitForURL('**/room/**');
- await host.getByPlaceholder(/Watch from Link/).fill(baseUrl + '/bg-video.mp4');
+ await host.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await host.getByRole('button',{name:'Play Now',exact:true}).click();
  await video(host).waitFor(); await video(viewer).waitFor();
  await wait(async()=>{const a=await values(host),b=await values(viewer);return a.time>1&&b.time>1},'remote did not play');
+ await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='1'),'video ambient light did not start');
+ assert.match(await host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--video-left-rgb')), /^\d+ \d+ \d+$/);
  await video(host).evaluate(v=>v.pause());
  await wait(async()=> (await values(viewer)).paused,'remote pause did not synchronize');
+ await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='0'),'video ambient light did not stop on pause');
  await video(host).evaluate(v=>{v.currentTime=5});
  await wait(async()=>Math.abs((await values(viewer)).time-5)<0.3,'remote seek did not synchronize');
  await video(host).evaluate(v=>v.play());
@@ -92,7 +95,7 @@ const ready = async url => {
  assert.equal(await host.evaluate(() => window.testScreenStream.getVideoTracks()[0].readyState), 'ended');
  console.log('PASS screen sharing survives readiness updates and stops cleanly (synthetic capture)');
  await wait(async()=> (await values(host)).ready>=3&&(await values(viewer)).ready>=3,'local media not ready');
- await host.getByPlaceholder(/Watch from Link/).blur();
+ await host.getByRole('textbox', { name: /Watch from Link/ }).blur();
  await host.keyboard.press('Space');
  await wait(async()=>!(await values(host)).paused&&!(await values(viewer)).paused,'local scheduled play failed');
  await new Promise(r=>setTimeout(r,1500));
@@ -149,7 +152,7 @@ const ready = async url => {
  await viewer.getByText('2/2 ready',{exact:true}).waitFor();
  await host.getByText('2/2 ready',{exact:true}).waitFor();
  console.log('PASS local host disconnect, source preservation, reconnect readiness');
- await host.getByPlaceholder(/Watch from Link/).fill(baseUrl + '/bg-video.mp4');
+ await host.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await host.getByRole('button',{name:'Play Now',exact:true}).click();
  await wait(async()=> !(await values(viewer)).paused,'local to remote playback failed');
  assert.equal(await viewer.getByRole('region',{name:'Local file readiness'}).count(),0);
@@ -162,7 +165,7 @@ const ready = async url => {
  await viewer.getByRole('button', { name: 'Take playback control' }).click();
  await viewer.getByRole('button', { name: 'Play Now', exact: true }).waitFor();
  assert.equal(await host.getByRole('button', { name: 'Play Now', exact: true }).count(), 0);
- await viewer.getByPlaceholder(/Watch from Link/).fill(baseUrl + '/bg-video.mp4');
+ await viewer.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await viewer.getByRole('button', { name: 'Queue', exact: true }).click();
  await viewer.getByRole('button', { name: 'Play Next', exact: true }).waitFor();
  assert.equal(await host.getByRole('button', { name: 'Play Next', exact: true }).count(), 0);

@@ -192,7 +192,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
     const [fingerprintProgress, setFingerprintProgress] = useState(0);
     const [isFingerprinting, setIsFingerprinting] = useState(false);
     const [localFileError, setLocalFileError] = useState('');
-    useVideoAmbientLight(activeMediaElement, ambientTargetRef);
+    useVideoAmbientLight(activeMediaElement, ambientTargetRef, appearance === 'cinematic' && videoState.isPlaying);
 
     // ── Fullscreen Listeners ──────────────────────────────────────────────────
     useEffect(() => {
@@ -1111,13 +1111,15 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
             {isPrivileged && (
                 <div className="flex flex-shrink-0 flex-wrap gap-2">
                     <form onSubmit={handleLoad} className="flex min-w-0 basis-full items-center gap-1.5 rounded-2xl border border-white/10 bg-black/80 p-1.5 shadow-xl shadow-black/30 transition-all lg:basis-auto lg:flex-1">
+                        <label htmlFor="room-link-input" className="cinematic-link-label">Watch from Link · YouTube or video URL</label>
                         <div className="relative flex flex-1 items-center">
                             <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                             <input
+                                id="room-link-input"
                                 type="text"
                                 value={inputUrl}
                                 onChange={e => setInputUrl(e.target.value)}
-                                placeholder="Watch from Link — YouTube, Vimeo, Google Drive, or direct URL..."
+                                placeholder={appearance === 'cinematic' ? 'Paste a link here...' : 'Watch from Link — YouTube, Vimeo, Google Drive, or direct URL...'}
                                 className="w-full bg-transparent py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-600 outline-none"
                             />
                         </div>
@@ -1143,46 +1145,46 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
                         title="Play a file that stays on each person’s device"
                     >
                         <FileVideo size={15} />
-                        <span className="hidden xl:inline">Watch Local File</span>
+                        <span>Watch Local File</span>
                     </button>
                     {/* Source badge */}
                     {(() => {
                         if (isLocal) return (
-                            <div className="flex items-center gap-1.5 px-3 py-2 border border-violet-500/30 bg-violet-500/10 rounded-xl text-xs text-violet-300 shrink-0" title="This video stays on each person’s device">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isLocalReady ? 'bg-violet-400 animate-pulse' : 'bg-violet-700'}`} />
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-white/10 bg-white/[0.03] rounded-xl text-xs text-zinc-300 shrink-0" title="This video stays on each person’s device">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isLocalReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                                 <FileVideo size={13} />
-                                <span className="hidden sm:inline font-medium">Local</span>
+                                <span className="font-medium">Local</span>
                             </div>
                         );
                         if (isGDriveProxy) return (
-                            <div className="flex items-center gap-1.5 px-3 py-2 border border-blue-500/30 bg-blue-500/10 rounded-xl text-xs text-blue-300 shrink-0" title="Streaming via Google Drive proxy">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-blue-400 animate-pulse' : 'bg-blue-600'}`} />
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-white/10 bg-white/[0.03] rounded-xl text-xs text-zinc-300 shrink-0" title="Streaming via Google Drive proxy">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                                 <FolderOpen size={13} />
-                                <span className="hidden sm:inline font-medium">{isPlayerReady ? 'G-Drive · Live' : 'G-Drive · Loading'}</span>
+                                <span className="font-medium">{isPlayerReady ? 'G-Drive · Live' : 'G-Drive · Loading'}</span>
                             </div>
                         );
                         if (isArchive) return (
-                            <div className="flex items-center gap-1.5 px-3 py-2 border border-orange-500/30 bg-orange-500/10 rounded-xl text-xs text-orange-300 shrink-0" title="Streaming from archive.org">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-orange-400 animate-pulse' : 'bg-orange-600'}`} />
-                                <span className="hidden sm:inline font-medium">{isPlayerReady ? 'Archive · Live' : 'Archive · Loading'}</span>
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-white/10 bg-white/[0.03] rounded-xl text-xs text-zinc-300 shrink-0" title="Streaming from archive.org">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                                <span className="font-medium">{isPlayerReady ? 'Archive · Live' : 'Archive · Loading'}</span>
                             </div>
                         );
                         if (isYouTube) return (
-                            <div className="flex items-center gap-1.5 px-3 py-2 border border-red-500/30 bg-red-500/10 rounded-xl text-xs text-red-300 shrink-0" title="Playing YouTube video">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-red-400 animate-pulse' : 'bg-red-700'}`} />
-                                <span className="hidden sm:inline font-medium">{isPlayerReady ? 'YouTube · Live' : 'YouTube · Loading'}</span>
+                            <div className="flex items-center gap-1.5 px-3 py-2 border border-white/10 bg-white/[0.03] rounded-xl text-xs text-zinc-300 shrink-0" title="Playing YouTube video">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                                <span className="font-medium">{isPlayerReady ? 'YouTube · Live' : 'YouTube · Loading'}</span>
                             </div>
                         );
                         if (hasContent) return (
                             <div className="flex items-center gap-1.5 px-3 py-2 border border-green-500/30 bg-green-500/10 rounded-xl text-xs text-green-300 shrink-0" title="Streaming direct file">
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-green-400 animate-pulse' : 'bg-green-700'}`} />
-                                <span className="hidden sm:inline font-medium">{isPlayerReady ? 'Direct · Live' : 'Direct · Loading'}</span>
+                                <span className="font-medium">{isPlayerReady ? 'Direct · Live' : 'Direct · Loading'}</span>
                             </div>
                         );
                         return (
                             <div className="flex shrink-0 items-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-500" title="No video loaded">
                                 <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-700" />
-                                <span className="hidden sm:inline">No source</span>
+                                <span>No source</span>
                             </div>
                         );
                     })()}
@@ -1198,9 +1200,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
             />
 
             {isLocal && (
-                <div className="flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-violet-500/20 bg-violet-500/[0.07] px-3 py-2 text-xs">
+                <div className="flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <ShieldCheck size={15} className="shrink-0 text-violet-300" />
+                        <ShieldCheck size={15} className="shrink-0 text-zinc-300" />
                         <div className="min-w-0">
                             <div className="truncate font-semibold text-zinc-200" title={videoState.localMedia.displayName}>
                                 {videoState.localMedia.displayName}
@@ -1255,7 +1257,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
                 <div className="flex flex-shrink-0 items-center gap-3 rounded-2xl border border-white/10 bg-black/70 px-3 py-2 text-xs text-zinc-400">
                     <span className="whitespace-nowrap">Checking file… {fingerprintProgress}%</span>
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                        <div className="h-full rounded-full bg-violet-400 transition-all" style={{ width: `${fingerprintProgress}%` }} />
+                        <div className="h-full rounded-full bg-zinc-300 transition-all" style={{ width: `${fingerprintProgress}%` }} />
                     </div>
                 </div>
             )}
@@ -1350,7 +1352,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
                             {isLocal && !isLocalReady && (
                                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-black px-5">
                                     <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-white/[0.035] p-6 text-center">
-                                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/25 bg-violet-500/10 text-violet-300">
+                                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-zinc-300">
                                             <FileVideo size={25} />
                                         </div>
                                         <h3 className="text-lg font-bold text-white">Choose the same local file</h3>
