@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import ReactPlayer from 'react-player/lazy'; // FIX #3: lazy import loads only the needed adapter, not all adapters
 import { useRoom } from '../context/RoomContext';
-import { Play, Link as LinkIcon, Lock, AlertCircle, FolderOpen, Maximize, Minimize, RefreshCw, FileVideo, ShieldCheck } from 'lucide-react';
+import { Play, Link as LinkIcon, Lock, AlertCircle, FolderOpen, Maximize, Minimize, RefreshCw, FileVideo, ShieldCheck, Clapperboard, Info, Captions } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { fingerprintLocalFile, formatFileSize, readLocalVideoDuration } from '../utils/localMedia';
@@ -9,6 +9,7 @@ import useSynchronizedMedia from '../hooks/useSynchronizedMedia';
 import useVideoAmbientLight from '../hooks/useVideoAmbientLight';
 import MediaTrackControls from './player/MediaTrackControls';
 import MediaInfoPanel from './player/MediaInfoPanel';
+import TheaterIconButton from './TheaterIconButton';
 import { inspectLocalMedia } from '../utils/mediaInspector';
 import { parseSubtitleFile } from '../utils/subtitleParser';
 import { extractMatroskaSubtitle } from '../utils/matroskaSubtitles';
@@ -192,6 +193,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
     const [fingerprintProgress, setFingerprintProgress] = useState(0);
     const [isFingerprinting, setIsFingerprinting] = useState(false);
     const [localFileError, setLocalFileError] = useState('');
+    const [activeTheaterTool, setActiveTheaterTool] = useState(null);
     useVideoAmbientLight(activeMediaElement, ambientTargetRef, appearance === 'cinematic' && videoState.isPlaying);
 
     // ── Fullscreen Listeners ──────────────────────────────────────────────────
@@ -211,6 +213,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
 
     // ── Derived values ────────────────────────────────────────────────────────
     const isPrivileged  = currentUser?.userId === controllerMemberId;
+    useEffect(() => {
+        if (!isPrivileged && activeTheaterTool === 'watch') setActiveTheaterTool(null);
+    }, [isPrivileged, activeTheaterTool]);
     const rawUrl        = videoState.url || null;
     const playerUrl     = rewriteGDriveUrl(rawUrl);
     const isLocal       = videoState.sourceType === 'local' && !!videoState.localMedia;
@@ -1095,8 +1100,24 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
-        <div className={`room-video-player flex h-full w-full flex-col gap-3 ${className}`} data-room-appearance={appearance}>
-            <div className="video-player-controls flex min-h-0 flex-col gap-3">
+        <div className={`room-video-player flex h-full w-full flex-col gap-3 ${className}`} data-room-appearance={appearance} data-open-tool={activeTheaterTool || ''}>
+            <nav className="theater-left-dock" aria-label="Movie tools">
+                {[
+                    ...(isPrivileged ? [{ id: 'watch', label: 'Watch controls', icon: <Clapperboard size={21} /> }] : []),
+                    { id: 'info', label: 'Now watching', icon: <Info size={21} /> },
+                    { id: 'tracks', label: 'Audio and subtitles', icon: <Captions size={21} /> },
+                ].map(tool => (
+                    <TheaterIconButton
+                        key={tool.id}
+                        icon={tool.icon}
+                        label={tool.label}
+                        active={activeTheaterTool === tool.id}
+                        controls="watchly-left-panel"
+                        onClick={() => setActiveTheaterTool(activeTheaterTool === tool.id ? null : tool.id)}
+                    />
+                ))}
+            </nav>
+            <div id="watchly-left-panel" className="video-player-controls flex min-h-0 flex-col gap-3">
                 <div className="cinematic-now-watching" aria-live="polite">
                     <span>Now Watching</span>
                     <strong title={nowWatchingLabel}>{nowWatchingLabel}</strong>
@@ -1109,7 +1130,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
 
             {/* ── Control Bar (Host/Mod only) ─────────────────────────── */}
             {isPrivileged && (
-                <div className="flex flex-shrink-0 flex-wrap gap-2">
+                <div className="watch-source-controls flex flex-shrink-0 flex-wrap gap-2">
                     <form onSubmit={handleLoad} className="flex min-w-0 basis-full items-center gap-1.5 rounded-2xl border border-white/10 bg-black/80 p-1.5 shadow-xl shadow-black/30 transition-all lg:basis-auto lg:flex-1">
                         <label htmlFor="room-link-input" className="cinematic-link-label">Watch from Link · YouTube or video URL</label>
                         <div className="relative flex flex-1 items-center">
@@ -1200,7 +1221,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
             />
 
             {isLocal && (
-                <div className="flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs">
+                <div className="watch-playback-details flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                         <ShieldCheck size={15} className="shrink-0 text-zinc-300" />
                         <div className="min-w-0">
@@ -1254,7 +1275,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
             )}
 
             {isFingerprinting && (
-                <div className="flex flex-shrink-0 items-center gap-3 rounded-2xl border border-white/10 bg-black/70 px-3 py-2 text-xs text-zinc-400">
+                <div className="watch-file-progress flex flex-shrink-0 items-center gap-3 rounded-2xl border border-white/10 bg-black/70 px-3 py-2 text-xs text-zinc-400">
                     <span className="whitespace-nowrap">Checking file… {fingerprintProgress}%</span>
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
                         <div className="h-full rounded-full bg-zinc-300 transition-all" style={{ width: `${fingerprintProgress}%` }} />
@@ -1263,13 +1284,14 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
             )}
 
             {localFileError && !isLocal && (
-                <div className="flex flex-shrink-0 items-center gap-2 rounded-2xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                <div className="watch-file-error flex flex-shrink-0 items-center gap-2 rounded-2xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
                     <AlertCircle size={14} className="shrink-0" />
                     <span>{localFileError}</span>
                 </div>
             )}
 
             {hasContent && (
+                <div className="watch-media-tools">
                 <MediaTrackControls
                     variant={appearance}
                     audioTracks={audioTracks}
@@ -1287,7 +1309,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
                     onSubtitleFiles={handleSubtitleFiles}
                     onRemoveSubtitle={removeExternalSubtitle}
                 />
+                </div>
             )}
+            {!hasContent && <p className="cinematic-no-media text-sm text-zinc-400">Play a video to choose audio and subtitles.</p>}
             </div>
 
             {/* ── Player ────────────────────────────────────────────────── */}

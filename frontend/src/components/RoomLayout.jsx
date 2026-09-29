@@ -7,9 +7,12 @@ import {
     ChevronUp,
     Copy,
     GripHorizontal,
+    Hash,
     LogOut,
     Menu,
     MessageSquare,
+    MonitorUp,
+    PhoneCall,
     Settings,
     Users,
     Wifi,
@@ -20,6 +23,7 @@ import ChatUI from './ChatUI';
 import UserQueueSidebar from './UserQueueSidebar';
 import VoiceRoom from './VoiceRoom';
 import VideoPlayer from './VideoPlayer';
+import TheaterIconButton from './TheaterIconButton';
 import ReadinessPanel from './player/ReadinessPanel';
 import ScreenShareAdapter from './player/ScreenShareAdapter';
 import { useRoom } from '../context/RoomContext';
@@ -161,12 +165,18 @@ const ThemePicker = ({ theme, setTheme, roomAppearance, setRoomAppearance }) => 
 
 const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, leaveRoom, navigate, isConnected, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
     const [showSettings, setShowSettings] = useState(false);
+    const [showRoomInfo, setShowRoomInfo] = useState(false);
+    const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
     const [copied, setCopied] = useState(false);
     const ref = useRef(null);
+    const roomInfoRef = useRef(null);
+    const leaveRef = useRef(null);
 
     useEffect(() => {
         const close = (e) => {
             if (ref.current && !ref.current.contains(e.target)) setShowSettings(false);
+            if (roomInfoRef.current && !roomInfoRef.current.contains(e.target)) setShowRoomInfo(false);
+            if (leaveRef.current && !leaveRef.current.contains(e.target)) setShowLeaveConfirm(false);
         };
         document.addEventListener('mousedown', close);
         return () => document.removeEventListener('mousedown', close);
@@ -187,44 +197,72 @@ const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, le
         <header className="room-header relative z-40 h-16 flex-none border-b border-white/10 bg-black/75 backdrop-blur-xl">
             <div className="mx-auto flex h-full max-w-[1800px] items-center justify-between px-3 sm:px-5">
                 <div className="flex min-w-0 items-center gap-3">
-                    <button onClick={() => navigate('/')} className="flex shrink-0 items-center gap-2.5">
+                    <button onClick={() => navigate('/')} className="room-brand flex shrink-0 items-center gap-2.5" title="Watchly home" aria-label="Watchly home">
                         <img src="/logo.png" alt="Watchly Logo" className="h-10 w-auto theme-invert" />
                         <span className="hidden text-sm font-bold tracking-tight text-white sm:block">Watchly</span>
                     </button>
 
-                    <button
-                        onClick={copyCode}
-                        className="flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 transition hover:border-white/25 hover:bg-white/[0.06]"
-                        title="Copy room code"
-                    >
-                        <span className="hidden text-[10px] font-bold uppercase tracking-wider text-zinc-600 sm:inline">Room</span>
-                        <span className="truncate font-mono text-xs font-bold text-white">{roomId}</span>
-                        <AnimatePresence mode="wait">
-                            {copied ? (
-                                <MotionSpan key="copied" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                                    <Check size={12} className="text-emerald-400" />
-                                </MotionSpan>
-                            ) : (
-                                <MotionSpan key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                                    <Copy size={12} className="text-zinc-500" />
-                                </MotionSpan>
+                    {roomAppearance === 'cinematic' ? (
+                        <div className="relative" ref={roomInfoRef}>
+                            <TheaterIconButton
+                                icon={<Hash size={19} />}
+                                label="Room details"
+                                active={showRoomInfo}
+                                controls="watchly-room-details"
+                                className="room-code-button"
+                                onClick={() => setShowRoomInfo(value => !value)}
+                            />
+                            {showRoomInfo && (
+                                <div id="watchly-room-details" className="room-header-popover room-info-popover">
+                                    <p className="room-header-popover-label">Room code</p>
+                                    <div className="room-info-code-row">
+                                        <code>{roomId}</code>
+                                        <button type="button" onClick={copyCode} aria-label="Copy room code" title="Copy room code">
+                                            {copied ? <Check size={16} /> : <Copy size={16} />}
+                                        </button>
+                                    </div>
+                                    <p className="room-info-meta">{users.length} online · {currentUser?.role || 'Viewer'} · {connectionLabel}</p>
+                                </div>
                             )}
-                        </AnimatePresence>
-                    </button>
-
-                    <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 md:flex">
-                        <Users size={13} />
-                        <span>{users.length} online</span>
-                        <span className="h-1 w-1 rounded-full bg-zinc-700" />
-                        <span>{currentUser?.role || 'Viewer'}</span>
-                    </div>
+                        </div>
+                    ) : (
+                        <>
+                            <button
+                                onClick={copyCode}
+                                className="room-code-button flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 transition hover:border-white/25 hover:bg-white/[0.06]"
+                                title={`Copy room code ${roomId}`}
+                                aria-label="Copy room code"
+                            >
+                                <span className="hidden text-[10px] font-bold uppercase tracking-wider text-zinc-600 sm:inline">Room</span>
+                                <span className="truncate font-mono text-xs font-bold text-white">{roomId}</span>
+                                <AnimatePresence mode="wait">
+                                    {copied ? (
+                                        <MotionSpan key="copied" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                                            <Check size={12} className="text-emerald-400" />
+                                        </MotionSpan>
+                                    ) : (
+                                        <MotionSpan key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                                            <Copy size={12} className="text-zinc-500" />
+                                        </MotionSpan>
+                                    )}
+                                </AnimatePresence>
+                            </button>
+                            <div className="room-presence hidden items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 md:flex" title={`${users.length} online · ${currentUser?.role || 'Viewer'}`}>
+                                <Users size={13} />
+                                <span>{users.length} online</span>
+                                <span className="h-1 w-1 rounded-full bg-zinc-700" />
+                                <span>{currentUser?.role || 'Viewer'}</span>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => isConnected && measurePing?.()}
                         disabled={!isConnected}
-                        className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold transition disabled:cursor-not-allowed"
+                        className="room-ping-button flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold transition disabled:cursor-not-allowed"
+                        aria-label={isConnected ? `Ping ${connectionLabel} · ${qualityMeta.label}` : 'Reconnecting'}
                         style={{ background: qualityMeta.bg, color: qualityMeta.color, border: `1px solid ${qualityMeta.border}` }}
                         title={isConnected ? `Ping ${connectionLabel} - ${qualityMeta.label}` : 'Reconnecting...'}
                     >
@@ -235,8 +273,9 @@ const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, le
                     <div className="relative" ref={ref}>
                         <button
                             onClick={() => setShowSettings(s => !s)}
-                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-zinc-400 transition hover:border-white/25 hover:text-white"
+                            className="room-settings-button flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-zinc-400 transition hover:border-white/25 hover:text-white"
                             title="Room settings"
+                            aria-label="Room settings"
                         >
                             <Settings size={16} />
                         </button>
@@ -252,16 +291,27 @@ const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, le
                         </AnimatePresence>
                     </div>
 
-                    <button
-                        onClick={() => {
-                            leaveRoom();
-                            navigate('/');
-                        }}
-                        className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 text-sm font-semibold text-red-300 transition hover:bg-red-500/15"
-                    >
-                        <LogOut size={14} />
-                        <span className="hidden sm:inline">Leave</span>
-                    </button>
+                    <div className="relative" ref={leaveRef}>
+                        <button
+                            onClick={() => {
+                                if (roomAppearance === 'cinematic') setShowLeaveConfirm(value => !value);
+                                else { leaveRoom(); navigate('/'); }
+                            }}
+                            className="room-leave-button flex h-9 items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 text-sm font-semibold text-red-300 transition hover:bg-red-500/15"
+                            title="Leave room"
+                            aria-label="Leave room"
+                            aria-expanded={roomAppearance === 'cinematic' ? showLeaveConfirm : undefined}
+                        >
+                            <LogOut size={14} />
+                            <span className="hidden sm:inline">Leave</span>
+                        </button>
+                        {showLeaveConfirm && roomAppearance === 'cinematic' && (
+                            <div className="room-header-popover room-leave-popover">
+                                <p>Leave this room?</p>
+                                <button type="button" onClick={() => { leaveRoom(); navigate('/'); }}>Leave room</button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </header>
@@ -304,6 +354,8 @@ const RoomLayout = () => {
     const { theme, setTheme, roomAppearance, setRoomAppearance } = useTheme();
     const ambientTargetRef = useRef(null);
     const [showUsersPanel, setShowUsersPanel] = useState(true);
+    const [activeRightTool, setActiveRightTool] = useState(null);
+    const [activeMobileTool, setActiveMobileTool] = useState(null);
     const [showMobileMembers, setShowMobileMembers] = useState(false);
     const [showMobileChat, setShowMobileChat] = useState(false);
     const [joinNickname, setJoinNickname] = useState('');
@@ -313,6 +365,17 @@ const RoomLayout = () => {
     const isPortrait = useOrientation();
     const isDesktop = useIsDesktop();
     const { heightPct, onDragStart } = useDragResize(52);
+
+    useEffect(() => {
+        const closePanels = event => {
+            if (event.key === 'Escape') {
+                setActiveRightTool(null);
+                setActiveMobileTool(null);
+            }
+        };
+        document.addEventListener('keydown', closePanels);
+        return () => document.removeEventListener('keydown', closePanels);
+    }, []);
 
     if (isRestoringSession) {
         return (
@@ -394,7 +457,12 @@ const RoomLayout = () => {
             data-room-appearance={roomAppearance}
         >
             <div className="classic-room-background"><BackgroundLayers /></div>
-            <div className="cinematic-room-environment" aria-hidden="true" />
+            <div className="cinematic-room-environment" aria-hidden="true">
+                <div className="theater-back-wall" />
+                <div className="theater-side-wall theater-wall-left" />
+                <div className="theater-side-wall theater-wall-right" />
+                <div className="theater-floor" />
+            </div>
             <div className="relative z-10 flex h-full w-full flex-col">
                 <Header
                     roomId={roomId}
@@ -439,7 +507,24 @@ const RoomLayout = () => {
                             </div>
                         </main>
 
-                        <aside className="room-right-rail flex min-h-0 flex-col gap-3">
+                        <aside id="watchly-right-panel" className="room-right-rail flex min-h-0 flex-col gap-3" data-open-tool={activeRightTool || ''}>
+                            <nav className="theater-right-dock" aria-label="Room tools">
+                                {[
+                                    { id: 'members', label: 'Members and queue', icon: <Users size={21} /> },
+                                    { id: 'voice', label: 'Voice call', icon: <PhoneCall size={21} /> },
+                                    { id: 'share', label: 'Share screen', icon: <MonitorUp size={21} /> },
+                                    { id: 'chat', label: 'Live chat', icon: <MessageSquare size={21} /> },
+                                ].map(tool => (
+                                    <TheaterIconButton
+                                        key={tool.id}
+                                        icon={tool.icon}
+                                        label={tool.label}
+                                        active={activeRightTool === tool.id}
+                                        controls="watchly-right-panel"
+                                        onClick={() => setActiveRightTool(activeRightTool === tool.id ? null : tool.id)}
+                                    />
+                                ))}
+                            </nav>
                             <section className={`room-members-group ${panelClass} overflow-hidden`}>
                                 <PanelHeader
                                     icon={<Users size={15} className="text-zinc-400" />}
@@ -467,8 +552,10 @@ const RoomLayout = () => {
                                 </AnimatePresence>
                             </section>
 
-                            <section className="room-voice-share-group">
+                            <section className="room-voice-group">
                                 <VoiceRoom variant={roomAppearance} />
+                            </section>
+                            <section className="room-share-group">
                                 <ScreenShareAdapter variant={roomAppearance} />
                             </section>
                             <div className="room-chat-group min-h-0 flex-1">
@@ -483,7 +570,7 @@ const RoomLayout = () => {
                                 <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} />
                             </div>
 
-                            {isPortrait && (
+                            {isPortrait && roomAppearance === 'classic' && (
                                 <div className="fixed right-4 z-20 flex flex-col gap-3" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
                                     {[
                                         { icon: <Menu size={19} />, label: 'Room', fn: () => setShowMobileMembers(true) },
@@ -500,7 +587,7 @@ const RoomLayout = () => {
                             )}
                         </div>
 
-                        {!isPortrait && (
+                        {!isPortrait && roomAppearance === 'classic' && (
                             <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 pt-0">
                                 <section className={`${panelClass} overflow-hidden`}>
                                     <PanelHeader
@@ -530,7 +617,7 @@ const RoomLayout = () => {
                         )}
 
                         <AnimatePresence>
-                            {showMobileChat && isPortrait && (
+                            {showMobileChat && isPortrait && roomAppearance === 'classic' && (
                                 <MotionDiv
                                     initial={{ opacity: 0, y: '100%' }}
                                     animate={{ opacity: 1, y: 0 }}
@@ -560,7 +647,7 @@ const RoomLayout = () => {
                         </AnimatePresence>
 
                         <AnimatePresence>
-                            {showMobileMembers && isPortrait && (
+                            {showMobileMembers && isPortrait && roomAppearance === 'classic' && (
                                 <>
                                     <MotionDiv
                                         initial={{ opacity: 0 }}
@@ -597,6 +684,54 @@ const RoomLayout = () => {
                                 </>
                             )}
                         </AnimatePresence>
+
+                        {roomAppearance === 'cinematic' && (
+                            <>
+                                <nav className="cinematic-mobile-dock" aria-label="Room tools">
+                                    {[
+                                        { id: 'members', label: 'Members and queue', icon: <Users size={20} /> },
+                                        { id: 'voice', label: 'Voice call', icon: <PhoneCall size={20} /> },
+                                        { id: 'share', label: 'Share screen', icon: <MonitorUp size={20} /> },
+                                        { id: 'chat', label: 'Live chat', icon: <MessageSquare size={20} /> },
+                                    ].map(tool => (
+                                        <TheaterIconButton
+                                            key={tool.id}
+                                            icon={tool.icon}
+                                            label={tool.label}
+                                            active={activeMobileTool === tool.id}
+                                            controls="watchly-mobile-panel"
+                                            onClick={() => setActiveMobileTool(activeMobileTool === tool.id ? null : tool.id)}
+                                        />
+                                    ))}
+                                </nav>
+                                {activeMobileTool && (
+                                    <button
+                                        type="button"
+                                        className="cinematic-mobile-scrim"
+                                        aria-label="Close room panel"
+                                        onClick={() => setActiveMobileTool(null)}
+                                    />
+                                )}
+                                <section
+                                    id="watchly-mobile-panel"
+                                    className="cinematic-mobile-sheet"
+                                    data-open-tool={activeMobileTool || ''}
+                                    aria-hidden={!activeMobileTool}
+                                    inert={!activeMobileTool}
+                                >
+                                    <div className="cinematic-mobile-sheet-header">
+                                        <h2>{({ members: 'Members and queue', voice: 'Voice call', share: 'Share screen', chat: 'Live chat' })[activeMobileTool] || 'Room tools'}</h2>
+                                        <button type="button" onClick={() => setActiveMobileTool(null)} aria-label="Close panel"><X size={19} /></button>
+                                    </div>
+                                    <div className="cinematic-mobile-sheet-content">
+                                        <div className="mobile-sheet-members"><UserQueueSidebar compact variant={roomAppearance} /><ReadinessPanel variant={roomAppearance} /></div>
+                                        <div className="mobile-sheet-voice"><VoiceRoom variant={roomAppearance} /></div>
+                                        <div className="mobile-sheet-share"><ScreenShareAdapter variant={roomAppearance} /></div>
+                                        <div className="mobile-sheet-chat"><ChatUI hideHeader variant={roomAppearance} /></div>
+                                    </div>
+                                </section>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

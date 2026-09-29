@@ -56,6 +56,19 @@ const ready = async url => {
  await viewer.getByPlaceholder('ROOM CODE').fill(roomId);
  await viewer.locator('.room-launcher-submit').click();
  await viewer.waitForURL('**/room/**');
+ await host.getByRole('button', { name: 'Room details' }).click();
+ await host.locator('.room-info-popover code').getByText(roomId, { exact: true }).waitFor();
+ await host.getByRole('button', { name: 'Copy room code' }).click();
+ await host.getByRole('button', { name: 'Room details' }).click();
+ await host.locator('.room-leave-button').click();
+ await host.getByText('Leave this room?', { exact: true }).waitFor();
+ await host.locator('.room-leave-button').click();
+ assert.equal(await host.locator('.room-leave-popover').count(), 0);
+ const stage = await host.locator('.room-player-surface').boundingBox();
+ assert.ok(Math.abs(stage.x + stage.width / 2 - 640) < 3, 'the screen should be centered in the viewport');
+ assert.equal(await host.locator('.theater-side-wall').count(), 2);
+ assert.equal(await host.locator('.theater-floor').count(), 1);
+ await host.getByRole('button', { name: 'Watch controls' }).click();
  await host.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await host.getByRole('button',{name:'Play Now',exact:true}).click();
  await video(host).waitFor(); await video(viewer).waitFor();
@@ -80,6 +93,7 @@ const ready = async url => {
    return window.testScreenStream;
   };
  });
+ await host.getByRole('button', { name: 'Share screen' }).click();
  await host.getByRole('button', { name: 'Share Screen (Beta)' }).click();
  await host.getByRole('button', { name: 'Stop sharing' }).waitFor();
 
@@ -89,6 +103,7 @@ const ready = async url => {
  await (await chooser).setFiles(path.resolve(__dirname, '../public/bg-video.mp4'));
  await viewer.getByRole('heading',{name:'Choose the same local file'}).waitFor();
  await viewer.locator('input[type=file][accept^="video/"]').setInputFiles(path.resolve(__dirname, '../public/bg-video.mp4'));
+ await viewer.getByRole('button', { name: 'Now watching' }).click();
  await host.getByText('2/2 ready',{exact:true}).waitFor();
  assert.equal(await host.evaluate(() => window.testScreenStream.getVideoTracks()[0].readyState), 'live');
  await host.getByRole('button', { name: 'Stop sharing' }).click();
@@ -162,16 +177,20 @@ const ready = async url => {
  await host.evaluate(async ({ roomId, targetId }) => {
   (await import('/src/socket.js')).socket.emit('promote_to_moderator', { roomId, targetId });
  }, { roomId, targetId: viewerSocketId });
+ await viewer.getByRole('button', { name: 'Members and queue' }).click();
  await viewer.getByRole('button', { name: 'Take playback control' }).click();
+ await viewer.getByRole('button', { name: 'Watch controls' }).click();
  await viewer.getByRole('button', { name: 'Play Now', exact: true }).waitFor();
  assert.equal(await host.getByRole('button', { name: 'Play Now', exact: true }).count(), 0);
  await viewer.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await viewer.getByRole('button', { name: 'Queue', exact: true }).click();
  await viewer.getByRole('button', { name: 'Play Next', exact: true }).waitFor();
+ await host.getByRole('button', { name: 'Members and queue' }).click();
  assert.equal(await host.getByRole('button', { name: 'Play Next', exact: true }).count(), 0);
  await host.evaluate(async ({ roomId, targetId }) => {
   (await import('/src/socket.js')).socket.emit('demote_to_viewer', { roomId, targetId });
  }, { roomId, targetId: viewerSocketId });
+ await host.getByRole('button', { name: 'Watch controls' }).click();
  await host.getByRole('button', { name: 'Play Now', exact: true }).waitFor();
  await host.getByRole('button', { name: 'Play Next', exact: true }).waitFor();
  assert.equal(await viewer.getByRole('button', { name: 'Play Next', exact: true }).count(), 0);
