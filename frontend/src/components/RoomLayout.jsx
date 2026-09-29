@@ -263,7 +263,7 @@ const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, le
                         disabled={!isConnected}
                         className="room-ping-button flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold transition disabled:cursor-not-allowed"
                         aria-label={isConnected ? `Ping ${connectionLabel} · ${qualityMeta.label}` : 'Reconnecting'}
-                        style={{ background: qualityMeta.bg, color: qualityMeta.color, border: `1px solid ${qualityMeta.border}` }}
+                        style={roomAppearance === 'cinematic' ? undefined : { background: qualityMeta.bg, color: qualityMeta.color, border: `1px solid ${qualityMeta.border}` }}
                         title={isConnected ? `Ping ${connectionLabel} - ${qualityMeta.label}` : 'Reconnecting...'}
                     >
                         {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}

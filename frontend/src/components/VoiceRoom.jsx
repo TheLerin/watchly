@@ -587,7 +587,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
             </div>
 
             <div className="relative z-10 p-3">
-                <div className="flex items-center gap-2">
+                <div className="room-voice-heading flex items-center gap-2">
                     <button
                         type="button"
                         onClick={() => setIsExpanded(value => !value)}
@@ -626,8 +626,8 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                         type="button"
                         onClick={handlePingCheck}
                         disabled={!isConnected || isCheckingPing}
-                        className="h-10 shrink-0 rounded-2xl px-3 flex items-center justify-center gap-1.5 text-[10px] font-bold transition-all disabled:opacity-60"
-                        style={{ background: qualityMeta.bg, color: qualityMeta.color, border: `1px solid ${qualityMeta.border}` }}
+                        className="room-voice-ping h-10 shrink-0 rounded-2xl px-3 flex items-center justify-center gap-1.5 text-[10px] font-bold transition-all disabled:opacity-60"
+                        style={variant === 'cinematic' ? undefined : { background: qualityMeta.bg, color: qualityMeta.color, border: `1px solid ${qualityMeta.border}` }}
                     >
                         <RefreshCw size={14} className={isCheckingPing ? 'animate-spin' : ''} />
                         <span className="hidden sm:inline">Ping</span>
@@ -663,7 +663,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                         <button
                             type="button"
                             onClick={toggleVoice}
-                            className="col-span-2 flex items-center justify-center gap-2 rounded-2xl border border-green-500/30 bg-green-500/15 px-3 py-2.5 text-xs font-bold text-green-400"
+                            className="room-voice-join col-span-2 flex items-center justify-center gap-2 rounded-2xl border border-green-500/30 bg-green-500/15 px-3 py-2.5 text-xs font-bold text-green-400"
                         >
                             <PhoneCall size={15} />
                             Join Voice
