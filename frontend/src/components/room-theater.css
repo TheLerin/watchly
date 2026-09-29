@@ -23,11 +23,11 @@
 }
 
 .room-shell {
-    --theater-left-rail: clamp(245px, 16vw, 300px);
-    --theater-right-rail: clamp(315px, 22vw, 380px);
+    --theater-left-rail: clamp(220px, 14vw, 250px);
+    --theater-right-rail: clamp(290px, 18vw, 320px);
     --theater-dock-width: 54px;
-    --theater-screen-top: clamp(108px, 13vh, 142px);
-    --theater-screen-width: min(62vw, 1150px, calc(100vw - 2 * var(--theater-right-rail) - 48px), calc((100dvh - 335px) * 1.77778));
+    --theater-screen-top: clamp(100px, 11.5vh, 122px);
+    --theater-screen-width: min(72vw, 1180px, calc(100vw - 160px), calc((100dvh - 245px) * 1.77778));
     --video-left-rgb: 24 24 26;
     --video-center-rgb: 24 24 26;
     --video-right-rgb: 24 24 26;
@@ -98,36 +98,30 @@
 }
 
 .theater-back-wall {
-    inset: 3% 14% 25%;
-    background: radial-gradient(ellipse 75% 65% at 50% 40%, #151518 0%, #0e0e11 60%, #09090b 100%);
-    border-inline: 1px solid rgba(255, 255, 255, 0.035);
+    inset: 0;
+    clip-path: polygon(18% 0, 82% 0, 88% 84%, 12% 84%);
+    background: radial-gradient(ellipse 64% 72% at 50% 38%, #18181c 0%, #101014 58%, #0b0b0e 100%);
 }
 
 .theater-side-wall {
-    top: 0;
-    bottom: 17%;
-    width: 25%;
-    background: linear-gradient(90deg, #070709, #101013 82%, #0b0b0e);
+    inset: 0;
+    width: 100%;
+    background: linear-gradient(90deg, #070709, #121216 18%, #0b0b0e 30%);
 }
 
 .theater-wall-left {
-    left: 0;
-    clip-path: polygon(0 0, 100% 5%, 100% 88%, 0 100%);
-    box-shadow: inset -28px 0 48px rgba(0, 0, 0, 0.42);
+    clip-path: polygon(0 0, 18% 0, 12% 84%, 0 94%);
 }
 
 .theater-wall-right {
-    right: 0;
-    clip-path: polygon(0 5%, 100% 0, 100% 100%, 0 88%);
-    background: linear-gradient(270deg, #070709, #101013 82%, #0b0b0e);
-    box-shadow: inset 28px 0 48px rgba(0, 0, 0, 0.42);
+    clip-path: polygon(82% 0, 100% 0, 100% 94%, 88% 84%);
+    background: linear-gradient(270deg, #070709, #121216 18%, #0b0b0e 30%);
 }
 
 .theater-floor {
-    inset: 72% 0 0;
-    clip-path: polygon(14% 0, 86% 0, 100% 100%, 0 100%);
-    background: linear-gradient(180deg, #101013 0%, #08080a 47%, #050506 100%);
-    box-shadow: inset 0 30px 55px rgba(0, 0, 0, 0.48);
+    inset: 0;
+    clip-path: polygon(12% 84%, 88% 84%, 100% 94%, 100% 100%, 0 100%, 0 94%);
+    background: linear-gradient(180deg, #111115 81%, #0b0b0e 92%, #070709 100%);
 }
 
 .room-shell[data-room-appearance="cinematic"] .room-header {
@@ -287,7 +281,7 @@
 
 .room-video-player[data-room-appearance="cinematic"] > .room-player-surface {
     position: fixed;
-    z-index: 10;
+    z-index: 6;
     top: var(--theater-screen-top);
     left: 50%;
     width: var(--theater-screen-width);
@@ -297,24 +291,23 @@
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 8px;
     background: #000;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 0 7px rgba(4, 4, 6, 0.9), 0 16px 48px rgba(0, 0, 0, 0.45);
     transform: translateX(-50%);
 }
 
 .room-shell[data-room-appearance="cinematic"] .video-ambient-light {
     position: fixed;
     z-index: 1;
-    top: calc(var(--theater-screen-top) - 64px);
+    top: calc(var(--theater-screen-top) - 82px);
     left: 50%;
     display: block;
-    width: calc(var(--theater-screen-width) + 140px);
-    height: calc(var(--theater-screen-width) * 0.5625 + 110px);
+    width: calc(var(--theater-screen-width) + 164px);
+    height: calc(var(--theater-screen-width) * 0.5625 + 164px);
     pointer-events: none;
     opacity: var(--ambient-opacity);
-    filter: blur(64px);
+    filter: blur(42px);
     transform: translateX(-50%);
     transition: opacity 600ms ease;
-    mask-image: linear-gradient(to bottom, #000 0%, #000 52%, transparent 95%);
 }
 
 .video-ambient-light span {
@@ -325,45 +318,42 @@
 
 .video-ambient-top {
     inset: 0 8% auto;
-    height: 32%;
-    background: radial-gradient(ellipse at 50% 10%, rgb(var(--video-top-rgb) / 30%), transparent 75%);
-    background: radial-gradient(ellipse at 50% 10%, color-mix(in srgb, var(--ambient-top-color) 30%, transparent), transparent 75%);
+    height: 164px;
+    background: radial-gradient(ellipse at 50% 55%, color-mix(in srgb, var(--ambient-top-color) 75%, transparent), transparent 74%);
 }
 
 .video-ambient-left {
-    top: 12%;
-    bottom: 18%;
+    top: 10%;
+    bottom: 10%;
     left: 0;
-    width: 29%;
-    background: radial-gradient(ellipse at 35% 45%, rgb(var(--video-left-rgb) / 36%), transparent 75%);
-    background: radial-gradient(ellipse at 35% 45%, color-mix(in srgb, var(--ambient-left-color) 36%, transparent), transparent 75%);
+    width: 164px;
+    background: radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--ambient-left-color) 80%, transparent), transparent 75%);
 }
 
 .video-ambient-right {
-    top: 12%;
+    top: 10%;
     right: 0;
-    bottom: 18%;
-    width: 29%;
-    background: radial-gradient(ellipse at 65% 45%, rgb(var(--video-right-rgb) / 36%), transparent 75%);
-    background: radial-gradient(ellipse at 65% 45%, color-mix(in srgb, var(--ambient-right-color) 36%, transparent), transparent 75%);
+    bottom: 10%;
+    width: 164px;
+    background: radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--ambient-right-color) 80%, transparent), transparent 75%);
 }
 
 .video-ambient-bottom {
-    right: 13%;
-    bottom: 7%;
-    left: 13%;
-    height: 25%;
-    background: radial-gradient(ellipse at 50% 15%, rgb(var(--video-bottom-rgb) / 12%), transparent 68%);
-    background: radial-gradient(ellipse at 50% 15%, color-mix(in srgb, var(--ambient-bottom-color) 12%, transparent), transparent 68%);
+    right: 8%;
+    bottom: 0;
+    left: 8%;
+    height: 164px;
+    background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--ambient-bottom-color) 55%, transparent), transparent 72%);
 }
 
 .room-shell[data-room-appearance="cinematic"] .cinematic-sofa {
     position: fixed;
-    z-index: 15;
-    top: calc(var(--theater-screen-top) + var(--theater-screen-width) * 0.5625 + 25px);
+    z-index: 18;
+    top: auto;
+    bottom: 0;
     left: 50%;
     display: block;
-    width: clamp(250px, calc(var(--theater-screen-width) * 0.35), 430px);
+    width: clamp(240px, 21vw, 295px);
     pointer-events: none;
     transform: translateX(-50%);
 }
@@ -426,16 +416,6 @@
 
 .room-shell[data-room-appearance="cinematic"] .room-chat {
     border-radius: 16px;
-}
-
-/* The screen sits behind the small wall controls and their opened glass panels. */
-.room-video-player[data-room-appearance="cinematic"] > .room-player-surface {
-    z-index: 6;
-    transform: translateX(-50%) scale(0.985);
-}
-
-.room-shell[data-room-appearance="cinematic"] .cinematic-sofa {
-    z-index: 18;
 }
 
 .room-shell[data-room-appearance="cinematic"] .room-header .room-brand span,
@@ -755,8 +735,8 @@
 
 @media (min-width: 1180px) and (max-width: 1450px) {
     .room-shell {
-        --theater-left-rail: clamp(225px, 18vw, 270px);
-        --theater-right-rail: clamp(315px, 24vw, 340px);
+        --theater-left-rail: clamp(220px, 17vw, 245px);
+        --theater-right-rail: clamp(290px, 22vw, 310px);
     }
 
     .room-shell[data-room-appearance="cinematic"] .room-desktop-workspace {

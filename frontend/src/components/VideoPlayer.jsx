@@ -113,7 +113,7 @@ async function resolveArchiveUrl(url) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' }) => {
+const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, className = '' }) => {
     const {
         videoState, currentUser, localReadiness, controllerMemberId, playback, clock, isConnected,
         loadVideo, addToQueue,
@@ -194,7 +194,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', className = '' 
     const [isFingerprinting, setIsFingerprinting] = useState(false);
     const [localFileError, setLocalFileError] = useState('');
     const [activeTheaterTool, setActiveTheaterTool] = useState(null);
-    useVideoAmbientLight(activeMediaElement, ambientTargetRef, appearance === 'cinematic' && videoState.isPlaying);
+    useVideoAmbientLight(activeMediaElement, ambientTargetRef, ambientEnabled && appearance === 'cinematic' && videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError);
 
     // ── Fullscreen Listeners ──────────────────────────────────────────────────
     useEffect(() => {

@@ -66,6 +66,7 @@ const ready = async url => {
  assert.equal(await host.locator('.room-leave-popover').count(), 0);
  const stage = await host.locator('.room-player-surface').boundingBox();
  assert.ok(Math.abs(stage.x + stage.width / 2 - 640) < 3, 'the screen should be centered in the viewport');
+ assert.ok(stage.width > 800, 'the theater screen should use the available wall space');
  assert.equal(await host.locator('.theater-side-wall').count(), 2);
  assert.equal(await host.locator('.theater-floor').count(), 1);
  await host.getByRole('button', { name: 'Watch controls' }).click();

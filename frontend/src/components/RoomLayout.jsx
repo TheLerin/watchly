@@ -567,7 +567,7 @@ const RoomLayout = () => {
                     <div className="room-mobile-workspace relative flex flex-1 flex-col p-2" data-orientation={isPortrait ? 'portrait' : 'landscape'}>
                         <div className="room-mobile-player relative w-full shrink-0">
                             <div className="room-mobile-player-inner relative">
-                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} />
+                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} ambientEnabled={false} />
                             </div>
 
                             {isPortrait && roomAppearance === 'classic' && (

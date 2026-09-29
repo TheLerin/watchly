@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 
 const SAMPLE_WIDTH = 24;
 const SAMPLE_HEIGHT = 14;
-const SAMPLE_INTERVAL_MS = 320;
+const SAMPLE_INTERVAL_MS = 480;
+const FALLBACK_COLOUR = 'rgb(72 74 82)';
 
 const averageRegion = (data, x0, y0, x1, y1) => {
   let red = 0;
@@ -34,13 +35,28 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
     if (!target) return undefined;
 
     target.style.setProperty('--ambient-opacity', '0');
-    if (!enabled || !(video instanceof HTMLVideoElement)) return undefined;
+    if (!enabled) return undefined;
+
+    const showFallback = () => {
+      for (const side of ['top', 'left', 'right', 'bottom']) {
+        target.style.setProperty(`--ambient-${side}-color`, FALLBACK_COLOUR);
+      }
+      target.style.setProperty('--ambient-opacity', '0.55');
+    };
+    if (!(video instanceof HTMLVideoElement)) {
+      // Embedded players expose an iframe instead of a drawable video frame.
+      showFallback();
+      return undefined;
+    }
 
     const canvas = document.createElement('canvas');
     canvas.width = SAMPLE_WIDTH;
     canvas.height = SAMPLE_HEIGHT;
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return undefined;
+    if (!context) {
+      showFallback();
+      return undefined;
+    }
 
     let interval = null;
     let blocked = false;
@@ -69,14 +85,20 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
         setRegion('--video-rgb', null, 0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
         target.style.setProperty('--ambient-opacity', '1');
       } catch {
-        // Cross-origin media cannot be sampled. Leave the theater neutral.
+        // Cross-origin media cannot be sampled. Keep a subtle neutral halo.
         blocked = true;
-        stop();
+        if (interval !== null) window.clearInterval(interval);
+        interval = null;
+        showFallback();
       }
     };
 
     const start = () => {
-      if (blocked || video.paused || video.ended || interval !== null) return;
+      if (blocked) {
+        if (!video.paused && !video.ended) showFallback();
+        return;
+      }
+      if (video.paused || video.ended || interval !== null) return;
       sample();
       interval = window.setInterval(sample, SAMPLE_INTERVAL_MS);
     };
