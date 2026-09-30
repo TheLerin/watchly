@@ -11,9 +11,10 @@ import MediaTrackControls from './player/MediaTrackControls';
 import MediaInfoPanel from './player/MediaInfoPanel';
 import TheaterIconButton from './TheaterIconButton';
 import { inspectLocalMedia } from '../utils/mediaInspector';
-import { parseSubtitleFile } from '../utils/subtitleParser';
+import { parseSubtitleFileOffThread } from '../utils/subtitleWorker';
 import { extractMatroskaSubtitle } from '../utils/matroskaSubtitles';
 import { createLocalRemuxSession, getRemuxEligibility } from '../utils/localMediaRemux';
+import { detectVideoSource } from '../utils/videoSources';
 import {
     applyAudioTrack,
     applySubtitleTrack,
@@ -140,6 +141,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const remuxGenerationRef = useRef(0);
     const remuxFailureIdsRef = useRef(new Set());
     const localInspectionBySessionRef = useRef(new Map());
+    const subtitleParseCacheRef = useRef(new Map());
 
     const isSeekingRef     = useRef(false);
     const seekEndTimerRef  = useRef(null);
@@ -193,6 +195,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const [fingerprintProgress, setFingerprintProgress] = useState(0);
     const [isFingerprinting, setIsFingerprinting] = useState(false);
     const [localFileError, setLocalFileError] = useState('');
+    const [isStartingAnyway, setIsStartingAnyway] = useState(false);
     const [activeTheaterTool, setActiveTheaterTool] = useState(null);
     useVideoAmbientLight(activeMediaElement, ambientTargetRef, ambientEnabled && appearance === 'cinematic' && videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError);
 
@@ -217,15 +220,24 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         if (!isPrivileged && activeTheaterTool === 'watch') setActiveTheaterTool(null);
     }, [isPrivileged, activeTheaterTool]);
     const rawUrl        = videoState.url || null;
-    const playerUrl     = rewriteGDriveUrl(rawUrl);
+    const source        = useMemo(() => detectVideoSource(rawUrl), [rawUrl]);
+    const playerUrl     = rewriteGDriveUrl(source.url);
     const isLocal       = videoState.sourceType === 'local' && !!videoState.localMedia;
-    const isGDriveProxy = !!(playerUrl && playerUrl.includes('/api/proxy/gdrive'));
-    const isNativePlayer = isLocal || isGDriveProxy;
+    const isGDriveProxy = source.kind === 'drive' && !!(playerUrl && playerUrl.includes('/api/proxy/gdrive'));
+    const isSupportedEmbed = source.kind === 'embed' || (source.kind === 'unknown' && ReactPlayer.canPlay(source.url));
+    const isNativePlayer = isLocal || source.kind === 'drive' || source.kind === 'direct' ||
+        (source.kind === 'unknown' && !isSupportedEmbed);
     const hasContent    = isLocal || !!(videoState.url || videoState.magnetURI);
-    const isYouTube     = !!(playerUrl && (playerUrl.includes('youtube.com') || playerUrl.includes('youtu.be')));
-    const isVimeo       = !!(playerUrl && playerUrl.includes('vimeo.com'));
+    const isYouTube     = source.kind === 'youtube';
     const isArchive     = !!(playerUrl && playerUrl.includes('archive.org'));
     const isLocalReady  = isLocal && !!localFileUrl && localSessionRef.current === videoState.localMedia?.sessionId;
+    useEffect(() => {
+        if (!hasContent || isPlayerReady || playerError || (isLocal && !isLocalReady)) return undefined;
+        const timeout = window.setTimeout(() => {
+            setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.');
+        }, 20000);
+        return () => window.clearTimeout(timeout);
+    }, [hasContent, isLocal, isLocalReady, isPlayerReady, playerError, playerUrl]);
     const nowWatchingLabel = isLocal
         ? videoState.localMedia?.displayName
         : rawUrl
@@ -242,7 +254,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         mediaId: `${videoState.localMedia?.sessionId}:${videoState.localMedia?.declarationId}`, onPlayError: handleSyncPlayError,
     });
 
-    const isPlatformEmbed = isYouTube || isVimeo;
+    const isPlatformEmbed = isYouTube || isSupportedEmbed;
     const mediaCapabilities = useMemo(() => getMediaSourceCapabilities({
         isLocal,
         isPlatformEmbed,
@@ -398,9 +410,12 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         setActiveAudioId(previous => {
             if (previous && discovered.audioTracks.some(track => track.id === previous && track.switchable)) return previous;
             const preferredLanguage = readLanguagePreference(AUDIO_LANGUAGE_PREFERENCE);
-            return discovered.audioTracks.find(track => track.switchable && track.language === preferredLanguage && track.support !== 'unsupported')?.id
-                || discovered.audioTracks.find(track => track.switchable && track.default && track.support !== 'unsupported')?.id
-                || discovered.audioTracks.find(track => track.switchable && track.support !== 'unsupported')?.id
+            // A detected MKV track needs a MediaSource remux. Prepare that only
+            // after an explicit selection; automatic remuxing can stall local playback.
+            const nativeTracks = discovered.audioTracks.filter(track => track.switchable && track.switchMethod !== 'remux' && track.support !== 'unsupported');
+            return nativeTracks.find(track => track.language === preferredLanguage)?.id
+                || nativeTracks.find(track => track.default)?.id
+                || nativeTracks[0]?.id
                 || null;
         });
         setActiveSubtitleId(previous => {
@@ -585,7 +600,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         prevSeekVersionReactPlayerRef.current = videoState.seekVersion ?? 0;
         prevSeekVersionGDriveRef.current      = videoState.seekVersion ?? 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [videoState.url, videoState.magnetURI, videoState.localMedia?.sessionId]);
+    }, [videoState.sourceId, videoState.url, videoState.magnetURI, videoState.localMedia?.sessionId]);
 
     useEffect(() => {
         const activeSession = videoState.localMedia?.sessionId || null;
@@ -832,7 +847,12 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             }
             toast.success('Archive.org link resolved!', { icon: '📼' });
         }
-        loadVideo(url);
+        const detected = detectVideoSource(url);
+        if (detected.kind === 'invalid') {
+            toast.error('Paste a valid HTTP(S) video or stream URL.');
+            return;
+        }
+        loadVideo(detected.url);
         setInputUrl('');
     };
 
@@ -851,12 +871,18 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                 return;
             }
         }
-        addToQueue(url, '', url);
+        const detected = detectVideoSource(url);
+        if (detected.kind === 'invalid') {
+            toast.error('Paste a valid HTTP(S) video or stream URL.');
+            return;
+        }
+        addToQueue(detected.url, '', detected.url);
         toast.success('Added to queue');
         setInputUrl('');
     };
 
     const replaceLocalObjectUrl = useCallback((file, sessionId) => {
+        if (localSessionRef.current === sessionId && localFileUrlRef.current) return localFileUrlRef.current;
         void localRemuxSessionRef.current?.dispose();
         localRemuxSessionRef.current = null;
         if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
@@ -986,9 +1012,26 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
     const handleSubtitleFiles = useCallback(async files => {
         const parsedTracks = [];
+        const sourceAtSelection = videoStateRef.current.localMedia?.sessionId || videoStateRef.current.sourceId;
+        toast.loading('Loading subtitles…', { id: 'external-subtitles' });
         for (const [index, file] of files.entries()) {
             try {
-                const parsed = await parseSubtitleFile(file);
+                const key = `${file.name}:${file.size}:${file.lastModified}`;
+                let parsed = subtitleParseCacheRef.current.get(key);
+                if (!parsed) {
+                    parsed = await parseSubtitleFileOffThread(file);
+                    if (file.size <= 2 * 1024 * 1024) {
+                        subtitleParseCacheRef.current.set(key, parsed);
+                        while (subtitleParseCacheRef.current.size > 4) {
+                            subtitleParseCacheRef.current.delete(subtitleParseCacheRef.current.keys().next().value);
+                        }
+                    }
+                }
+                if (sourceAtSelection !== (videoStateRef.current.localMedia?.sessionId || videoStateRef.current.sourceId)) {
+                    parsedTracks.forEach(track => URL.revokeObjectURL(track.src));
+                    toast.dismiss('external-subtitles');
+                    return;
+                }
                 parsedTracks.push({
                     ...parsed,
                     blob: undefined,
@@ -1000,6 +1043,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                 toast.error(`${file.name}: ${error.message}`, { duration: 5000 });
             }
         }
+        toast.dismiss('external-subtitles');
         if (!parsedTracks.length) return;
         setExternalSubtitles(previous => [...previous, ...parsedTracks]);
         setActiveSubtitleId(parsedTracks[0].id);
@@ -1265,10 +1309,15 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                     {isPrivileged && !everyoneReady && !videoState.isPlaying && (
                         <button
                             type="button"
-                            onClick={() => playVideo({ startAnyway: true })}
-                            className="rounded-xl border border-white/10 bg-white px-3 py-1.5 font-bold text-black transition hover:bg-zinc-200"
+                            disabled={isStartingAnyway}
+                            onClick={async () => {
+                                setIsStartingAnyway(true);
+                                try { await playVideo({ startAnyway: true }); }
+                                finally { setIsStartingAnyway(false); }
+                            }}
+                            className="rounded-xl border border-white/10 bg-white px-3 py-1.5 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
                         >
-                            Start anyway
+                            {isStartingAnyway ? 'Starting…' : 'Start anyway'}
                         </button>
                     )}
                 </div>
@@ -1346,27 +1395,22 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         animate={{ opacity: 1 }}
                                         exit={{ opacity: 0 }}
                                         className="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 text-center"
-                                        style={{ background: 'var(--bg-base)' }}
+                                        style={{ background: '#0b0b0b' }}
                                     >
-                                        <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6 ring-4 ring-white/5 animate-pulse shimmer-pill">
-                                            <img src="/logo.png" alt="Loading" className="w-16 h-auto opacity-50 animate-bounce theme-invert transition-all" />
+                                        <div className="w-24 h-24 rounded-full border border-white/10 bg-black/40 flex items-center justify-center mb-6">
+                                            <img src="/logo.png" alt="Watchly" className="w-16 h-auto opacity-65 theme-invert" />
                                         </div>
-                                        <h2 className="text-xl font-bold mb-2 animate-pulse" style={{ color: 'var(--text)' }}>
+                                        <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
                                             {isLocal ? 'Preparing local video…' : 'Buffering stream...'}
                                         </h2>
-                                        {/* FIX #9: Real buffer fill bar for GDrive; indeterminate shimmer for others */}
-                                        <div className="w-48 h-2 bg-white/10 rounded-full overflow-hidden mt-2">
-                                            {isGDriveProxy && bufferedPercent > 0 ? (
-                                                <div
-                                                    className="h-full bg-emerald-400 transition-all duration-500 rounded-full"
-                                                    style={{ width: `${bufferedPercent}%` }}
-                                                />
-                                            ) : (
-                                                <div className="h-full bg-emerald-400 animate-pulse w-full origin-left" style={{ animation: 'shimmer 1.5s infinite linear' }} />
-                                            )}
-                                        </div>
+                                        {/* Only report measurable buffer progress. */}
                                         {isGDriveProxy && bufferedPercent > 0 && (
-                                            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{Math.round(bufferedPercent)}% buffered</p>
+                                            <>
+                                                <div className="mt-2 h-2 w-48 overflow-hidden rounded-full bg-white/10">
+                                                    <div className="h-full rounded-full bg-zinc-400" style={{ width: `${bufferedPercent}%` }} />
+                                                </div>
+                                                <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{bufferedPercent}% buffered</p>
+                                            </>
                                         )}
                                     </MotionDiv>
                                 )}
@@ -1415,7 +1459,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                 <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                                     <video
                                         ref={nativeVideoRef}
-                                        key={isLocal ? videoState.localMedia.sessionId : playerUrl}
+                                        key={isLocal ? videoState.localMedia.sessionId : videoState.sourceId || playerUrl}
                                         src={isLocal ? localPlaybackUrl : playerUrl}
                                         controls
                                         preload="auto"
@@ -1470,12 +1514,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             if (!isConnected) { nativeVideoRef.current?.pause(); return; }
                                             if (localPlaybackSwitchRef.current) return;
                                             if (!isPrivileged) return;
-                                            if (isLocal && videoStateRef.current.isPlaying) return;
-                                            if (isLocal && !everyoneReady && !videoStateRef.current.isPlaying) {
-                                                nativeVideoRef.current?.pause();
-                                                toast.error('Not everyone is ready. Use “Start anyway” to continue.');
-                                                return;
-                                            }
+                                            if (videoStateRef.current.isPlaying) return;
                                             if (isLocal && !videoStateRef.current.isPlaying) {
                                                 nativeVideoRef.current?.pause();
                                                 debouncePlay();
@@ -1539,9 +1578,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         }}
                                         // FIX #9: Update buffer fill progress
                                         onTimeUpdate={() => {
+                                            if (!isGDriveProxy) return;
                                             const v = nativeVideoRef.current;
                                             if (v && v.buffered.length > 0 && v.duration > 0) {
-                                                setBufferedPercent(Math.min(100, (v.buffered.end(v.buffered.length - 1) / v.duration) * 100));
+                                                const percent = Math.round(Math.min(100, (v.buffered.end(v.buffered.length - 1) / v.duration) * 100));
+                                                setBufferedPercent(previous => previous === percent ? previous : percent);
                                             }
                                         }}
                                         onError={() => {
@@ -1556,7 +1597,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             );
                                             // MediaError codes: 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
                                             // FIX #3: Auto-retry up to 3× on transient network errors
-                                            if (code === 2 && retryCountRef.current < 3) {
+                                            if (code === 2 && !isLocal && retryCountRef.current < 3) {
                                                 retryCountRef.current++;
                                                 const attempt = retryCountRef.current;
                                                 setPlayerError(`Connection issue — retrying (${attempt}/3)…`);
@@ -1573,11 +1614,15 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             } else if (code === 4) {
                                                 setPlayerError(isLocal
                                                     ? (mediaInspection?.compatibility?.message || 'This local file format is not supported by your browser. Try an MP4 (H.264/AAC) or a compatible WebM.')
-                                                    : 'Could not load this file. Make sure it is an MP4 or WebM and is shared as “Anyone with the link” in Google Drive.');
+                                                    : isGDriveProxy
+                                                        ? 'Could not load this file. Make sure it is shared as “Anyone with the link” in Google Drive.'
+                                                        : 'This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.');
                                             } else {
                                                 setPlayerError(isLocal
                                                     ? 'Could not play this local file.'
-                                                    : 'Could not load Google Drive video. Make sure the file is shared as “Anyone with the link”.');
+                                                    : isGDriveProxy
+                                                        ? 'Could not load Google Drive video. Make sure the file is shared as “Anyone with the link”.'
+                                                        : 'Could not load this video. Check the link and browser support for this format.');
                                             }
                                         }}
                                         onEnded={() => { if (isPrivileged) endVideo(nativeVideoRef.current?.currentTime); }}
@@ -1614,24 +1659,24 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             )}
 
                             {/* ── YouTube / Vimeo / Archive / direct URL: ReactPlayer ──────── */}
-                            {!isLocal && !isGDriveProxy && playerUrl && (
+                            {!isNativePlayer && playerUrl && (
                                 <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                                     <ReactPlayer
                                         ref={playerRef}
-                                        key={playerUrl}
+                                        key={videoState.sourceId || playerUrl}
                                         url={playerUrl}
                                         playing={videoState.isPlaying}
                                         controls={isPrivileged || isYouTube || isArchive}
                                         width="100%"
                                         height="100%"
                                         onReady={handleReady}
-                                        onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged) return; debouncePlay(); }}
-                                        onPause={() => { if (!isPrivileged) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
+                                        onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged || videoStateRef.current.isPlaying) return; debouncePlay(); }}
+                                        onPause={() => { if (!isPrivileged || !videoStateRef.current.isPlaying) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
                                         onSeek={() => {
                                             if (!isPrivileged) return;
                                             endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
                                         }}
-                                        onError={() => setPlayerError('Could not load video.')}
+                                        onError={() => setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.')}
                                         onEnded={() => { if (isPrivileged) endVideo(playerRef.current?.getCurrentTime?.()); }}
                                         onProgress={(p) => { lastSyncedPosRef.current = p.playedSeconds; }}
                                         progressInterval={1000}

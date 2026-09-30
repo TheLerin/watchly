@@ -15,6 +15,7 @@ const cleanText = (value, max) => normalizedText(value, max).replace(/<[^>]*>/g,
 
 const createVideoState = () => ({
     sourceType: 'remote',
+    sourceId: null,
     url: '',
     magnetURI: '',
     localMedia: null,
@@ -218,6 +219,33 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         io.to(roomId).emit('media:readiness', payload);
     };
 
+    const startNextQueuedVideo = (roomId, room) => {
+        if (!room.queue.length) return false;
+        const next = room.queue.shift();
+        room.lastEndedSourceId = null;
+        room.media = null;
+        room.mediaStatuses.clear();
+        room.playback = createPlayback();
+        room.recentCommandIds.clear();
+        room.localReadyUserIds.clear();
+        room.videoState = {
+            sourceType: 'remote',
+            sourceId: crypto.randomUUID(),
+            url: next.url,
+            magnetURI: next.magnetURI,
+            localMedia: null,
+            isPlaying: true,
+            playedSeconds: 0,
+            updatedAt: Date.now(),
+            seekVersion: 0,
+            stateVersion: room.videoState.stateVersion + 1
+        };
+        io.to(roomId).emit('video_changed', snapshot(room));
+        io.to(roomId).emit('queue_updated', room.queue);
+        emitReadiness(roomId, room);
+        return true;
+    };
+
     const voicePresence = (roomId, user) => {
         io.to(roomId).emit('voice_updated', {
             userId: user.id,
@@ -295,6 +323,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                     media: null,
                     playback: createPlayback(),
                     recentCommandIds: new Map(),
+                    lastEndedMediaId: null,
+                    lastEndedSourceId: null,
                     controllerMemberId: null,
                     controllerLeaseUntil: null,
                     screenSharerMemberId: null,
@@ -603,6 +633,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.localReadyUserIds = new Set([user.userId]);
             room.playback = createPlayback();
             room.recentCommandIds.clear();
+            room.lastEndedMediaId = null;
             io.to(socket.data.roomId).emit('media:declared', { media: room.media, playback: room.playback });
             emitReadiness(socket.data.roomId, room);
             callback?.({ ok: true, snapshot: roomSnapshot(room, user.userId) });
@@ -625,8 +656,12 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 }
             }
             const verified = status === 'READY' || status === 'BUFFERING' ? Boolean(prior?.verified || status === 'READY') : false;
-            room.mediaStatuses.set(user.userId, { status, reason: cleanText(reason, 120) || null, verified });
-            if (status === 'READY') room.localReadyUserIds.add(user.userId);
+            const nextReason = cleanText(reason, 120) || null;
+            if (prior?.status === status && prior.reason === nextReason && prior.verified === verified) {
+                return callback?.({ ok: true });
+            }
+            room.mediaStatuses.set(user.userId, { status, reason: nextReason, verified });
+            if (status === 'READY' || (status === 'BUFFERING' && verified)) room.localReadyUserIds.add(user.userId);
             else room.localReadyUserIds.delete(user.userId);
             emitReadiness(socket.data.roomId, room);
             callback?.({ ok: true });
@@ -637,6 +672,9 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             const user = getUserBySocket(room, socket.id);
             if (!room || !user || room.controllerMemberId !== user.userId) {
                 return callback?.(protocolError('NOT_CONTROLLER', 'Only the current controller can change playback.'));
+            }
+            if (payload.action === 'ENDED' && !room.media && room.lastEndedMediaId === payload.mediaId) {
+                return callback?.({ ok: true, duplicate: true });
             }
             if (!room.media || payload.mediaId !== room.media.mediaId || !validCommandId(payload.commandId) ||
                 !['PLAY', 'PAUSE', 'SEEK', 'ENDED'].includes(payload.action) ||
@@ -653,6 +691,10 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             playbackRateLimitMap.set(user.userId, bucket);
             if (bucket.count > 10) return callback?.(protocolError('RATE_LIMITED', 'Too many playback commands.', true));
             if (payload.action === 'PLAY') {
+                if (room.playback.status === 'playing' &&
+                    canonicalPosition(room.playback, now, room.media.durationMs / 1000) < room.media.durationMs / 1000 - 0.5) {
+                    return callback?.({ ok: true, duplicate: true, playback: room.playback });
+                }
                 const readiness = readinessPayload(room);
                 if (readiness.readyCount < readiness.totalCount && payload.startAnyway !== true) {
                     return callback?.(protocolError('NOT_ALL_READY', `${readiness.readyCount}/${readiness.totalCount} participants are ready.`));
@@ -673,8 +715,13 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             };
             room.recentCommandIds.set(payload.commandId, room.playback);
             while (room.recentCommandIds.size > 100) room.recentCommandIds.delete(room.recentCommandIds.keys().next().value);
-            io.to(socket.data.roomId).emit('playback:state', room.playback);
-            callback?.({ ok: true, playback: room.playback });
+            const completedPlayback = room.playback;
+            io.to(socket.data.roomId).emit('playback:state', completedPlayback);
+            if (payload.action === 'ENDED') {
+                room.lastEndedMediaId = payload.mediaId;
+                startNextQueuedVideo(socket.data.roomId, room);
+            }
+            callback?.({ ok: true, playback: completedPlayback });
         });
 
         socket.on('playback:telemetry', ({ mediaId, positionSec, readyState, buffering, lastSeq } = {}) => {
@@ -711,6 +758,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 return;
             }
             const { room } = access;
+            room.lastEndedSourceId = null;
             room.media = null;
             room.mediaStatuses.clear();
             room.playback = createPlayback();
@@ -718,6 +766,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.localReadyUserIds.clear();
             room.videoState = {
                 sourceType: 'remote',
+                sourceId: crypto.randomUUID(),
                 url: url || '',
                 magnetURI: magnetURI || '',
                 localMedia: null,
@@ -810,6 +859,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             const access = controller(payload.roomId);
             if (!access || !mediaEventIsCurrent(access.room, payload)) return;
             const { room } = access;
+            if (room.videoState.isPlaying) return;
             if (room.videoState.sourceType === 'local') {
                 const readiness = readinessPayload(room);
                 if (readiness.readyCount < readiness.totalCount && payload.startAnyway !== true) {
@@ -817,6 +867,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                     return;
                 }
             }
+            room.lastEndedSourceId = null;
             advancePlayback(room);
             if (!room.videoState.isPlaying) {
                 room.videoState.isPlaying = true;
@@ -876,27 +927,22 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
 
         socket.on('play_next', ({ roomId } = {}) => {
             const access = controller(roomId);
-            if (!access || access.room.queue.length === 0) return;
-            const next = access.room.queue.shift();
-            access.room.media = null;
-            access.room.mediaStatuses.clear();
-            access.room.playback = createPlayback();
-            access.room.recentCommandIds.clear();
-            access.room.localReadyUserIds.clear();
-            access.room.videoState = {
-                sourceType: 'remote',
-                url: next.url,
-                magnetURI: next.magnetURI,
-                localMedia: null,
-                isPlaying: true,
-                playedSeconds: 0,
-                updatedAt: Date.now(),
-                seekVersion: 0,
-                stateVersion: access.room.videoState.stateVersion + 1
-            };
-            io.to(roomId).emit('video_changed', snapshot(access.room));
-            io.to(roomId).emit('queue_updated', access.room.queue);
-            emitReadiness(roomId, access.room);
+            if (access) startNextQueuedVideo(roomId, access.room);
+        });
+
+        socket.on('video_ended', (payload = {}) => {
+            const access = controller(payload.roomId);
+            if (!access || access.room.media) return;
+            const { room } = access;
+            if (!room.videoState.sourceId || payload.sourceId !== room.videoState.sourceId ||
+                room.lastEndedSourceId === payload.sourceId) return;
+            room.lastEndedSourceId = payload.sourceId;
+            if (startNextQueuedVideo(payload.roomId, room)) return;
+            advancePlayback(room);
+            room.videoState.isPlaying = false;
+            if (isFiniteNumber(payload.playedSeconds)) room.videoState.playedSeconds = clampSeconds(payload.playedSeconds);
+            room.videoState.stateVersion += 1;
+            io.to(payload.roomId).emit('video_paused', snapshot(room));
         });
 
         socket.on('network_ping', (_payload, callback) => {

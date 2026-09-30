@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Send, Check, MessageSquare } from 'lucide-react';
 import { useRoom } from '../context/RoomContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,13 +38,16 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => 
     const { messages, sendMessage, currentUser } = useRoom();
     const [input, setInput] = useState('');
     const [sent, setSent] = useState(false);
-    const bottomRef = useRef(null);
-
-    const msgList = useMemo(() => messages, [messages]);
+    const listRef = useRef(null);
+    const nearBottomRef = useRef(true);
+    const sentTimerRef = useRef(null);
+    const msgList = messages;
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const list = listRef.current;
+        if (list && nearBottomRef.current) list.scrollTop = list.scrollHeight;
     }, [msgList]);
+    useEffect(() => () => clearTimeout(sentTimerRef.current), []);
 
     const handleSend = (e) => {
         e.preventDefault();
@@ -52,14 +55,15 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => 
         sendMessage(input.trim());
         setInput('');
         setSent(true);
-        setTimeout(() => setSent(false), 1000);
+        clearTimeout(sentTimerRef.current);
+        sentTimerRef.current = setTimeout(() => setSent(false), 1000);
     };
 
     const isMe = (msg) => !msg.isSystem && msg.nickname === currentUser?.nickname;
 
     return (
         <div
-            className={`room-chat flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}
+            className={`room-chat flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}
             data-room-variant={variant}
         >
             {!hideHeader && (
@@ -74,7 +78,14 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => 
                 </div>
             )}
 
-            <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-3">
+            <div
+                ref={listRef}
+                className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-x-hidden overflow-y-auto p-3"
+                onScroll={event => {
+                    const list = event.currentTarget;
+                    nearBottomRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 64;
+                }}
+            >
                 {msgList.length === 0 && (
                     <MotionDiv
                         initial={{ opacity: 0, y: 10 }}
@@ -94,6 +105,7 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => 
                     {msgList.map(msg => (
                         <MotionDiv
                             key={msg.id}
+                            className="min-w-0"
                             initial={{ opacity: 0, y: 10, scale: 0.96 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0 }}
@@ -108,23 +120,25 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => 
                             ) : (
                                 <div className={`flex gap-2 ${isMe(msg) ? 'flex-row-reverse' : 'flex-row'}`}>
                                     {!isMe(msg) && <Avatar nickname={msg.nickname} role={msg.role} />}
-                                    <div className={`flex max-w-[78%] flex-col gap-0.5 ${isMe(msg) ? 'items-end' : 'items-start'}`}>
+                                    <div className={`flex min-w-0 max-w-[78%] flex-col gap-0.5 ${isMe(msg) ? 'items-end' : 'items-start'}`}>
                                         {!isMe(msg) && (
                                             <span className="px-1 text-[10px] font-semibold text-zinc-400">
                                                 {msg.nickname}
                                             </span>
                                         )}
                                         <div
-                                            className="relative px-3 py-2 text-sm leading-relaxed"
+                                            className="relative max-w-full break-words px-3 py-2 text-sm leading-relaxed"
                                             style={isMe(msg)
                                                 ? {
-                                                    background: 'rgba(255,255,255,0.94)',
-                                                    color: '#000',
-                                                    border: '1px solid rgba(255,255,255,0.25)',
+                                                    overflowWrap: 'anywhere',
+                                                    background: 'rgba(38,38,38,0.78)',
+                                                    color: '#f4f4f5',
+                                                    border: '1px solid rgba(255,255,255,0.11)',
                                                     borderRadius: 14,
                                                     borderBottomRightRadius: 4,
                                                 }
                                                 : {
+                                                    overflowWrap: 'anywhere',
                                                     background: 'rgba(255,255,255,0.04)',
                                                     color: '#fff',
                                                     border: '1px solid rgba(255,255,255,0.10)',
@@ -141,24 +155,23 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => 
                         </MotionDiv>
                     ))}
                 </AnimatePresence>
-                <div ref={bottomRef} />
             </div>
 
             <div className="shrink-0 border-t border-white/10 p-3">
-                <form onSubmit={handleSend} className="flex items-center gap-2">
+                <form onSubmit={handleSend} className="flex min-w-0 items-center gap-2">
                     <input
                         type="text"
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         maxLength={500}
                         placeholder="Type a message..."
-                        className="h-11 flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-white/30"
+                        className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-white/30"
                     />
                     <MotionButton
                         type="submit"
                         whileTap={{ scale: 0.92 }}
                         disabled={!input.trim()}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-black transition hover:bg-zinc-200 disabled:opacity-40"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/40 text-white backdrop-blur-sm transition hover:bg-black/60 disabled:opacity-40"
                     >
                         <AnimatePresence mode="wait">
                             {sent ? (

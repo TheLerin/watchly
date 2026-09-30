@@ -19,13 +19,14 @@ function fixture() {
 const state = (extra = {}) => ({ seq: 1, status: 'playing', positionSec: 10, effectiveAtServerMs: 1750, rate: 1, ...extra });
 
 test('URL and local playback controls use their respective server protocols', () => {
-    const remote = { sourceType: 'remote' };
-    for (const [action, event] of [['PLAY', 'play_video'], ['PAUSE', 'pause_video'], ['SEEK', 'seek_video'], ['ENDED', 'pause_video']]) {
+    const remote = { sourceType: 'remote', sourceId: 'source-123' };
+    for (const [action, event] of [['PLAY', 'play_video'], ['PAUSE', 'pause_video'], ['SEEK', 'seek_video'], ['ENDED', 'video_ended']]) {
         const command = playbackCommand(remote, action, { positionSec: 12 });
         assert.equal(command.event, event);
         assert.equal(command.payload.playedSeconds, 12);
         assert.equal(playbackCommand({ sourceType: 'local', localMedia: { sessionId: 'movie' } }, action).event, 'playback:command');
     }
+    assert.equal(playbackCommand(remote, 'ENDED').payload.sourceId, 'source-123');
 });
 test('scheduled state and drift correction do not execute before the shared deadline', () => {
     const { sync, video, advance } = fixture();

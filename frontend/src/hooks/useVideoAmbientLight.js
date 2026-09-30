@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 const SAMPLE_WIDTH = 24;
 const SAMPLE_HEIGHT = 14;
 const SAMPLE_INTERVAL_MS = 480;
-const FALLBACK_COLOUR = 'rgb(72 74 82)';
+const FALLBACK_COLOUR = 'rgb(76 52 34)';
 
 const averageRegion = (data, x0, y0, x1, y1) => {
   let red = 0;
@@ -23,9 +23,15 @@ const averageRegion = (data, x0, y0, x1, y1) => {
     }
   }
 
-  return weight
-    ? [red, green, blue].map(channel => Math.round(channel / weight)).join(' ')
-    : '24 24 26';
+  if (!weight) return '42 31 24';
+  const source = [red, green, blue].map(channel => channel / weight);
+  // Follow the video's brightness without letting cool frames turn the room blue.
+  const warm = [
+    Math.min(116, 35 + source[0] * 0.28 + source[1] * 0.08),
+    Math.min(87, 27 + source[1] * 0.20 + source[0] * 0.04),
+    Math.min(60, 20 + source[2] * 0.10 + source[1] * 0.03),
+  ];
+  return warm.map(Math.round).join(' ');
 };
 
 const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {

@@ -24,6 +24,7 @@ const PING_TIMEOUT_MS = 2500;
 
 const emptyVideoState = () => ({
     sourceType: 'remote',
+    sourceId: null,
     url: '',
     magnetURI: '',
     localMedia: null,
@@ -68,6 +69,7 @@ export const RoomProvider = ({ children }) => {
     const serverClockOffsetRef = useRef(0);
     const activeMediaIdRef = useRef(null);
     const videoStateRef = useRef(videoState);
+    const pendingPlayRef = useRef(new Map());
     useEffect(() => {
         videoStateRef.current = videoState;
     }, [videoState]);
@@ -87,6 +89,7 @@ export const RoomProvider = ({ children }) => {
         setPlayback(null);
         setControllerMemberId(null);
         activeMediaIdRef.current = null;
+        pendingPlayRef.current.clear();
     }, []);
 
     const updateClockOffset = useCallback((serverTime, roundTripMs = 0) => {
@@ -154,13 +157,21 @@ export const RoomProvider = ({ children }) => {
                 totalCount: Number(payload.totalCount) || 0,
                 statuses: payload.statuses || {},
             });
-            setUsers(previous => previous.map(user => ({
-                ...user,
-                localReady: readinessSession ? readyIds.has(user.userId) : null,
-            })));
-            setCurrentUser(previous => previous
-                ? { ...previous, localReady: readinessSession ? readyIds.has(previous.userId) : null }
-                : previous);
+            setUsers(previous => {
+                let changed = false;
+                const next = previous.map(user => {
+                    const localReady = readinessSession ? readyIds.has(user.userId) : null;
+                    if (user.localReady === localReady) return user;
+                    changed = true;
+                    return { ...user, localReady };
+                });
+                return changed ? next : previous;
+            });
+            setCurrentUser(previous => {
+                if (!previous) return previous;
+                const localReady = readinessSession ? readyIds.has(previous.userId) : null;
+                return previous.localReady === localReady ? previous : { ...previous, localReady };
+            });
         };
 
         const applyVideoState = nextState => {
@@ -318,7 +329,7 @@ export const RoomProvider = ({ children }) => {
             setPlayback(nextPlayback);
             const fingerprint = media.mediaId.split(':').at(-1);
             applyVideoState({
-                sourceType: 'local', url: '', magnetURI: '', isPlaying: nextPlayback.status === 'playing', playedSeconds: nextPlayback.positionSec,
+                sourceType: 'local', sourceId: null, url: '', magnetURI: '', isPlaying: nextPlayback.status === 'playing', playedSeconds: nextPlayback.positionSec,
                 updatedAt: nextPlayback.effectiveAtServerMs, stateVersion: nextPlayback.seq, seekVersion: 0,
                 localMedia: {
                     sessionId: media.mediaId, declarationId: nextPlayback.effectiveAtServerMs, fingerprint, displayName: media.displayTitle,
@@ -358,7 +369,6 @@ export const RoomProvider = ({ children }) => {
         socket.on('user_kicked', onUserKicked);
         socket.on('video_changed', onVideoChanged);
         socket.on('local_media_selected', onLocalMediaSelected);
-        socket.on('local_readiness_updated', applyReadiness);
         socket.on('local_media_waiting', onLocalWaiting);
         socket.on('video_played', onVideoPlayed);
         socket.on('video_paused', onVideoPaused);
@@ -384,7 +394,6 @@ export const RoomProvider = ({ children }) => {
             socket.off('user_kicked', onUserKicked);
             socket.off('video_changed', onVideoChanged);
             socket.off('local_media_selected', onLocalMediaSelected);
-            socket.off('local_readiness_updated', applyReadiness);
             socket.off('local_media_waiting', onLocalWaiting);
             socket.off('video_played', onVideoPlayed);
             socket.off('video_paused', onVideoPaused);
@@ -536,12 +545,27 @@ export const RoomProvider = ({ children }) => {
     }, []);
 
     const sendPlaybackCommand = useCallback((action, options = {}) => {
-        if (!socket.connected) return;
+        if (!socket.connected) return Promise.resolve(false);
         const { event, payload } = playbackCommand(videoStateRef.current, action, options);
-        if (event !== 'playback:command') return emitControl(event, payload);
-        socket.timeout(10000).emit(event, { ...payload, commandId: commandId() }, (error, response) => {
-            if (error || !response?.ok) toast.error(error ? 'Playback request timed out. Please try again.' : protocolErrorMessage(response));
+        if (event !== 'playback:command') {
+            emitControl(event, payload);
+            return Promise.resolve(true);
+        }
+        const playKey = action === 'PLAY' ? `${payload.mediaId}:${options.startAnyway === true}` : null;
+        if (playKey && pendingPlayRef.current.has(playKey)) return pendingPlayRef.current.get(playKey);
+        const request = new Promise(resolve => {
+            socket.timeout(10000).emit(event, { ...payload, commandId: commandId() }, (error, response) => {
+                if (error || !response?.ok) toast.error(error ? 'Playback request timed out. Please try again.' : protocolErrorMessage(response));
+                resolve(!error && Boolean(response?.ok));
+            });
         });
+        if (playKey) {
+            pendingPlayRef.current.set(playKey, request);
+            void request.finally(() => {
+                if (pendingPlayRef.current.get(playKey) === request) pendingPlayRef.current.delete(playKey);
+            });
+        }
+        return request;
     }, [emitControl]);
     const playVideo = useCallback((options = {}) => sendPlaybackCommand('PLAY', options), [sendPlaybackCommand]);
     const pauseVideo = useCallback(positionSec => sendPlaybackCommand('PAUSE', { positionSec }), [sendPlaybackCommand]);

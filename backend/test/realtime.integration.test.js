@@ -69,10 +69,14 @@ test('an old reconnect lease cannot override an explicit host transfer', async (
     const promoted = receive(moderator, 'role_updated');
     host.emit('promote_to_moderator', { roomId: room.roomId, targetId: moderator.id });
     await promoted;
+    const controlRequestedForViewer = receive(viewer, 'control:changed');
     await emit(moderator, 'control:request', {});
+    assert.equal((await controlRequestedForViewer).reason, 'CONTROL_REQUESTED');
     const grace = receive(host, 'control:changed');
+    const graceForViewer = receive(viewer, 'control:changed');
     moderator.close();
     assert.equal((await grace).reason, 'HOST_RECONNECT_GRACE');
+    assert.equal((await graceForViewer).reason, 'HOST_RECONNECT_GRACE');
     const transferred = receive(viewer, 'control:changed');
     host.emit('transfer_host', { roomId: room.roomId, targetId: viewer.id });
     assert.equal((await transferred).controllerMemberId, joined.memberId);
@@ -147,6 +151,88 @@ test('link playback, local-to-link switching, queue switching and late joins sha
     host.emit('play_next', { roomId });
     assert.equal((await next).url, 'https://example.com/next.mp4');
     assert.equal((await emit(host, 'room:snapshot', {})).snapshot.media, null);
+});
+
+test('a finished link advances the queue once and leaves the last item paused', async () => {
+    const host = await connect();
+    const created = await emit(host, 'room:create', { nickname: 'Host', protocolVersion: 2 });
+    const roomId = created.roomId;
+    const viewer = await connect();
+    await emit(viewer, 'room:join', { roomId, nickname: 'Viewer', protocolVersion: 2 });
+    const firstSource = receive(viewer, 'video_changed');
+    host.emit('change_video', { roomId, url: 'https://example.com/first.mp4' });
+    const first = await firstSource;
+    assert.ok(first.sourceId);
+    for (const url of ['https://example.com/second.mp4', 'https://example.com/third.mp4']) {
+        const updated = receive(viewer, 'queue_updated');
+        host.emit('add_to_queue', { roomId, url });
+        await updated;
+    }
+    const pausedBeforeEnd = receive(viewer, 'video_paused');
+    host.emit('pause_video', { roomId, playedSeconds: 12 });
+    await pausedBeforeEnd;
+    const secondSource = receive(viewer, 'video_changed');
+    host.emit('video_ended', { roomId, sourceId: first.sourceId, playedSeconds: 12 });
+    const second = await secondSource;
+    assert.equal(second.url, 'https://example.com/second.mp4');
+    assert.equal(second.isPlaying, true);
+    host.emit('video_ended', { roomId, sourceId: first.sourceId, playedSeconds: 12 });
+    assert.equal((await emit(host, 'room:snapshot', {})).snapshot.queue.length, 1);
+    const thirdSource = receive(viewer, 'video_changed');
+    host.emit('video_ended', { roomId, sourceId: second.sourceId, playedSeconds: 12 });
+    const third = await thirdSource;
+    assert.equal(third.url, 'https://example.com/third.mp4');
+    assert.equal((await emit(host, 'room:snapshot', {})).snapshot.queue.length, 0);
+    const paused = receive(viewer, 'video_paused');
+    host.emit('video_ended', { roomId, sourceId: third.sourceId, playedSeconds: 12 });
+    assert.equal((await paused).isPlaying, false);
+    const newQueue = receive(viewer, 'queue_updated');
+    host.emit('add_to_queue', { roomId, url: 'https://example.com/fourth.mp4' });
+    await newQueue;
+    host.emit('video_ended', { roomId, sourceId: third.sourceId, playedSeconds: 12 });
+    assert.equal((await emit(host, 'room:snapshot', {})).snapshot.queue.length, 1);
+    const replayed = receive(viewer, 'video_played');
+    host.emit('play_video', { roomId });
+    await replayed;
+    const fourthSource = receive(viewer, 'video_changed');
+    host.emit('video_ended', { roomId, sourceId: third.sourceId, playedSeconds: 12 });
+    assert.equal((await fourthSource).url, 'https://example.com/fourth.mp4');
+});
+
+test('Start anyway bypasses only this start; verified buffering stays ready and local ending advances the queue', async () => {
+    const host = await connect();
+    const created = await emit(host, 'room:create', { nickname: 'Host', protocolVersion: 2 });
+    const roomId = created.roomId;
+    const viewer = await connect();
+    const joined = await emit(viewer, 'room:join', { roomId, nickname: 'Viewer', protocolVersion: 2 });
+    const mediaId = `sampled-sha256-v1:100:${'d'.repeat(64)}`;
+    await emit(host, 'media:declare', { descriptor: { sourceType: 'local-file', mediaId,
+        fingerprintVersion: 'sampled-sha256-v1', displayTitle: 'Movie', sizeBytes: 100, durationMs: 10000 } });
+    const blocked = await emit(host, 'playback:command', { commandId: 'queue_ready_block_1', mediaId, action: 'PLAY' });
+    assert.equal(blocked.error.code, 'NOT_ALL_READY');
+    const started = await emit(host, 'playback:command', { commandId: 'queue_start_anyway_1', mediaId, action: 'PLAY', startAnyway: true });
+    assert.equal(started.ok, true);
+    assert.equal(started.playback.seq, 1);
+    assert.equal((await emit(host, 'playback:command', { commandId: 'queue_start_anyway_1', mediaId, action: 'PLAY', startAnyway: true })).duplicate, true);
+    assert.equal((await emit(host, 'playback:command', { commandId: 'queue_start_anyway_2', mediaId, action: 'PLAY', startAnyway: true })).duplicate, true);
+    await emit(host, 'playback:command', { commandId: 'queue_pause_again_1', mediaId, action: 'PAUSE' });
+    assert.equal((await emit(host, 'playback:command', { commandId: 'queue_ready_block_2', mediaId, action: 'PLAY' })).error.code, 'NOT_ALL_READY');
+    await emit(viewer, 'media:ready', { mediaId, status: 'READY', fingerprint: 'd'.repeat(64), size: 100, duration: 10 });
+    await emit(viewer, 'media:ready', { mediaId, status: 'BUFFERING', reason: 'Local player is buffering' });
+    const readiness = (await emit(host, 'room:snapshot', {})).snapshot.readiness;
+    assert.equal(readiness.readyCount, 2);
+    assert.equal(readiness.statuses[joined.memberId].status, 'BUFFERING');
+    const queued = receive(viewer, 'queue_updated');
+    host.emit('add_to_queue', { roomId, url: 'https://example.com/after-local.mp4' });
+    await queued;
+    await emit(host, 'playback:command', { commandId: 'queue_seek_end_123', mediaId, action: 'SEEK', positionSec: 9.5 });
+    const nextSource = receive(viewer, 'video_changed');
+    const ended = await emit(host, 'playback:command', { commandId: 'queue_local_ended_1', mediaId, action: 'ENDED' });
+    assert.equal(ended.ok, true);
+    const next = await nextSource;
+    assert.equal(next.url, 'https://example.com/after-local.mp4');
+    assert.equal(next.isPlaying, true);
+    assert.equal((await emit(host, 'room:snapshot', {})).snapshot.queue.length, 0);
 });
 
 test('create, join, expiration error, readiness and controller-only playback', async () => {

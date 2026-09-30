@@ -124,15 +124,21 @@ const ready = async url => {
  await host.getByTitle('Play a file that stays on each person’s device').click();
  await (await chooser).setFiles(path.resolve(__dirname, '../public/bg-video.mp4'));
  await viewer.getByRole('heading',{name:'Choose the same local file'}).waitFor();
+ await host.getByRole('button', { name: 'Start anyway' }).click();
+ await wait(async () => await video(host).count() && !(await values(host)).paused, 'Start anyway did not play for the host');
  await viewer.locator('input[type=file][accept^="video/"]').setInputFiles(path.resolve(__dirname, '../public/bg-video.mp4'));
  await viewer.getByRole('button', { name: 'Now watching' }).click();
  await host.getByText('2/2 ready',{exact:true}).waitFor();
+ await wait(async () => await video(viewer).count() && !(await values(viewer)).paused, 'viewer did not join Start anyway playback');
+ await host.getByRole('textbox', { name: /Watch from Link/ }).blur();
+ await host.keyboard.press('Space');
+ await wait(async()=> (await values(host)).paused&&(await values(viewer)).paused,'Start anyway playback did not pause');
+ console.log('PASS Start anyway and late file readiness');
  assert.equal(await host.evaluate(() => window.testScreenStream.getVideoTracks()[0].readyState), 'live');
  await host.getByRole('button', { name: 'Stop sharing' }).click();
  assert.equal(await host.evaluate(() => window.testScreenStream.getVideoTracks()[0].readyState), 'ended');
  console.log('PASS screen sharing survives readiness updates and stops cleanly (synthetic capture)');
  await wait(async()=> (await values(host)).ready>=3&&(await values(viewer)).ready>=3,'local media not ready');
- await host.getByRole('textbox', { name: /Watch from Link/ }).blur();
  await host.keyboard.press('Space');
  await wait(async()=>!(await values(host)).paused&&!(await values(viewer)).paused,'local scheduled play failed');
  await new Promise(r=>setTimeout(r,1500));
@@ -182,6 +188,15 @@ const ready = async url => {
   return !h.paused && !v.paused && h.time < 3 && v.time < 3;
  }, 'replaying an ended movie did not restart both players');
  console.log('PASS local movie ends and replays from the beginning');
+ const sourceBeforeSubtitle = await video(host).getAttribute('src');
+ await host.locator('input[type=file][accept*=".srt"]').setInputFiles({
+  name: 'en.srt', mimeType: 'application/x-subrip',
+  buffer: Buffer.from('1\n00:00:00,000 --> 00:00:10,000\nSubtitle worker loaded this track.\n'),
+ });
+ await wait(async () => video(host).evaluate(v => [...v.textTracks].some(track => track.mode === 'showing')),
+  'selected subtitles did not become active');
+ assert.equal(await video(host).getAttribute('src'), sourceBeforeSubtitle, 'loading subtitles must not reload the local video');
+ console.log('PASS subtitle file loads off thread and activates without changing video source');
  await host.evaluate(async()=>{const {socket}=await import('/src/socket.js');socket.disconnect()});
  await wait(async()=> (await values(viewer)).paused,'host disconnect did not pause viewer');
  assert.ok(await viewer.getByText('Browser regression movie',{exact:true}).count()>0);
@@ -217,6 +232,45 @@ const ready = async url => {
  await host.getByRole('button', { name: 'Play Next', exact: true }).waitFor();
  assert.equal(await viewer.getByRole('button', { name: 'Play Next', exact: true }).count(), 0);
  console.log('PASS moderator control on links and demotion');
+ await video(host).evaluate(v => { v.currentTime = v.duration - 0.6; });
+ await wait(async () => {
+  const queueLength = await host.evaluate(async () => {
+   const { socket } = await import('/src/socket.js');
+   return new Promise(resolve => socket.emit('room:snapshot', {}, response => resolve(response.snapshot.queue.length)));
+  });
+  const h = await values(host), v = await values(viewer);
+  return queueLength === 0 && !h.paused && !v.paused && h.time < 4 && v.time < 4;
+ }, 'finished video did not automatically play the queued item');
+ console.log('PASS queue automatically plays the next video, including the same URL');
+ await host.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/');
+ await host.getByRole('button', { name: 'Play Now', exact: true }).click();
+ await host.getByText('This source cannot be played directly in the browser.', { exact: false }).waitFor();
+ console.log('PASS unsupported webpage shows a useful playback error');
+ await viewer.getByRole('button', { name: 'Live chat' }).click();
+ await host.evaluate(async roomId => {
+  const { socket } = await import('/src/socket.js');
+  for (let i = 0; i < 14; i++) {
+   socket.emit('send_message', { roomId, message: { id: `scroll_check_${i}`, text: `scroll check ${i} ${'longword'.repeat(12)}` } });
+   await new Promise(resolve => setTimeout(resolve, 530));
+  }
+ }, roomId);
+ await viewer.getByText(/scroll check 13/).waitFor();
+ const messageList = viewer.locator('.room-chat .overflow-y-auto').first();
+ assert.ok(await messageList.evaluate(element => element.scrollHeight - element.scrollTop - element.clientHeight < 64),
+  'chat should follow new messages while the reader is at the bottom');
+ await messageList.evaluate(element => { element.scrollTop = 0; });
+ const scrollBefore = await messageList.evaluate(element => element.scrollTop);
+ await host.evaluate(async roomId => {
+  const { socket } = await import('/src/socket.js');
+  socket.emit('send_message', { roomId, message: { id: 'scroll_check_new', text: 'scroll check newest' } });
+ }, roomId);
+ await viewer.getByText('scroll check newest', { exact: true }).waitFor();
+ const chatLayout = await messageList.evaluate(element => ({
+  scrollTop: element.scrollTop, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth,
+ }));
+ assert.ok(chatLayout.scrollTop <= scrollBefore + 2, 'a new chat message should not pull a reader away from old messages');
+ assert.ok(chatLayout.scrollWidth <= chatLayout.clientWidth + 1, 'long messages should wrap inside the chat panel');
+ console.log('PASS chat keeps the reader position and wraps long messages');
  await host.evaluate(async ({ roomId, targetId }) => {
   (await import('/src/socket.js')).socket.emit('kick_user', { roomId, targetId });
  }, { roomId, targetId: viewerSocketId });

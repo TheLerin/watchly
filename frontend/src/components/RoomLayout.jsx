@@ -525,7 +525,7 @@ const RoomLayout = () => {
                                     />
                                 ))}
                             </nav>
-                            <section className={`room-members-group ${panelClass} overflow-hidden`}>
+                            <section className={`room-members-group ${panelClass} overflow-hidden`} data-expanded={showUsersPanel}>
                                 <PanelHeader
                                     icon={<Users size={15} className="text-zinc-400" />}
                                     title="Members & Queue"
