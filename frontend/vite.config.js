@@ -14,7 +14,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.png'],
+      includeAssets: ['logo.png', 'bg-video-poster.jpg', 'assets/sofa-couple-mobile.webp'],
       manifest: {
         name: 'Watchly',
         short_name: 'Watchly',

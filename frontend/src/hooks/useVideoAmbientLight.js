@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 const SAMPLE_WIDTH = 24;
 const SAMPLE_HEIGHT = 14;
 const SAMPLE_INTERVAL_MS = 480;
+const MOBILE_SAMPLE_INTERVAL_MS = 2000;
 const FALLBACK_COLOUR = 'rgb(76 52 34)';
 
 const averageRegion = (data, x0, y0, x1, y1) => {
@@ -68,6 +69,7 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
     let blocked = false;
     let isLit = false;
     const lastColours = new Map();
+    const compactScreen = window.matchMedia('(max-width: 1024px)');
 
     const stop = () => {
       if (interval !== null) window.clearInterval(interval);
@@ -113,7 +115,17 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
       }
       if (video.paused || video.ended || interval !== null) return;
       sample();
-      interval = window.setInterval(sample, SAMPLE_INTERVAL_MS);
+      interval = window.setInterval(
+        sample,
+        compactScreen.matches ? MOBILE_SAMPLE_INTERVAL_MS : SAMPLE_INTERVAL_MS,
+      );
+    };
+
+    const onScreenChange = () => {
+      if (interval === null) return;
+      window.clearInterval(interval);
+      interval = null;
+      start();
     };
 
     const onVisibilityChange = () => {
@@ -125,6 +137,7 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
     video.addEventListener('pause', stop);
     video.addEventListener('ended', stop);
     document.addEventListener('visibilitychange', onVisibilityChange);
+    compactScreen.addEventListener('change', onScreenChange);
     start();
 
     return () => {
@@ -133,6 +146,7 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
       video.removeEventListener('pause', stop);
       video.removeEventListener('ended', stop);
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      compactScreen.removeEventListener('change', onScreenChange);
     };
   }, [targetRef, videoRef, enabled]);
 };

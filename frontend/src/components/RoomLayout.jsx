@@ -481,7 +481,10 @@ const RoomLayout = () => {
                                 </div>
                                 <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} />
                                 <div className="cinematic-sofa" aria-hidden="true">
-                                    <img src="/assets/sofa-couple.png" alt="" />
+                                    <picture>
+                                        <source srcSet="/assets/sofa-couple.webp" type="image/webp" />
+                                        <img src="/assets/sofa-couple.png" alt="" />
+                                    </picture>
                                 </div>
                             </div>
                         </main>

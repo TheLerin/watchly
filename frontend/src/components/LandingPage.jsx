@@ -161,8 +161,11 @@ const CinemaScene = ({ onCreate, onJoin, videoRef }) => (
           loop
           playsInline
           preload="metadata"
-          src={WATCHLY_HERO_VIDEO}
-        />
+          poster="/bg-video-poster.jpg"
+        >
+          <source media="(max-width: 1024px)" src="/bg-video-mobile.mp4" type="video/mp4" />
+          <source src={WATCHLY_HERO_VIDEO} type="video/mp4" />
+        </video>
         <div className="cinema-screen-vignette" aria-hidden="true" />
       </div>
     </div>
@@ -184,13 +187,24 @@ const CinemaScene = ({ onCreate, onJoin, videoRef }) => (
     </div>
 
     <div className="cinema-floor" aria-hidden="true"><div className="cinema-floor-reflection" /></div>
-    <div className="cinema-sofa-reflection" aria-hidden="true"><img src="/assets/sofa-couple.png" alt="" /></div>
-    <img
-      className="cinema-sofa"
-      src="/assets/sofa-couple.png"
-      alt="A couple sitting together on a sofa facing the cinema screen"
-      draggable="false"
-    />
+    <div className="cinema-sofa-reflection" aria-hidden="true">
+      <picture>
+        <source media="(max-width: 1024px)" srcSet="/assets/sofa-couple-mobile.webp" type="image/webp" />
+        <source srcSet="/assets/sofa-couple.webp" type="image/webp" />
+        <img src="/assets/sofa-couple.png" alt="" />
+      </picture>
+    </div>
+    <picture>
+      <source media="(max-width: 1024px)" srcSet="/assets/sofa-couple-mobile.webp" type="image/webp" />
+      <source srcSet="/assets/sofa-couple.webp" type="image/webp" />
+      <img
+        className="cinema-sofa"
+        src="/assets/sofa-couple.png"
+        alt="A couple sitting together on a sofa facing the cinema screen"
+        fetchPriority="high"
+        draggable="false"
+      />
+    </picture>
     <div className="cinema-sofa-contact-shadow" aria-hidden="true" />
     <div className="cinema-room-vignette" aria-hidden="true" />
   </div>
