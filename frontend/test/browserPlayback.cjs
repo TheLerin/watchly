@@ -45,6 +45,7 @@ const ready = async url => {
  await invalidSession.close();
  console.log('PASS malformed saved session recovers without waiting for a connection');
  await host.goto(baseUrl);
+ assert.equal(await host.evaluate(() => performance.getEntriesByType('resource').some(entry => entry.name.includes('/components/RoomLayout.jsx'))), false, 'landing page should not load the room player before opening a room');
  await host.getByRole('button',{name:'Create room',exact:true}).first().click();
  await host.getByPlaceholder('Your nickname').fill('Browser host');
  await host.locator('.room-launcher-submit').click();
@@ -147,6 +148,16 @@ const ready = async url => {
  await wait(async()=>{const a=await values(host),b=await values(viewer);return a.time>1&&b.time>1},'remote did not play');
  await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='1'),'video ambient light did not start');
  assert.match(await host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--video-left-rgb')), /^\d+ \d+ \d+$/);
+ await host.evaluate(() => {
+  Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+ });
+ await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='0'),'hidden tab did not stop ambient sampling');
+ await host.evaluate(() => {
+  delete document.hidden;
+  document.dispatchEvent(new Event('visibilitychange'));
+ });
+ await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='1'),'visible tab did not resume ambient sampling');
  await video(host).evaluate(v=>v.pause());
  await wait(async()=> (await values(viewer)).paused,'remote pause did not synchronize');
  await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='0'),'video ambient light did not stop on pause');

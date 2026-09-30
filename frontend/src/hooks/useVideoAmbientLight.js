@@ -66,11 +66,14 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
 
     let interval = null;
     let blocked = false;
+    let isLit = false;
+    const lastColours = new Map();
 
     const stop = () => {
       if (interval !== null) window.clearInterval(interval);
       interval = null;
       target.style.setProperty('--ambient-opacity', '0');
+      isLit = false;
     };
 
     const sample = () => {
@@ -80,6 +83,8 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
         const { data } = context.getImageData(0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
         const setRegion = (name, ambientName, x0, y0, x1, y1) => {
           const colour = averageRegion(data, x0, y0, x1, y1);
+          if (lastColours.get(name) === colour) return;
+          lastColours.set(name, colour);
           target.style.setProperty(name, colour);
           if (ambientName) target.style.setProperty(ambientName, `rgb(${colour})`);
         };
@@ -89,7 +94,8 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
         setRegion('--video-top-rgb', '--ambient-top-color', 0, 0, SAMPLE_WIDTH, 4);
         setRegion('--video-bottom-rgb', '--ambient-bottom-color', 0, 10, SAMPLE_WIDTH, SAMPLE_HEIGHT);
         setRegion('--video-rgb', null, 0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
-        target.style.setProperty('--ambient-opacity', '1');
+        if (!isLit) target.style.setProperty('--ambient-opacity', '1');
+        isLit = true;
       } catch {
         // Cross-origin media cannot be sampled. Keep a subtle neutral halo.
         blocked = true;
@@ -100,6 +106,7 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
     };
 
     const start = () => {
+      if (document.hidden) return;
       if (blocked) {
         if (!video.paused && !video.ended) showFallback();
         return;
@@ -109,9 +116,15 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
       interval = window.setInterval(sample, SAMPLE_INTERVAL_MS);
     };
 
+    const onVisibilityChange = () => {
+      if (document.hidden) stop();
+      else start();
+    };
+
     video.addEventListener('play', start);
     video.addEventListener('pause', stop);
     video.addEventListener('ended', stop);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     start();
 
     return () => {
@@ -119,6 +132,7 @@ const useVideoAmbientLight = (videoRef, targetRef, enabled = true) => {
       video.removeEventListener('play', start);
       video.removeEventListener('pause', stop);
       video.removeEventListener('ended', stop);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [targetRef, videoRef, enabled]);
 };

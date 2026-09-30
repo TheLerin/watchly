@@ -1,10 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { RoomProvider, useRoom } from './context/RoomContext';
 import { ThemeProvider } from './context/ThemeContext';
-import LandingPage from './components/LandingPage';
-import RoomLayout from './components/RoomLayout';
+import { loadRoomLayout } from './roomRoute';
+
+const LandingPage = lazy(() => import('./components/LandingPage'));
+const RoomLayout = lazy(loadRoomLayout);
 
 // BUG-25: Error boundary catches any render-time errors and shows a recovery UI
 class ErrorBoundary extends React.Component {
@@ -82,10 +84,10 @@ function App() {
         <Router>
           <RoomProvider>
             <KickHandler />
-            <ProtocolGuard><Routes>
+            <ProtocolGuard><Suspense fallback={<div className="min-h-screen bg-black" />}><Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/room/:roomId" element={<RoomLayout />} />
-            </Routes></ProtocolGuard>
+            </Routes></Suspense></ProtocolGuard>
             {/* ISSUE-26: Toaster must be inside the tree so toasts render */}
             <Toaster
               position="bottom-center"

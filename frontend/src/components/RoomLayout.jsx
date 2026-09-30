@@ -26,7 +26,7 @@ import ReadinessPanel from './player/ReadinessPanel';
 import ScreenShareAdapter from './player/ScreenShareAdapter';
 import { useRoom } from '../context/RoomContext';
 import { useTheme, THEME_META, ROOM_APPEARANCE_META } from '../context/ThemeContext';
-import { BackgroundLayers } from './LandingPage';
+import { BackgroundLayers } from './BackgroundLayers';
 import toast from 'react-hot-toast';
 import { NETWORK_QUALITY_META, formatPing } from '../utils/networkQuality';
 import './room-theater.css';

@@ -19,31 +19,15 @@ import toast from 'react-hot-toast';
 import { useRoom } from '../context/RoomContext';
 import useStageNavigation, { STAGE_TRANSITION } from '../hooks/useStageNavigation';
 import useVideoAmbientLight from '../hooks/useVideoAmbientLight';
+import { BackgroundLayers } from './BackgroundLayers';
+import { loadRoomLayout } from '../roomRoute';
 import './cinema-hero.css';
+
+export { BackgroundLayers };
 
 const WATCHLY_HERO_VIDEO = '/bg-video.mp4';
 const PANEL_COUNT = 4;
 const MotionArticle = motion.article;
-
-// Kept as a compatibility export for the existing room shell.
-export const BackgroundLayers = () => (
-  <>
-    <div className="bg-base-layer" />
-    <div className="fixed inset-0 z-[1] pointer-events-none overflow-hidden">
-      <div
-        className="absolute inset-0"
-        style={{
-          background: 'linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)',
-          backgroundSize: '56px 56px',
-          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.45) 48%, rgba(0,0,0,0.08))',
-          WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.45) 48%, rgba(0,0,0,0.08))',
-        }}
-      />
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.72) 52%, rgba(0,0,0,0.96) 100%)' }} />
-    </div>
-    <div className="noise-overlay" />
-  </>
-);
 
 const storyPanels = [
   {
@@ -452,7 +436,11 @@ const LandingPage = () => {
     if (activeTab === 'create') handleCreate(); else handleJoin();
   };
 
-  const openLauncher = useCallback(tab => { setActiveTab(tab); setLauncherOpen(true); }, []);
+  const openLauncher = useCallback(tab => {
+    void loadRoomLayout().catch(() => {});
+    setActiveTab(tab);
+    setLauncherOpen(true);
+  }, []);
   const closeLauncher = useCallback(() => setLauncherOpen(false), []);
 
   const canSubmit = Boolean(nickname.trim() && (activeTab === 'create' || joinCode.trim()));
