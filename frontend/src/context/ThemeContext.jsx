@@ -5,8 +5,8 @@ const ThemeContext = createContext();
 export const useTheme = () => useContext(ThemeContext);
 
 export const THEME_META = {
-    'glass-dark':  { label: 'Dark Glass',   emoji: '🌙', orb: ['#333','#111'] },
-    'glass-light': { label: 'Light Glass',  emoji: '☀️', orb: ['#eee','#ccc'] },
+    'glass-dark':  { label: 'Dark Glass',  orb: ['#333','#111'] },
+    'glass-light': { label: 'Light Glass', orb: ['#eee','#ccc'] },
 };
 
 export const ROOM_APPEARANCE_META = {
@@ -26,7 +26,7 @@ export const ThemeProvider = ({ children }) => {
     const [theme, setThemeState] = useState(() => {
         const s = localStorage.getItem('watchly-theme');
         if (s === 'light' || s === 'glass-light') return 'glass-light';
-        return 'glass-dark'; // default
+        return 'glass-dark';
     });
 
     const [roomAppearance, setRoomAppearanceState] = useState(() => {
@@ -48,18 +48,14 @@ export const ThemeProvider = ({ children }) => {
 
     useEffect(() => {
         const root = document.documentElement;
-        // Clean up any old classes
         root.className = '';
         if (theme !== 'glass-dark') {
             root.classList.add(`theme-${theme}`);
         }
-        // We removed JS injection of CSS variables; index.css handles them now via classes.
     }, [theme]);
 
-    const isDark = theme === 'glass-dark';
-
     return (
-        <ThemeContext.Provider value={{ theme, setTheme, isDark, roomAppearance, setRoomAppearance }}>
+        <ThemeContext.Provider value={{ theme, setTheme, roomAppearance, setRoomAppearance }}>
             {children}
         </ThemeContext.Provider>
     );
