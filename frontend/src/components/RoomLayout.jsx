@@ -60,6 +60,18 @@ function useIsDesktop() {
     return isDesktop;
 }
 
+function useSupportsTheater() {
+    const [supportsTheater, setSupportsTheater] = useState(() =>
+        window.matchMedia('(min-width: 1180px) and (min-height: 650px)').matches);
+    useEffect(() => {
+        const media = window.matchMedia('(min-width: 1180px) and (min-height: 650px)');
+        const update = () => setSupportsTheater(media.matches);
+        media.addEventListener('change', update);
+        return () => media.removeEventListener('change', update);
+    }, []);
+    return supportsTheater;
+}
+
 function useDragResize(def = 45) {
     const [pct, setPct] = useState(def);
     const startY = useRef(null);
@@ -97,7 +109,7 @@ function useDragResize(def = 45) {
 
 const panelClass = 'rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl';
 
-const ThemePicker = ({ theme, setTheme, roomAppearance, setRoomAppearance }) => (
+const ThemePicker = ({ theme, setTheme, roomAppearance, setRoomAppearance, supportsTheater }) => (
     <MotionDiv
         initial={{ opacity: 0, scale: 0.96, y: -8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -105,33 +117,37 @@ const ThemePicker = ({ theme, setTheme, roomAppearance, setRoomAppearance }) => 
         transition={{ type: 'spring', damping: 22, stiffness: 320 }}
         className="room-settings-popover absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-white/10 bg-black p-3 shadow-2xl shadow-black/60"
     >
-        <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Room appearance</p>
-        <div className="mb-4 grid grid-cols-2 gap-2">
-            {Object.entries(ROOM_APPEARANCE_META).map(([id, meta]) => (
-                <button
-                    type="button"
-                    key={id}
-                    aria-pressed={roomAppearance === id}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setRoomAppearance(id);
-                    }}
-                    className="rounded-xl border p-2.5 text-left transition hover:bg-white/[0.06]"
-                    style={{
-                        background: roomAppearance === id ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.02)',
-                        borderColor: roomAppearance === id ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)',
-                    }}
-                >
-                    <span className="flex items-center justify-between text-xs font-bold text-zinc-100">
-                        {meta.label}
-                        {roomAppearance === id && <Check size={12} className="text-emerald-400" />}
-                    </span>
-                    <span className="mt-1 block text-[10px] leading-4 text-zinc-500">{meta.description}</span>
-                </button>
-            ))}
-        </div>
+        {supportsTheater && (
+            <>
+                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Room appearance</p>
+                <div className="mb-4 grid grid-cols-2 gap-2">
+                    {Object.entries(ROOM_APPEARANCE_META).map(([id, meta]) => (
+                        <button
+                            type="button"
+                            key={id}
+                            aria-pressed={roomAppearance === id}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setRoomAppearance(id);
+                            }}
+                            className="rounded-xl border p-2.5 text-left transition hover:bg-white/[0.06]"
+                            style={{
+                                background: roomAppearance === id ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.02)',
+                                borderColor: roomAppearance === id ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)',
+                            }}
+                        >
+                            <span className="flex items-center justify-between text-xs font-bold text-zinc-100">
+                                {meta.label}
+                                {roomAppearance === id && <Check size={12} className="text-emerald-400" />}
+                            </span>
+                            <span className="mt-1 block text-[10px] leading-4 text-zinc-500">{meta.description}</span>
+                        </button>
+                    ))}
+                </div>
+            </>
+        )}
 
-        <p className="mb-3 border-t border-white/10 px-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Color theme</p>
+        <p className={`mb-3 px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 ${supportsTheater ? 'border-t border-white/10 pt-3' : ''}`}>Color theme</p>
         <div className="grid grid-cols-2 gap-2">
             {Object.entries(THEME_META).map(([id, meta]) => (
                 <button
@@ -163,7 +179,7 @@ const ThemePicker = ({ theme, setTheme, roomAppearance, setRoomAppearance }) => 
     </MotionDiv>
 );
 
-const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, leaveRoom, navigate, isConnected, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
+const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, supportsTheater, leaveRoom, navigate, isConnected, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
     const [showSettings, setShowSettings] = useState(false);
     const [showRoomInfo, setShowRoomInfo] = useState(false);
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -286,6 +302,7 @@ const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, le
                                     setTheme={setTheme}
                                     roomAppearance={roomAppearance}
                                     setRoomAppearance={setRoomAppearance}
+                                    supportsTheater={supportsTheater}
                                 />
                             )}
                         </AnimatePresence>
@@ -351,7 +368,7 @@ const RoomLayout = () => {
         joinRoom,
         createRoom,
     } = useRoom();
-    const { theme, setTheme, roomAppearance, setRoomAppearance } = useTheme();
+    const { theme, setTheme, roomAppearance: preferredRoomAppearance, setRoomAppearance } = useTheme();
     const ambientTargetRef = useRef(null);
     const [showUsersPanel, setShowUsersPanel] = useState(true);
     const [activeRightTool, setActiveRightTool] = useState(null);
@@ -364,6 +381,8 @@ const RoomLayout = () => {
     const [isJoining, setIsJoining] = useState(false);
     const isPortrait = useOrientation();
     const isDesktop = useIsDesktop();
+    const supportsTheater = useSupportsTheater();
+    const roomAppearance = supportsTheater ? preferredRoomAppearance : 'classic';
     const { heightPct, onDragStart } = useDragResize(52);
 
     useEffect(() => {
@@ -470,6 +489,7 @@ const RoomLayout = () => {
                     setTheme={setTheme}
                     roomAppearance={roomAppearance}
                     setRoomAppearance={setRoomAppearance}
+                    supportsTheater={supportsTheater}
                     leaveRoom={leaveRoom}
                     navigate={navigate}
                     isConnected={isConnected}
