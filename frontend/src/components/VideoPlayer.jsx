@@ -1378,7 +1378,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                 {isPrivileged
                                     ? appearance === 'cinematic'
                                         ? 'Choose a source in Watch Controls to begin syncing.'
-                                        : 'Paste a video URL in the bar above and click Play Now to begin syncing.'
+                                        : 'Choose a link or local file in Watch controls to begin syncing.'
                                     : 'Waiting for the host to start a video.'}
                             </p>
                         </MotionDiv>

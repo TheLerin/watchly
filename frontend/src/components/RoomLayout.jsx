@@ -1,15 +1,14 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Check,
     ChevronDown,
     ChevronUp,
+    Clapperboard,
     Copy,
-    GripHorizontal,
     Hash,
     LogOut,
-    Menu,
     MessageSquare,
     MonitorUp,
     PhoneCall,
@@ -17,7 +16,6 @@ import {
     Users,
     Wifi,
     WifiOff,
-    X,
 } from 'lucide-react';
 import ChatUI from './ChatUI';
 import UserQueueSidebar from './UserQueueSidebar';
@@ -70,41 +68,6 @@ function useSupportsTheater() {
         return () => media.removeEventListener('change', update);
     }, []);
     return supportsTheater;
-}
-
-function useDragResize(def = 45) {
-    const [pct, setPct] = useState(def);
-    const startY = useRef(null);
-    const startPct = useRef(null);
-    const pctRef = useRef(def);
-
-    useEffect(() => {
-        pctRef.current = pct;
-    }, [pct]);
-
-    const onDragStart = useCallback((e) => {
-        const y0 = e.touches ? e.touches[0].clientY : e.clientY;
-        startY.current = y0;
-        startPct.current = pctRef.current;
-
-        const onMove = (ev) => {
-            const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
-            setPct(Math.min(85, Math.max(28, startPct.current + ((startY.current - y) / window.innerHeight) * 100)));
-        };
-        const onEnd = () => {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onEnd);
-            document.removeEventListener('touchmove', onMove);
-            document.removeEventListener('touchend', onEnd);
-        };
-
-        document.addEventListener('mousemove', onMove, { passive: true });
-        document.addEventListener('mouseup', onEnd);
-        document.addEventListener('touchmove', onMove, { passive: true });
-        document.addEventListener('touchend', onEnd);
-    }, []);
-
-    return { heightPct: pct, onDragStart };
 }
 
 const panelClass = 'rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl';
@@ -372,9 +335,7 @@ const RoomLayout = () => {
     const ambientTargetRef = useRef(null);
     const [showUsersPanel, setShowUsersPanel] = useState(true);
     const [activeRightTool, setActiveRightTool] = useState(null);
-    const [activeMobileTool, setActiveMobileTool] = useState(null);
-    const [showMobileMembers, setShowMobileMembers] = useState(false);
-    const [showMobileChat, setShowMobileChat] = useState(false);
+    const [mobileTab, setMobileTab] = useState('watch');
     const [joinNickname, setJoinNickname] = useState('');
     const [joinError, setJoinError] = useState('');
     const [joinErrorCode, setJoinErrorCode] = useState('');
@@ -383,13 +344,11 @@ const RoomLayout = () => {
     const isDesktop = useIsDesktop();
     const supportsTheater = useSupportsTheater();
     const roomAppearance = supportsTheater ? preferredRoomAppearance : 'classic';
-    const { heightPct, onDragStart } = useDragResize(52);
 
     useEffect(() => {
         const closePanels = event => {
             if (event.key === 'Escape') {
                 setActiveRightTool(null);
-                setActiveMobileTool(null);
             }
         };
         document.addEventListener('keydown', closePanels);
@@ -584,174 +543,54 @@ const RoomLayout = () => {
                         </aside>
                     </div>
                 ) : (
-                    <div className="room-mobile-workspace relative flex flex-1 flex-col p-2" data-orientation={isPortrait ? 'portrait' : 'landscape'}>
-                        <div className="room-mobile-player relative w-full shrink-0">
-                            <div className="room-mobile-player-inner relative">
-                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} ambientEnabled={false} />
+                    <div className="room-mobile-workspace" data-orientation={isPortrait ? 'portrait' : 'landscape'} data-mobile-tab={mobileTab}>
+                        <div className="room-mobile-player">
+                            <div className="room-mobile-player-inner">
+                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance="classic" ambientEnabled={false} />
                             </div>
-
-                            {isPortrait && roomAppearance === 'classic' && (
-                                <div className="fixed right-4 z-20 flex flex-col gap-3" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
-                                    {[
-                                        { icon: <Menu size={19} />, label: 'Room', fn: () => setShowMobileMembers(true) },
-                                        { icon: <MessageSquare size={19} />, label: 'Chat', fn: () => setShowMobileChat(true) },
-                                    ].map(item => (
-                                        <button key={item.label} onClick={item.fn} className="flex flex-col items-center gap-1">
-                                            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/75 text-white shadow-xl backdrop-blur-xl">
-                                                {item.icon}
-                                            </div>
-                                            <span className="text-[10px] font-bold text-white" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}>{item.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
                         </div>
 
-                        {!isPortrait && roomAppearance === 'classic' && (
-                            <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 pt-0">
-                                <section className={`${panelClass} overflow-hidden`}>
-                                    <PanelHeader
-                                        icon={<Users size={14} className="text-zinc-400" />}
-                                        title="Room"
-                                        count={users.length}
-                                        open={showUsersPanel}
-                                        onToggle={() => setShowUsersPanel(v => !v)}
-                                    />
-                                    <AnimatePresence initial={false}>
-                                        {showUsersPanel && (
-                                            <MotionDiv initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-                                                <div className="max-h-32 overflow-y-auto">
-                                                    <UserQueueSidebar compact variant={roomAppearance} />
-                                                    <ReadinessPanel variant={roomAppearance} />
-                                                </div>
-                                            </MotionDiv>
-                                        )}
-                                    </AnimatePresence>
-                                </section>
-                                <VoiceRoom variant={roomAppearance} />
-                                <ScreenShareAdapter variant={roomAppearance} />
-                                <div className="min-h-0 flex-1">
-                                    <ChatUI variant={roomAppearance} />
+                        <div className="mobile-classic-panels" hidden={mobileTab === 'watch'}>
+                            <section className="mobile-classic-panel mobile-classic-room" hidden={mobileTab !== 'room'} aria-label="Members and queue">
+                                <div className="mobile-classic-panel-heading">
+                                    <div><span>YOUR ROOM</span><h2>Members & Queue</h2></div>
+                                    <small>{users.length} online</small>
                                 </div>
-                            </div>
-                        )}
+                                <div className="mobile-classic-card">
+                                    <UserQueueSidebar compact variant="classic" />
+                                    <ReadinessPanel variant="classic" />
+                                </div>
+                            </section>
+                            <section className="mobile-classic-panel mobile-classic-call" hidden={mobileTab !== 'call'} aria-label="Voice and screen share">
+                                <div className="mobile-classic-panel-heading">
+                                    <div><span>CONNECT</span><h2>Voice & Share</h2></div>
+                                </div>
+                                <VoiceRoom variant="classic" />
+                                <ScreenShareAdapter variant="classic" />
+                            </section>
+                            <section className="mobile-classic-panel mobile-classic-chat" hidden={mobileTab !== 'chat'} aria-label="Live chat">
+                                <ChatUI hideHeader variant="classic" className="mobile-classic-chat-ui" visible={mobileTab === 'chat'} />
+                            </section>
+                        </div>
 
-                        <AnimatePresence>
-                            {showMobileChat && isPortrait && roomAppearance === 'classic' && (
-                                <MotionDiv
-                                    initial={{ opacity: 0, y: '100%' }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: '100%' }}
-                                    transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                                    className="fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-3xl border-t border-white/10 bg-black/95 shadow-2xl shadow-black backdrop-blur-xl"
-                                    style={{ height: `${heightPct}%`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+                        <nav className="mobile-classic-tabs" aria-label="Mobile room sections">
+                            {[
+                                { id: 'watch', label: 'Watch', icon: <Clapperboard size={19} /> },
+                                { id: 'room', label: 'Room', icon: <Users size={19} /> },
+                                { id: 'call', label: 'Call', icon: <PhoneCall size={19} /> },
+                                { id: 'chat', label: 'Chat', icon: <MessageSquare size={19} /> },
+                            ].map(tab => (
+                                <button
+                                    type="button"
+                                    key={tab.id}
+                                    data-active={mobileTab === tab.id}
+                                    aria-current={mobileTab === tab.id ? 'page' : undefined}
+                                    onClick={() => setMobileTab(tab.id)}
                                 >
-                                    <div
-                                        className="flex shrink-0 cursor-row-resize select-none items-center justify-between border-b border-white/10 px-4 py-3"
-                                        onMouseDown={onDragStart}
-                                        onTouchStart={onDragStart}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <GripHorizontal size={15} className="text-zinc-600" />
-                                            <span className="text-sm font-bold text-white">Live Chat</span>
-                                        </div>
-                                        <button onClick={() => setShowMobileChat(false)} className="text-zinc-400">
-                                            <X size={18} />
-                                        </button>
-                                    </div>
-                                    <div className="min-h-0 flex-1">
-                                        <ChatUI hideHeader variant={roomAppearance} />
-                                    </div>
-                                </MotionDiv>
-                            )}
-                        </AnimatePresence>
-
-                        <AnimatePresence>
-                            {showMobileMembers && isPortrait && roomAppearance === 'classic' && (
-                                <>
-                                    <MotionDiv
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        className="fixed inset-0 z-30 bg-black/70 backdrop-blur-sm"
-                                        onClick={() => setShowMobileMembers(false)}
-                                    />
-                                    <MotionDiv
-                                        initial={{ y: '100%' }}
-                                        animate={{ y: 0 }}
-                                        exit={{ y: '100%' }}
-                                        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                                        className="fixed inset-x-0 bottom-0 z-40 flex max-h-[76vh] flex-col rounded-t-3xl border-t border-white/10 bg-black/95 shadow-2xl shadow-black backdrop-blur-xl"
-                                        style={{ height: '68vh', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-                                    >
-                                        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
-                                            <h2 className="flex items-center gap-2 text-sm font-bold text-white">
-                                                <Users size={15} className="text-zinc-400" />
-                                                Members & Queue
-                                                <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-zinc-500">{users.length}</span>
-                                            </h2>
-                                            <button onClick={() => setShowMobileMembers(false)} className="text-zinc-400">
-                                                <X size={19} />
-                                            </button>
-                                        </div>
-                                        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                                            <VoiceRoom variant={roomAppearance} />
-                                            <ScreenShareAdapter variant={roomAppearance} />
-                                            <UserQueueSidebar compact variant={roomAppearance} />
-                                            <ReadinessPanel variant={roomAppearance} />
-                                        </div>
-                                    </MotionDiv>
-                                </>
-                            )}
-                        </AnimatePresence>
-
-                        {roomAppearance === 'cinematic' && (
-                            <>
-                                <nav className="cinematic-mobile-dock" aria-label="Room tools">
-                                    {[
-                                        { id: 'members', label: 'Members and queue', icon: <Users size={20} /> },
-                                        { id: 'voice', label: 'Voice call', icon: <PhoneCall size={20} /> },
-                                        { id: 'share', label: 'Share screen', icon: <MonitorUp size={20} /> },
-                                        { id: 'chat', label: 'Live chat', icon: <MessageSquare size={20} /> },
-                                    ].map(tool => (
-                                        <TheaterIconButton
-                                            key={tool.id}
-                                            icon={tool.icon}
-                                            label={tool.label}
-                                            active={activeMobileTool === tool.id}
-                                            controls="watchly-mobile-panel"
-                                            onClick={() => setActiveMobileTool(activeMobileTool === tool.id ? null : tool.id)}
-                                        />
-                                    ))}
-                                </nav>
-                                {activeMobileTool && (
-                                    <button
-                                        type="button"
-                                        className="cinematic-mobile-scrim"
-                                        aria-label="Close room panel"
-                                        onClick={() => setActiveMobileTool(null)}
-                                    />
-                                )}
-                                <section
-                                    id="watchly-mobile-panel"
-                                    className="cinematic-mobile-sheet"
-                                    data-open-tool={activeMobileTool || ''}
-                                    aria-hidden={!activeMobileTool}
-                                    inert={!activeMobileTool}
-                                >
-                                    <div className="cinematic-mobile-sheet-header">
-                                        <h2>{({ members: 'Members and queue', voice: 'Voice call', share: 'Share screen', chat: 'Live chat' })[activeMobileTool] || 'Room tools'}</h2>
-                                        <button type="button" onClick={() => setActiveMobileTool(null)} aria-label="Close panel"><X size={19} /></button>
-                                    </div>
-                                    <div className="cinematic-mobile-sheet-content">
-                                        <div className="mobile-sheet-members"><UserQueueSidebar compact variant={roomAppearance} /><ReadinessPanel variant={roomAppearance} /></div>
-                                        <div className="mobile-sheet-voice"><VoiceRoom variant={roomAppearance} /></div>
-                                        <div className="mobile-sheet-share"><ScreenShareAdapter variant={roomAppearance} /></div>
-                                        <div className="mobile-sheet-chat"><ChatUI hideHeader variant={roomAppearance} /></div>
-                                    </div>
-                                </section>
-                            </>
-                        )}
+                                    {tab.icon}<span>{tab.label}</span>
+                                </button>
+                            ))}
+                        </nav>
                     </div>
                 )}
             </div>

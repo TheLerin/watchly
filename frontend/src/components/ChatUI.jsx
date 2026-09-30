@@ -34,7 +34,7 @@ const Avatar = ({ nickname, role }) => {
     );
 };
 
-const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => {
+const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visible = true }) => {
     const { messages, sendMessage, currentUser } = useRoom();
     const [input, setInput] = useState('');
     const [sent, setSent] = useState(false);
@@ -45,8 +45,8 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '' }) => 
 
     useEffect(() => {
         const list = listRef.current;
-        if (list && nearBottomRef.current) list.scrollTop = list.scrollHeight;
-    }, [msgList]);
+        if (list && visible && nearBottomRef.current) list.scrollTop = list.scrollHeight;
+    }, [msgList, visible]);
     useEffect(() => () => clearTimeout(sentTimerRef.current), []);
 
     const handleSend = (e) => {
