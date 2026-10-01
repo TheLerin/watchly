@@ -7,19 +7,23 @@
     --cinema-border: rgb(255 255 255 / 6%);
     --cinema-text: #f5f5f5;
     --cinema-muted: #a1a1aa;
-    --cinema-glass: rgb(8 8 8 / 76%);
+    --cinema-glass: rgb(6 6 6 / 72%);
     --cinema-warm: 255 211 166;
-    --cinema-video-r: 155;
-    --cinema-video-g: 159;
-    --cinema-video-b: 164;
+    --cinema-video-r: 180;
+    --cinema-video-g: 186;
+    --cinema-video-b: 192;
     --cinema-video-rgb: var(--cinema-video-r) var(--cinema-video-g) var(--cinema-video-b);
     --theater-glass: var(--cinema-glass);
-    --theater-screen-width: min(74vw, 1600px, calc((100dvh - 230px) * 1.77778));
-    --theater-screen-top: max(108px, calc((100dvh - var(--theater-screen-width) * 0.5625) * 0.42));
-    --luxe-back-left: calc(50% - var(--theater-screen-width) * 0.5 - 38px);
-    --luxe-back-right: calc(50% + var(--theater-screen-width) * 0.5 + 38px);
-    --luxe-ceiling-end: calc(var(--theater-screen-top) - 44px);
-    --luxe-floor-start: calc(var(--theater-screen-top) + var(--theater-screen-width) * 0.5625 + 30px);
+    /* Anchor the established architecture separately from the smaller screen.
+       Walls, ceiling, platform and aisle positions retain their geometry. */
+    --luxe-wall-screen-width: min(69.5vw, 1450px, calc((100dvh - 230px) * 1.67));
+    --luxe-wall-screen-top: max(122px, calc((100dvh - var(--luxe-wall-screen-width) * 0.5625) * 0.44));
+    --theater-screen-width: var(--luxe-wall-screen-width);
+    --theater-screen-top: var(--luxe-wall-screen-top);
+    --luxe-back-left: calc(50% - var(--luxe-wall-screen-width) * 0.5 - 58px);
+    --luxe-back-right: calc(50% + var(--luxe-wall-screen-width) * 0.5 + 58px);
+    --luxe-ceiling-end: calc(var(--luxe-wall-screen-top) - 22px);
+    --luxe-floor-start: calc(var(--luxe-wall-screen-top) + var(--luxe-wall-screen-width) * 0.5625 + 44px);
     background: var(--cinema-bg);
     color: var(--cinema-text);
     transition: background-color 400ms ease;
@@ -49,21 +53,53 @@
 }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-back-wall {
-    background: radial-gradient(ellipse at 50% 40%, #121212, #070707 65%);
+    background:
+        linear-gradient(90deg, transparent calc(var(--luxe-back-left) + 12px), rgb(255 255 255 / 2%) calc(var(--luxe-back-left) + 13px), transparent calc(var(--luxe-back-left) + 14px)),
+        linear-gradient(270deg, transparent calc(var(--luxe-back-left) + 12px), rgb(255 255 255 / 2%) calc(var(--luxe-back-left) + 13px), transparent calc(var(--luxe-back-left) + 14px)),
+        radial-gradient(ellipse 58% 48% at 50% 40%, #0a0a0a, #050505 80%);
     clip-path: polygon(var(--luxe-back-left) var(--luxe-ceiling-end), var(--luxe-back-right) var(--luxe-ceiling-end), var(--luxe-back-right) var(--luxe-floor-start), var(--luxe-back-left) var(--luxe-floor-start));
 }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-ceiling {
     background:
-        repeating-linear-gradient(90deg, transparent 0 17%, rgb(255 255 255 / 2%) 17.1% 17.2%, transparent 17.3% 34%),
-        linear-gradient(#030303, #111 55%, #070707);
-    clip-path: polygon(0 0, 100% 0, var(--luxe-back-right) var(--luxe-ceiling-end), var(--luxe-back-left) var(--luxe-ceiling-end));
+        radial-gradient(ellipse 34% 10% at 50% var(--luxe-ceiling-end), rgb(var(--cinema-warm) / 3.5%), transparent),
+        linear-gradient(#050505 70px, transparent var(--luxe-ceiling-end)),
+        conic-gradient(at 50% var(--luxe-ceiling-end),
+            #060606 0.15deg 28deg, rgb(255 255 255 / 2.2%) 28.1deg 28.3deg,
+            #080808 28.4deg 180deg, #050505 180deg 331.6deg,
+            rgb(255 255 255 / 2.2%) 331.7deg 331.9deg, #080808 332deg 359.85deg,
+            rgb(255 255 255 / 2.2%) 359.9deg 360deg);
+    clip-path: polygon(0 70px, 100% 70px, var(--luxe-back-right) var(--luxe-ceiling-end), var(--luxe-back-left) var(--luxe-ceiling-end));
 }
+
+.room-shell[data-theme="cinema-luxe"] .luxe-ceiling i {
+    top: calc(70px + (var(--luxe-ceiling-end) - 70px) * 0.45);
+    left: 32%;
+    width: 5px;
+    height: 2px;
+    border-radius: 50%;
+    background: rgb(var(--cinema-warm) / 26%);
+    box-shadow: 0 0 10px 3px rgb(var(--cinema-warm) / 3%);
+    transition: opacity 700ms ease;
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-ceiling i:last-child { left: 68%; }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-wall {
     background:
-        repeating-linear-gradient(90deg, transparent 0 3.5%, rgb(255 255 255 / 3%) 3.6% 3.65%, transparent 3.75% 7%),
-        linear-gradient(90deg, #040404, #141414 17%, #080808 32%);
+        repeating-linear-gradient(90deg, transparent 0 70px, rgb(255 255 255 / 2.5%) 71px, transparent 72px),
+        linear-gradient(90deg, #080808, #111 6%, #0a0a0a 12%, #050505 18%);
+}
+
+/* One broad, dim wash per wall catches the acoustic texture. No fixtures. */
+.room-shell[data-theme="cinema-luxe"] .luxe-wall::before {
+    position: absolute;
+    inset: 0;
+    content: '';
+    pointer-events: none;
+    background: radial-gradient(ellipse 7% 42% at 6.5% 58%, rgb(255 190 125 / 7.5%), rgb(255 190 125 / 5.5%) 22%, rgb(255 190 125 / 1.5%) 58%, transparent 88%);
+    filter: blur(28px);
+    transition: opacity 700ms ease;
 }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-wall-left {
@@ -73,104 +109,159 @@
 .room-shell[data-theme="cinema-luxe"] .luxe-wall-right {
     clip-path: polygon(var(--luxe-back-right) var(--luxe-ceiling-end), 100% 0, 100% 100%, var(--luxe-back-right) var(--luxe-floor-start));
     background:
-        repeating-linear-gradient(90deg, transparent 0 3.5%, rgb(255 255 255 / 3%) 3.6% 3.65%, transparent 3.75% 7%),
-        linear-gradient(270deg, #040404, #141414 17%, #080808 32%);
+        repeating-linear-gradient(270deg, transparent 0 70px, rgb(255 255 255 / 2.5%) 71px, transparent 72px),
+        linear-gradient(270deg, #080808, #111 6%, #0a0a0a 12%, #050505 18%);
 }
+
+.room-shell[data-theme="cinema-luxe"] .luxe-wall-right::before { transform: scaleX(-1); }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-floor {
     clip-path: polygon(var(--luxe-back-left) var(--luxe-floor-start), var(--luxe-back-right) var(--luxe-floor-start), 100% 100%, 0 100%);
-    background: linear-gradient(#151515, #0a0a0a 80%, #020202);
+    /* Neutral matte material; no coloured pool or reflected screen image. */
+    background: linear-gradient(
+        #090909 var(--luxe-floor-start),
+        #070707 calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.35),
+        #060606 calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.64),
+        #020202);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-platform {
+    z-index: 1;
+    top: calc(var(--luxe-floor-start) - 23px);
+    left: 50%;
+    width: calc(var(--luxe-wall-screen-width) + 100px);
+    height: clamp(16px, 2.5dvh, 24px);
+    background:
+        radial-gradient(ellipse at 50% 85%, rgb(255 185 110 / 4%), transparent 75%),
+        linear-gradient(#121212 0%, #0c0c0c 45%, #030303 48%, #040404);
+    box-shadow: inset 0 1px 1px rgb(255 185 110 / 3%), 0 8px 30px rgb(255 185 110 / 4%);
+    clip-path: polygon(2% 0, 98% 0, 100% 45%, 100% 100%, 0 100%, 0 45%);
+    transform: translateX(-50%);
+    transition: opacity 700ms ease;
 }
 
 .room-shell[data-theme="cinema-luxe"] :is(.luxe-screen-recess, .luxe-ambient) {
-    top: var(--theater-screen-top);
     left: 50%;
-    width: var(--theater-screen-width);
-    aspect-ratio: 16 / 9;
     transform: translateX(-50%);
-    transition: transform 700ms ease, opacity 700ms ease, background-color 650ms ease;
+    transition: transform 700ms ease, opacity 700ms ease, background-color 650ms ease, box-shadow 700ms ease;
 }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-screen-recess {
     z-index: 1;
+    top: calc(var(--theater-screen-top) - 16px);
+    width: calc(var(--theater-screen-width) + 32px);
+    height: calc(var(--theater-screen-width) * 0.5625 + 32px);
     border-radius: 3px;
-    box-shadow: 0 0 0 20px #050505, 0 0 0 21px rgb(var(--cinema-warm) / 7%), 0 12px 34px 28px rgb(0 0 0 / 80%);
+    background: #050505;
+    box-shadow: inset 0 1px 2px rgb(var(--cinema-warm) / 11%), inset 0 0 24px rgb(0 0 0 / 95%), 0 0 24px rgb(0 0 0 / 75%), 0 0 35px rgb(255 185 110 / 4%);
 }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-ambient {
     z-index: 2;
+    top: calc(var(--theater-screen-top) - var(--theater-screen-width) * 0.04);
+    width: calc(var(--theater-screen-width) * 1.16);
+    height: calc(var(--theater-screen-width) * 0.6425);
     opacity: 0;
-    background: rgb(var(--cinema-video-rgb) / 22%);
-    filter: blur(72px);
-    mask-image: linear-gradient(#000 0 65%, rgb(0 0 0 / 25%) 88%, transparent);
+    background: radial-gradient(ellipse, rgb(var(--cinema-video-rgb) / 16%), transparent 74%);
+    filter: blur(90px);
+    mask-image: linear-gradient(#000 0 70%, rgb(0 0 0 / 20%) 88%, transparent);
+}
+
+/* CSS reads iframe presence only; iframe pixels and controls are untouched. */
+.room-shell[data-theme="cinema-luxe"]:has(.room-player-surface iframe) .luxe-ambient {
+    opacity: 1;
+    background: radial-gradient(ellipse, rgb(180 186 192 / 4%), transparent 76%);
 }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-aisle {
     inset: 0;
-    opacity: 0.45;
+    opacity: 0.72;
     transition: opacity 700ms ease;
 }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-aisle i {
-    width: 7px;
-    height: 2px;
+    width: 5px;
+    height: 3px;
     border-radius: 50%;
-    background: rgb(var(--cinema-warm) / 50%);
-    box-shadow: 0 0 7px 2px rgb(var(--cinema-warm) / 10%);
+    background: rgb(255 218 175 / 65%);
+    box-shadow: 0 0 7px rgb(255 185 110 / 20%);
 }
 
-.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(1) { top: calc(var(--luxe-floor-start) + 8px); left: 17%; width: 3px; }
-.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(2) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.32); left: 13%; width: 4px; }
-.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(3) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.57); left: 9%; width: 5px; }
-.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(4) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.84); left: 5%; }
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(1) { top: calc(var(--luxe-floor-start) + 8px); left: var(--luxe-back-left); width: 3px; }
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(2) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.24); left: calc(var(--luxe-back-left) * 0.8); width: 4px; }
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(3) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.52); left: calc(var(--luxe-back-left) * 0.54); }
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(4) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.88); left: calc(var(--luxe-back-left) * 0.2); }
 .room-shell[data-theme="cinema-luxe"] .luxe-aisle-right { transform: scaleX(-1); }
 
-/* Lightweight matte upholstered silhouette; no image download is required. */
+/* Curved upholstered fallback; the scene's optional sofaImage prop replaces
+   only this decoration with a supplied transparent /assets/cinema-sofa.webp. */
 .room-shell[data-theme="cinema-luxe"] .luxe-sofa {
     z-index: 3;
-    bottom: -14px;
+    bottom: clamp(-28px, -2.64dvh, -18px);
     left: 50%;
-    display: flex;
     width: clamp(280px, 42vw, 720px);
-    height: clamp(74px, 13dvh, 134px);
-    gap: 3px;
-    padding: 0 20px;
-    border-radius: 22px 22px 0 0;
-    background: linear-gradient(#101010, #020202);
-    box-shadow: 0 -1px 0 rgb(255 255 255 / 4%), 0 -14px 28px rgb(0 0 0 / 45%);
+    height: clamp(80px, 12dvh, 128px);
     transform: translateX(-50%);
-    transition: opacity 700ms ease;
+    filter: drop-shadow(0 -3px 8px rgb(var(--cinema-video-rgb) / 4.375%));
+    transition: opacity 700ms ease, filter 650ms ease;
 }
 
-.room-shell[data-theme="cinema-luxe"] .luxe-sofa span {
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa-back {
+    inset: 0 5% 0;
+    display: flex;
+    overflow: hidden;
+    border-radius: 28% 28% 8% 8% / 24% 24% 8% 8%;
+    background: linear-gradient(#141414, #060606 24%, #020202 85%);
+    box-shadow: inset 0 1px 2px rgb(var(--cinema-video-rgb) / 16.25%), inset 0 5px 8px -7px rgb(var(--cinema-video-rgb) / 15%), inset 0 -16px 20px #020202;
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa-back span {
     position: relative;
     flex: 1;
-    height: 80%;
-    margin-top: 4px;
-    border: 1px solid rgb(255 255 255 / 2%);
-    border-radius: 18px 18px 5px 5px;
-    background: linear-gradient(170deg, #161616, #060606 60%);
+    margin-top: 9%;
+    border-right: 1px solid rgb(255 255 255 / 1.5%);
+    background: radial-gradient(ellipse at 50% 0, rgb(255 255 255 / 1.5%), transparent 65%);
 }
+
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa-back span:last-child { border: 0; }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-sofa::before,
 .room-shell[data-theme="cinema-luxe"] .luxe-sofa::after {
     position: absolute;
     bottom: 0;
-    width: 28px;
-    height: 84%;
-    border-radius: 15px 15px 0 0;
-    background: linear-gradient(90deg, #060606, #131313, #050505);
+    width: 9%;
+    height: 68%;
+    border-radius: 50% 50% 10% 10% / 25% 25% 8% 8%;
+    background: linear-gradient(90deg, #050505, #111 45%, #070707);
+    box-shadow: inset 0 1px 1px rgb(255 255 255 / 3%);
     content: '';
     pointer-events: none;
 }
 
-.room-shell[data-theme="cinema-luxe"] .luxe-sofa::before { left: -3px; }
-.room-shell[data-theme="cinema-luxe"] .luxe-sofa::after { right: -3px; }
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa::before { left: 0; transform: rotate(-3deg); }
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa::after { right: 0; transform: rotate(3deg); }
+
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa[data-sofa-asset="true"] {
+    height: clamp(110px, 17dvh, 180px);
+    bottom: clamp(-40px, -3.74dvh, -24px);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa[data-sofa-asset="true"]::before,
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa[data-sofa-asset="true"]::after { display: none; }
+
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa-image {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center bottom;
+    filter: brightness(0.35) contrast(1.1);
+}
 
 .room-shell[data-theme="cinema-luxe"] .room-video-player > .room-player-surface {
-    border: 1px solid rgb(255 255 255 / 7%);
+    border: 1px solid rgb(255 255 255 / 5%);
     border-radius: 3px;
-    box-shadow: inset 0 0 16px #000, 0 0 0 8px #030303;
+    box-shadow: none;
     transition: transform 700ms ease;
 }
 
@@ -189,9 +280,9 @@
 }
 
 .room-shell[data-theme="cinema-luxe"] .room-header {
-    border-color: var(--cinema-border);
+    border-color: rgb(255 255 255 / 5.5%);
     background: var(--cinema-glass);
-    backdrop-filter: blur(22px);
+    backdrop-filter: blur(20px);
 }
 
 .room-shell[data-theme="cinema-luxe"] .theater-icon-button {
@@ -200,6 +291,9 @@
     color: rgb(255 255 255 / 58%);
     backdrop-filter: blur(18px);
 }
+
+.room-shell[data-theme="cinema-luxe"] :is(.theater-left-dock, .theater-right-dock) .theater-icon-button { opacity: 0.55; }
+.room-shell[data-theme="cinema-luxe"] :is(.theater-left-dock, .theater-right-dock) .theater-icon-button:is(:hover, :focus-visible, [aria-expanded="true"]) { opacity: 1; }
 
 .room-shell[data-theme="cinema-luxe"] .theater-icon-button:is(:hover, :focus-visible, [aria-expanded="true"]) {
     border-color: rgb(255 255 255 / 18%);
@@ -217,16 +311,23 @@
     outline-offset: 3px;
 }
 
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.luxe-wall, .luxe-back-wall) { opacity: 0.48; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ceiling { opacity: 0.2; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.luxe-floor, .luxe-sofa) { opacity: 0.4; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-aisle { opacity: 0.12; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ambient { opacity: 0.7; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.luxe-wall, .luxe-back-wall, .luxe-platform) { opacity: 0.6; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-wall::before { opacity: 0.85; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ceiling { opacity: 0.5; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ceiling i { opacity: 0.6; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.luxe-floor, .luxe-sofa) { opacity: 0.6; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-aisle { opacity: 0.29; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ambient { opacity: 0.55; }
 .room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-screen-recess {
-    box-shadow: 0 0 0 20px #030303, 0 0 0 21px rgb(255 255 255 / 2%), 0 12px 34px 28px rgb(0 0 0 / 90%);
+    box-shadow: inset 0 1px 2px rgb(var(--cinema-warm) / 8%), inset 0 0 24px rgb(0 0 0 / 95%), 0 0 24px rgb(0 0 0 / 75%), 0 0 35px rgb(255 185 110 / 2.5%);
 }
 
 @media (min-width: 1180px) and (min-height: 650px) {
+    .room-shell[data-theme="cinema-luxe"] {
+        --theater-screen-width: calc(var(--luxe-wall-screen-width) * 0.97);
+        --theater-screen-top: calc(var(--luxe-wall-screen-top) + var(--luxe-wall-screen-width) * 0.5625 * 0.015);
+    }
+
     .room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.room-player-surface:not(:fullscreen), .luxe-screen-recess, .luxe-ambient) {
         transform: translateX(-50%) scale(1.04);
     }

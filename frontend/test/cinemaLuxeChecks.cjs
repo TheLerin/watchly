@@ -35,22 +35,35 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
  assert.equal(await host.evaluate(() => window.cinemaOriginalVideo === document.querySelector('.room-player-surface video')), true,
   'theme switches must preserve the authoritative video element');
  await wait(async () => await shell(host).getAttribute('data-cinema-ambient') === 'sampled', 'same-origin video was not sampled');
+ await host.waitForTimeout(800);
  const geometry = await host.evaluate(() => {
   const screen = document.querySelector('.room-player-surface').getBoundingClientRect();
   const sofa = document.querySelector('.luxe-sofa').getBoundingClientRect();
   return {
    radius: getComputedStyle(document.querySelector('.room-player-surface')).borderRadius,
+   playerShadow: getComputedStyle(document.querySelector('.room-player-surface')).boxShadow,
+   recess: document.querySelector('.luxe-screen-recess').getBoundingClientRect(),
+   platform: document.querySelector('.luxe-platform').getBoundingClientRect(),
+   previousScreenWidth: Math.min(innerWidth * 0.695, 1450, (innerHeight - 230) * 1.67) * 1.04,
    nonInteractive: [...document.querySelectorAll('.cinema-luxe-scene, .cinema-luxe-scene *')].every(element => getComputedStyle(element).pointerEvents === 'none'),
    floor: getComputedStyle(document.querySelector('.luxe-floor')).clipPath,
    screen, sofa, scrollHeight: document.documentElement.scrollHeight, height: innerHeight,
   };
  });
  assert.equal(geometry.radius, '3px');
+ assert.equal(geometry.playerShadow, 'none', 'the video should have one thin bezel without nested frame shadows');
+ assert.ok(Math.abs(geometry.screen.width / geometry.previousScreenWidth - 0.97) < 0.001,
+  'desktop screen should be 3% smaller than the previous Cinema Luxe screen');
+ assert.ok((geometry.recess.width - geometry.screen.width) / 2 >= 15 && (geometry.recess.width - geometry.screen.width) / 2 <= 18,
+  'recess should be about one third thinner while retaining one bezel');
+ assert.ok(geometry.platform.height >= 16 && geometry.platform.height <= 30, 'screen platform should remain low');
+ assert.ok(geometry.sofa.top > geometry.platform.bottom + 15, 'leave visible floor between platform and sofa');
  assert.equal(geometry.nonInteractive, true);
  assert.match(geometry.floor, /^polygon/);
  assert.ok(geometry.sofa.top > geometry.screen.bottom, 'sofa must sit below the screen');
  assert.ok(geometry.scrollHeight <= geometry.height + 1, 'theater must fit in the viewport');
  assert.equal(await host.locator('.luxe-aisle i').count(), 8);
+ assert.equal(await host.locator('.luxe-ceiling i').count(), 2);
  await host.getByRole('button', { name: 'Watch controls', exact: true }).click();
  await host.evaluate(() => document.activeElement.blur());
  await host.mouse.move(640, 350);
@@ -113,9 +126,14 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
  await wait(async () => await shell(host).getAttribute('data-cinema-playing') === 'false' && (await values(viewer)).paused,
   'pause must restore room lighting and synchronize');
  await host.waitForTimeout(800);
+ assert.equal(await host.locator('.luxe-wall').first().evaluate(element => getComputedStyle(element).opacity), '1');
+ assert.equal(await host.locator('.luxe-ceiling').evaluate(element => getComputedStyle(element).opacity), '1');
  await host.screenshot({ path: path.resolve(__dirname, '../../cinema-luxe-paused-visual-verification.png') });
  await video(host).evaluate(media => media.play());
  await wait(async () => await shell(host).getAttribute('data-cinema-playing') === 'true', 'playback must dim the room');
+ await host.waitForTimeout(800);
+ assert.equal(await host.locator('.luxe-wall').first().evaluate(element => getComputedStyle(element).opacity), '0.6');
+ assert.equal(await host.locator('.luxe-ceiling').evaluate(element => getComputedStyle(element).opacity), '0.5');
  assert.equal(await viewer.evaluate(() => localStorage.getItem('watchly-theme')), 'cinema-luxe');
  for (const page of [host, viewer]) {
   await page.evaluate(() => {
