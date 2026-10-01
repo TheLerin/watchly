@@ -1,0 +1,256 @@
+/* All geometry, colour and motion are opt-in. Existing themes keep their CSS.
+   Scene: 0; reflected light: 2; actual screen: 6; chrome/drawers: 35–40;
+   existing popovers/tooltips: 50–60; existing modal/toast layers stay above. */
+.room-shell[data-theme="cinema-luxe"] {
+    --cinema-bg: #050505;
+    --cinema-surface: #0a0a0a;
+    --cinema-border: rgb(255 255 255 / 6%);
+    --cinema-text: #f5f5f5;
+    --cinema-muted: #a1a1aa;
+    --cinema-glass: rgb(8 8 8 / 76%);
+    --cinema-warm: 255 211 166;
+    --cinema-video-r: 155;
+    --cinema-video-g: 159;
+    --cinema-video-b: 164;
+    --cinema-video-rgb: var(--cinema-video-r) var(--cinema-video-g) var(--cinema-video-b);
+    --theater-glass: var(--cinema-glass);
+    --theater-screen-width: min(74vw, 1600px, calc((100dvh - 230px) * 1.77778));
+    --theater-screen-top: max(108px, calc((100dvh - var(--theater-screen-width) * 0.5625) * 0.42));
+    --luxe-back-left: calc(50% - var(--theater-screen-width) * 0.5 - 38px);
+    --luxe-back-right: calc(50% + var(--theater-screen-width) * 0.5 + 38px);
+    --luxe-ceiling-end: calc(var(--theater-screen-top) - 44px);
+    --luxe-floor-start: calc(var(--theater-screen-top) + var(--theater-screen-width) * 0.5625 + 30px);
+    background: var(--cinema-bg);
+    color: var(--cinema-text);
+    transition: background-color 400ms ease;
+}
+
+.room-shell[data-theme="cinema-luxe"] :is(.classic-room-background, .cinematic-room-environment, .video-ambient-light) {
+    display: none;
+}
+
+.room-shell[data-theme="cinema-luxe"] .cinema-luxe-scene,
+.room-shell[data-theme="cinema-luxe"] .cinema-luxe-scene * {
+    position: absolute;
+    pointer-events: none;
+}
+
+.room-shell[data-theme="cinema-luxe"] .cinema-luxe-scene {
+    z-index: 0;
+    inset: 0;
+    overflow: hidden;
+    background: #030303;
+    animation: luxe-arrive 400ms ease both;
+}
+
+.room-shell[data-theme="cinema-luxe"] :is(.luxe-back-wall, .luxe-wall, .luxe-ceiling, .luxe-floor) {
+    inset: 0;
+    transition: opacity 700ms ease;
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-back-wall {
+    background: radial-gradient(ellipse at 50% 40%, #121212, #070707 65%);
+    clip-path: polygon(var(--luxe-back-left) var(--luxe-ceiling-end), var(--luxe-back-right) var(--luxe-ceiling-end), var(--luxe-back-right) var(--luxe-floor-start), var(--luxe-back-left) var(--luxe-floor-start));
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-ceiling {
+    background:
+        repeating-linear-gradient(90deg, transparent 0 17%, rgb(255 255 255 / 2%) 17.1% 17.2%, transparent 17.3% 34%),
+        linear-gradient(#030303, #111 55%, #070707);
+    clip-path: polygon(0 0, 100% 0, var(--luxe-back-right) var(--luxe-ceiling-end), var(--luxe-back-left) var(--luxe-ceiling-end));
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-wall {
+    background:
+        repeating-linear-gradient(90deg, transparent 0 3.5%, rgb(255 255 255 / 3%) 3.6% 3.65%, transparent 3.75% 7%),
+        linear-gradient(90deg, #040404, #141414 17%, #080808 32%);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-wall-left {
+    clip-path: polygon(0 0, var(--luxe-back-left) var(--luxe-ceiling-end), var(--luxe-back-left) var(--luxe-floor-start), 0 100%);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-wall-right {
+    clip-path: polygon(var(--luxe-back-right) var(--luxe-ceiling-end), 100% 0, 100% 100%, var(--luxe-back-right) var(--luxe-floor-start));
+    background:
+        repeating-linear-gradient(90deg, transparent 0 3.5%, rgb(255 255 255 / 3%) 3.6% 3.65%, transparent 3.75% 7%),
+        linear-gradient(270deg, #040404, #141414 17%, #080808 32%);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-floor {
+    clip-path: polygon(var(--luxe-back-left) var(--luxe-floor-start), var(--luxe-back-right) var(--luxe-floor-start), 100% 100%, 0 100%);
+    background: linear-gradient(#151515, #0a0a0a 80%, #020202);
+}
+
+.room-shell[data-theme="cinema-luxe"] :is(.luxe-screen-recess, .luxe-ambient) {
+    top: var(--theater-screen-top);
+    left: 50%;
+    width: var(--theater-screen-width);
+    aspect-ratio: 16 / 9;
+    transform: translateX(-50%);
+    transition: transform 700ms ease, opacity 700ms ease, background-color 650ms ease;
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-screen-recess {
+    z-index: 1;
+    border-radius: 3px;
+    box-shadow: 0 0 0 20px #050505, 0 0 0 21px rgb(var(--cinema-warm) / 7%), 0 12px 34px 28px rgb(0 0 0 / 80%);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-ambient {
+    z-index: 2;
+    opacity: 0;
+    background: rgb(var(--cinema-video-rgb) / 22%);
+    filter: blur(72px);
+    mask-image: linear-gradient(#000 0 65%, rgb(0 0 0 / 25%) 88%, transparent);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle {
+    inset: 0;
+    opacity: 0.45;
+    transition: opacity 700ms ease;
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i {
+    width: 7px;
+    height: 2px;
+    border-radius: 50%;
+    background: rgb(var(--cinema-warm) / 50%);
+    box-shadow: 0 0 7px 2px rgb(var(--cinema-warm) / 10%);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(1) { top: calc(var(--luxe-floor-start) + 8px); left: 17%; width: 3px; }
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(2) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.32); left: 13%; width: 4px; }
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(3) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.57); left: 9%; width: 5px; }
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle i:nth-child(4) { top: calc(var(--luxe-floor-start) + (100dvh - var(--luxe-floor-start)) * 0.84); left: 5%; }
+.room-shell[data-theme="cinema-luxe"] .luxe-aisle-right { transform: scaleX(-1); }
+
+/* Lightweight matte upholstered silhouette; no image download is required. */
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa {
+    z-index: 3;
+    bottom: -14px;
+    left: 50%;
+    display: flex;
+    width: clamp(280px, 42vw, 720px);
+    height: clamp(74px, 13dvh, 134px);
+    gap: 3px;
+    padding: 0 20px;
+    border-radius: 22px 22px 0 0;
+    background: linear-gradient(#101010, #020202);
+    box-shadow: 0 -1px 0 rgb(255 255 255 / 4%), 0 -14px 28px rgb(0 0 0 / 45%);
+    transform: translateX(-50%);
+    transition: opacity 700ms ease;
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa span {
+    position: relative;
+    flex: 1;
+    height: 80%;
+    margin-top: 4px;
+    border: 1px solid rgb(255 255 255 / 2%);
+    border-radius: 18px 18px 5px 5px;
+    background: linear-gradient(170deg, #161616, #060606 60%);
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa::before,
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa::after {
+    position: absolute;
+    bottom: 0;
+    width: 28px;
+    height: 84%;
+    border-radius: 15px 15px 0 0;
+    background: linear-gradient(90deg, #060606, #131313, #050505);
+    content: '';
+    pointer-events: none;
+}
+
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa::before { left: -3px; }
+.room-shell[data-theme="cinema-luxe"] .luxe-sofa::after { right: -3px; }
+
+.room-shell[data-theme="cinema-luxe"] .room-video-player > .room-player-surface {
+    border: 1px solid rgb(255 255 255 / 7%);
+    border-radius: 3px;
+    box-shadow: inset 0 0 16px #000, 0 0 0 8px #030303;
+    transition: transform 700ms ease;
+}
+
+.room-shell[data-theme="cinema-luxe"] .room-player-surface :is(video, iframe) { object-fit: contain; }
+
+.room-shell[data-theme="cinema-luxe"] .room-player-surface:fullscreen {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    transform: none;
+}
+
+.room-shell[data-theme="cinema-luxe"] :is(.room-header, .theater-left-dock, .theater-right-dock) {
+    opacity: 1;
+    transition: opacity 650ms ease;
+}
+
+.room-shell[data-theme="cinema-luxe"] .room-header {
+    border-color: var(--cinema-border);
+    background: var(--cinema-glass);
+    backdrop-filter: blur(22px);
+}
+
+.room-shell[data-theme="cinema-luxe"] .theater-icon-button {
+    border-color: var(--cinema-border);
+    background: rgb(8 8 8 / 70%);
+    color: rgb(255 255 255 / 58%);
+    backdrop-filter: blur(18px);
+}
+
+.room-shell[data-theme="cinema-luxe"] .theater-icon-button:is(:hover, :focus-visible, [aria-expanded="true"]) {
+    border-color: rgb(255 255 255 / 18%);
+    color: #fff;
+}
+
+.room-shell[data-theme="cinema-luxe"] :is(.video-player-controls, .room-right-rail > section, .room-right-rail > .room-chat-group, .room-settings-popover, .room-header-popover, .mobile-classic-card, .mobile-classic-chat-ui, .mobile-classic-tabs) {
+    border-color: var(--cinema-border);
+    background-color: rgb(8 8 8 / 94%);
+    backdrop-filter: blur(24px);
+}
+
+.room-shell[data-theme="cinema-luxe"] :is(button, a, input, textarea, select):focus-visible {
+    outline: 2px solid #f3d3aa;
+    outline-offset: 3px;
+}
+
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.luxe-wall, .luxe-back-wall) { opacity: 0.48; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ceiling { opacity: 0.2; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.luxe-floor, .luxe-sofa) { opacity: 0.4; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-aisle { opacity: 0.12; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ambient { opacity: 0.7; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-screen-recess {
+    box-shadow: 0 0 0 20px #030303, 0 0 0 21px rgb(255 255 255 / 2%), 0 12px 34px 28px rgb(0 0 0 / 90%);
+}
+
+@media (min-width: 1180px) and (min-height: 650px) {
+    .room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.room-player-surface:not(:fullscreen), .luxe-screen-recess, .luxe-ambient) {
+        transform: translateX(-50%) scale(1.04);
+    }
+
+    .room-shell[data-theme="cinema-luxe"][data-cinema-controls-hidden="true"] :is(.room-header, .theater-left-dock, .theater-right-dock):not(:focus-within) {
+        opacity: 0;
+        pointer-events: none;
+    }
+}
+
+/* Keep the existing compact desktop and mobile layouts and tab navigation. */
+@media (max-width: 1179px), (max-height: 649px) {
+    .room-shell[data-theme="cinema-luxe"] .cinema-luxe-scene {
+        background: radial-gradient(ellipse at 50% 25%, #101010, #030303 70%);
+    }
+    .room-shell[data-theme="cinema-luxe"] .cinema-luxe-scene > * { display: none; }
+    .room-shell[data-theme="cinema-luxe"] .room-player-surface { box-shadow: 0 0 0 5px #030303; }
+}
+
+@keyframes luxe-arrive { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .room-shell[data-theme="cinema-luxe"],
+    .room-shell[data-theme="cinema-luxe"] *,
+    .room-shell[data-theme="cinema-luxe"] *::before,
+    .room-shell[data-theme="cinema-luxe"] *::after { animation: none; transition: none; }
+}

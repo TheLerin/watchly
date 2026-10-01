@@ -7,6 +7,7 @@ export const useTheme = () => useContext(ThemeContext);
 export const THEME_META = {
     'glass-dark':  { label: 'Dark Glass',  orb: ['#333','#111'] },
     'glass-light': { label: 'Light Glass', orb: ['#eee','#ccc'] },
+    'cinema-luxe': { label: 'Cinema Luxe', orb: ['#39342e','#050505'] },
 };
 
 export const ROOM_APPEARANCE_META = {
@@ -26,6 +27,7 @@ export const ThemeProvider = ({ children }) => {
     const [theme, setThemeState] = useState(() => {
         const s = localStorage.getItem('watchly-theme');
         if (s === 'light' || s === 'glass-light') return 'glass-light';
+        if (s === 'cinema-luxe') return s;
         return 'glass-dark';
     });
 

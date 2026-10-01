@@ -30,6 +30,8 @@ import { BackgroundLayers } from './BackgroundLayers';
 import toast from 'react-hot-toast';
 import { NETWORK_QUALITY_META, formatPing } from '../utils/networkQuality';
 import './room-theater.css';
+import CinemaLuxeScene from './CinemaLuxeScene';
+import './cinema-luxe.css';
 
 const MotionDiv = motion.div;
 const MotionSpan = motion.span;
@@ -343,7 +345,8 @@ const RoomLayout = () => {
     const isPortrait = useOrientation();
     const isDesktop = useIsDesktop();
     const supportsTheater = useSupportsTheater();
-    const roomAppearance = supportsTheater ? preferredRoomAppearance : 'classic';
+    const cinemaLuxe = theme === 'cinema-luxe';
+    const roomAppearance = supportsTheater ? (cinemaLuxe ? 'cinematic' : preferredRoomAppearance) : 'classic';
 
     useEffect(() => {
         const closePanels = event => {
@@ -433,7 +436,9 @@ const RoomLayout = () => {
             ref={ambientTargetRef}
             className="room-shell relative h-[100dvh] w-full overflow-hidden bg-black text-white"
             data-room-appearance={roomAppearance}
+            data-theme={theme}
         >
+            {cinemaLuxe && <CinemaLuxeScene />}
             <div className="classic-room-background"><BackgroundLayers /></div>
             <div className="cinematic-room-environment" aria-hidden="true">
                 <div className="theater-back-wall" />
@@ -479,13 +484,13 @@ const RoomLayout = () => {
                                     <span className="video-ambient-right" />
                                     <span className="video-ambient-bottom" />
                                 </div>
-                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} />
-                                <div className="cinematic-sofa" aria-hidden="true">
+                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} cinemaLuxe={cinemaLuxe} />
+                                {!cinemaLuxe && <div className="cinematic-sofa" aria-hidden="true">
                                     <picture>
                                         <source srcSet="/assets/sofa-couple.webp" type="image/webp" />
                                         <img src="/assets/sofa-couple.png" alt="" />
                                     </picture>
-                                </div>
+                                </div>}
                             </div>
                         </main>
 
@@ -549,7 +554,7 @@ const RoomLayout = () => {
                     <div className="room-mobile-workspace" data-orientation={isPortrait ? 'portrait' : 'landscape'} data-mobile-tab={mobileTab}>
                         <div className="room-mobile-player">
                             <div className="room-mobile-player-inner">
-                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance="classic" ambientEnabled={false} />
+                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance="classic" ambientEnabled={false} cinemaLuxe={cinemaLuxe} />
                             </div>
                         </div>
 

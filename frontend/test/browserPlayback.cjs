@@ -182,6 +182,7 @@ const ready = async url => {
  await video(host).evaluate(v=>v.play());
  await wait(async()=>!(await values(viewer)).paused,'remote resume failed');
  console.log('PASS remote play, pause, seek, resume',await values(host),await values(viewer));
+ await require('./cinemaLuxeChecks.cjs')({ host, viewer, browser, baseUrl, video, values, wait });
 
  await host.evaluate(() => {
   navigator.mediaDevices.getDisplayMedia = async () => {
@@ -216,8 +217,14 @@ const ready = async url => {
  assert.equal(await host.evaluate(() => window.testScreenStream.getVideoTracks()[0].readyState), 'ended');
  console.log('PASS screen sharing survives readiness updates and stops cleanly (synthetic capture)');
  await wait(async()=> (await values(host)).ready>=3&&(await values(viewer)).ready>=3,'local media not ready');
+ assert.equal(await host.locator('.room-shell').getAttribute('data-cinema-ambient'), 'neutral');
+ const originalVolume = await video(host).evaluate(v => v.volume);
+ await video(host).evaluate(v => { v.volume = 0.35; });
+ assert.equal(await video(host).evaluate(v => v.volume), 0.35);
+ await video(host).evaluate((v, volume) => { v.volume = volume; }, originalVolume);
  await host.keyboard.press('Space');
  await wait(async()=>!(await values(host)).paused&&!(await values(viewer)).paused,'local scheduled play failed');
+ await wait(async () => await host.locator('.room-shell').getAttribute('data-cinema-ambient') === 'sampled', 'local movie did not provide ambient lighting');
  await new Promise(r=>setTimeout(r,1500));
  let a=await values(host),b=await values(viewer);
  assert.ok(Math.abs(a.time-b.time)<0.3,JSON.stringify({a,b}));

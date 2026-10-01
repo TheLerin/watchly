@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { fingerprintLocalFile, formatFileSize, readLocalVideoDuration } from '../utils/localMedia';
 import useSynchronizedMedia from '../hooks/useSynchronizedMedia';
 import useVideoAmbientLight from '../hooks/useVideoAmbientLight';
+import useCinemaLuxeEffects from '../hooks/useCinemaLuxeEffects';
 import MediaTrackControls from './player/MediaTrackControls';
 import MediaInfoPanel from './player/MediaInfoPanel';
 import TheaterIconButton from './TheaterIconButton';
@@ -114,7 +115,7 @@ async function resolveArchiveUrl(url) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, className = '' }) => {
+const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '' }) => {
     const {
         videoState, currentUser, localReadiness, controllerMemberId, playback, clock, isConnected,
         loadVideo, addToQueue,
@@ -197,7 +198,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const [localFileError, setLocalFileError] = useState('');
     const [isStartingAnyway, setIsStartingAnyway] = useState(false);
     const [activeTheaterTool, setActiveTheaterTool] = useState(null);
-    useVideoAmbientLight(activeMediaElement, ambientTargetRef, ambientEnabled && appearance === 'cinematic' && videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError);
+    useVideoAmbientLight(activeMediaElement, ambientTargetRef, !cinemaLuxe && ambientEnabled && appearance === 'cinematic' && videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError);
+    useCinemaLuxeEffects(activeMediaElement, ambientTargetRef, cinemaLuxe,
+        videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError);
 
     // ── Fullscreen Listeners ──────────────────────────────────────────────────
     useEffect(() => {
