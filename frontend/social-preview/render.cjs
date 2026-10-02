@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { existsSync, writeFileSync } = require('node:fs');
+const { existsSync, mkdirSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -22,7 +22,7 @@ const { pathToFileURL } = require('node:url');
       await document.fonts.ready;
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     });
-    const output = path.resolve(__dirname, '../public/og-image-watchly.png');
+    const output = path.resolve(__dirname, '../public/og/watchly-room-v2.png');
     let rendered;
     // FontFace loading can finish before Chromium paints the new glyphs. Check
     // the exported pixels so an incomplete font paint never becomes the card.
@@ -35,7 +35,7 @@ const { pathToFileURL } = require('node:url');
         canvas.width = 1200; canvas.height = 630;
         const context = canvas.getContext('2d');
         context.drawImage(image, 0, 0);
-        const pixels = context.getImageData(50, 185, 380, 175).data;
+        const pixels = context.getImageData(460, 70, 280, 105).data;
         let count = 0;
         for (let index = 0; index < pixels.length; index += 4) {
           if (pixels[index] > 220 && pixels[index + 1] > 220 && pixels[index + 2] > 220) count++;
@@ -43,10 +43,11 @@ const { pathToFileURL } = require('node:url');
         image.close();
         return count;
       }, png.toString('base64'));
-      if (headlinePixels > 1500) { rendered = png; break; }
+      if (headlinePixels > 1000) { rendered = png; break; }
       await page.waitForTimeout(100);
     }
     if (!rendered) throw new Error('The headline did not paint completely; the previous card was preserved.');
+    mkdirSync(path.dirname(output), { recursive: true });
     writeFileSync(output, rendered);
     console.log(`Saved 1200 × 630 preview: ${output}`);
   } finally {

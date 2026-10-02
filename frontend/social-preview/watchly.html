@@ -12,17 +12,19 @@
     html, body { width: 1200px; height: 630px; margin: 0; overflow: hidden; }
     body { background: #050505; color: #f5f5f5; font-family: 'DM Sans', sans-serif; }
     .card { position: relative; width: 1200px; height: 630px; isolation: isolate; }
-    .brand { position: absolute; left: 56px; top: 64px; display: flex; align-items: center; gap: 14px; }
-    .logo { position: relative; width: 46px; height: 44px; overflow: hidden; mix-blend-mode: screen; }
-    .logo img { position: absolute; width: 96px; height: 72px; max-width: none; left: -25px; top: -14px; }
+    .brand { position: absolute; left: 50%; top: 24px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; }
+    .logo { position: relative; width: 36px; height: 36px; overflow: hidden; mix-blend-mode: screen; }
+    .logo img { position: absolute; width: 80px; height: 60px; max-width: none; left: -22px; top: -12px; }
     .brand span { font-size: 17px; font-weight: 600; letter-spacing: 3px; color: #dedede; }
-    .copy { position: absolute; left: 56px; top: 190px; width: 372px; }
-    h1 { margin: 0; font-size: 48px; font-weight: 600; line-height: 1.12; letter-spacing: -1.7px; }
+    .copy { position: absolute; left: 50%; top: 73px; width: 600px; transform: translateX(-50%); text-align: center; }
+    h1 { margin: 0; font-size: 30px; font-weight: 600; line-height: 1.07; letter-spacing: -0.8px; }
     h1 span { display: block; }
-    .description { margin: 29px 0 0; color: rgb(255 255 255 / 60%); font-size: 17px; font-weight: 400; line-height: 1.5; white-space: nowrap; }
-    .room { position: absolute; left: 454px; top: 159px; width: 690px; margin: 0; border: 1px solid #262626; border-radius: 8px; overflow: hidden; background: #030303; box-shadow: 0 24px 56px rgb(0 0 0 / 70%); }
-    .room img { display: block; width: 100%; height: auto; }
-    .features { position: absolute; left: 56px; bottom: 54px; margin: 0; color: #858585; font-size: 15px; font-weight: 400; line-height: 1.4; white-space: nowrap; }
+    .description { margin: 12px 0 0; color: rgb(255 255 255 / 60%); font-size: 16px; font-weight: 400; line-height: 1.5; white-space: nowrap; }
+    .room { position: absolute; left: 285px; top: 216px; width: 630px; height: 356px; margin: 0; border: 1px solid #262626; border-radius: 7px; overflow: hidden; background: #030303; box-shadow: 0 18px 40px rgb(0 0 0 / 65%); }
+    /* Crop the real desktop capture: remove peripheral toolbars and the lower
+       foreground, keep the complete player/frame, wall slivers and navbar. */
+    .room img { position: absolute; width: 744px; max-width: none; height: auto; left: -58px; top: 0; }
+    .features { position: absolute; left: 50%; bottom: 27px; transform: translateX(-50%); margin: 0; color: #858585; font-size: 14px; font-weight: 400; line-height: 1.4; white-space: nowrap; }
     .features span { padding: 0 11px; color: #4b4b4b; }
   </style>
 </head>
