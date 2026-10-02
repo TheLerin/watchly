@@ -29,7 +29,10 @@ const ready = async url => {
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
  ].find(file => existsSync(file));
- browser = await chromium.launch({ executablePath, headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
+ browser = await chromium.launch({ executablePath, headless: true, args: [
+  '--autoplay-policy=no-user-gesture-required', '--disable-background-timer-throttling',
+  '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
+ ] });
  const errors=[];
  const host=await browser.newPage(); const viewer=await browser.newPage();
  for(const page of [host,viewer]) page.on('pageerror',e=>errors.push(e.message));
@@ -80,6 +83,12 @@ const ready = async url => {
  await host.getByText('Leave this room?', { exact: true }).waitFor();
  await host.locator('.room-leave-button').click();
  assert.equal(await host.locator('.room-leave-popover').count(), 0);
+ // Clear join/copy notifications before the compact layout checks; their fixed
+ // overlay can cover the mobile tab targets when Chromium throttles timers.
+ await host.evaluate(async () => {
+  const moduleUrl = performance.getEntriesByType('resource').find(entry => entry.name.includes('/react-hot-toast.js'))?.name;
+  if (moduleUrl) (await import(moduleUrl)).default.remove();
+ });
  await host.setViewportSize({ width: 390, height: 844 });
  await wait(async () => await host.locator('.room-shell').getAttribute('data-room-appearance') === 'classic', 'mobile portrait did not use classic room');
  assert.equal(await host.locator('.room-mobile-workspace').count(), 1);
@@ -185,6 +194,7 @@ const ready = async url => {
  console.log('PASS remote play, pause, seek, resume',await values(host),await values(viewer));
  await require('./cinemaLuxeChecks.cjs')({ host, viewer, browser, baseUrl, video, values, wait });
  await require('./appearanceChecks.cjs')({ host, viewer, browser, baseUrl, video, values, wait });
+ await require('./classicDesktopChecks.cjs')({ host, viewer, baseUrl, video, values, wait });
 
  await host.evaluate(() => {
   navigator.mediaDevices.getDisplayMedia = async () => {
@@ -283,6 +293,7 @@ const ready = async url => {
   'selected subtitles did not become active');
  assert.equal(await video(host).getAttribute('src'), sourceBeforeSubtitle, 'loading subtitles must not reload the local video');
  console.log('PASS subtitle file loads off thread and activates without changing video source');
+ await require('./localSeekChecks.cjs')({ host, viewer, video, values, wait });
  await host.evaluate(async()=>{const {socket}=await import('/src/socket.js');socket.disconnect()});
  await wait(async()=> (await values(viewer)).paused,'host disconnect did not pause viewer');
  assert.ok(await viewer.getByText('Browser regression movie',{exact:true}).count()>0);

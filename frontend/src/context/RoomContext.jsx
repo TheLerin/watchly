@@ -144,6 +144,9 @@ export const RoomProvider = ({ children }) => {
     }, [isConnected, measurePing]);
 
     useEffect(() => {
+        // Membership notifications are socket side effects. Keep them outside
+        // state updaters, which React can replay while rendering the provider.
+        const knownMembers = new Map();
         const applyReadiness = payload => {
             if (!payload) return;
             const activeSession = activeMediaIdRef.current || videoStateRef.current.localMedia?.sessionId;
@@ -222,6 +225,8 @@ export const RoomProvider = ({ children }) => {
                 setRoomId(joinedRoomId);
             }
             setCurrentUser(user);
+            knownMembers.clear();
+            for (const member of existingUsers || []) knownMembers.set(member.userId || member.id, member);
             setUsers(existingUsers || []);
             if (initialVideoState) applyVideoState(initialVideoState);
             if (initialReadiness) applyReadiness(initialReadiness);
@@ -240,6 +245,9 @@ export const RoomProvider = ({ children }) => {
             setIsRestoringSession(false);
         };
         const onUserJoined = newUser => {
+            const memberKey = newUser.userId || newUser.id;
+            const alreadyKnown = knownMembers.has(memberKey);
+            knownMembers.set(memberKey, newUser);
             setUsers(previous => {
                 const index = previous.findIndex(user => (
                     user.id === newUser.id || user.userId === newUser.userId
@@ -249,16 +257,15 @@ export const RoomProvider = ({ children }) => {
                     next[index] = newUser;
                     return next;
                 }
-                toast(`${newUser.nickname} joined`, { icon: '👋', duration: 2000 });
                 return [...previous, newUser];
             });
+            if (!alreadyKnown) toast(`${newUser.nickname} joined`, { icon: '👋', duration: 2000 });
         };
         const onUserLeft = userId => {
-            setUsers(previous => {
-                const leaving = previous.find(user => user.id === userId);
-                if (leaving) toast(`${leaving.nickname} left`, { icon: '🚪', duration: 2000 });
-                return previous.filter(user => user.id !== userId);
-            });
+            const leaving = [...knownMembers.values()].find(user => user.id === userId);
+            if (leaving) knownMembers.delete(leaving.userId || leaving.id);
+            setUsers(previous => previous.filter(user => user.id !== userId));
+            if (leaving) toast(`${leaving.nickname} left`, { icon: '🚪', duration: 2000 });
         };
         const onReceiveMessage = message => {
             setMessages(previous => (
@@ -554,7 +561,7 @@ export const RoomProvider = ({ children }) => {
         const playKey = action === 'PLAY' ? `${payload.mediaId}:${options.startAnyway === true}` : null;
         if (playKey && pendingPlayRef.current.has(playKey)) return pendingPlayRef.current.get(playKey);
         const request = new Promise(resolve => {
-            socket.timeout(10000).emit(event, { ...payload, commandId: commandId() }, (error, response) => {
+            socket.timeout(10000).emit(event, { ...payload, commandId: options.commandId || commandId() }, (error, response) => {
                 if (error || !response?.ok) toast.error(error ? 'Playback request timed out. Please try again.' : protocolErrorMessage(response));
                 resolve(!error && Boolean(response?.ok));
             });
@@ -575,9 +582,9 @@ export const RoomProvider = ({ children }) => {
         emitControl('sync_progress', { playedSeconds });
     }, [emitControl]);
 
-    const seekVideo = useCallback(playedSeconds => {
+    const seekVideo = useCallback((playedSeconds, options = {}) => {
         if (!Number.isFinite(playedSeconds)) return;
-        sendPlaybackCommand('SEEK', { positionSec: playedSeconds });
+        return sendPlaybackCommand('SEEK', { ...options, positionSec: playedSeconds });
     }, [sendPlaybackCommand]);
     const endVideo = useCallback(positionSec => sendPlaybackCommand('ENDED', { positionSec }), [sendPlaybackCommand]);
     const requestControl = useCallback(() => socket.emit('control:request', {}, response => {

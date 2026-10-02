@@ -678,7 +678,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             }
             if (!room.media || payload.mediaId !== room.media.mediaId || !validCommandId(payload.commandId) ||
                 !['PLAY', 'PAUSE', 'SEEK', 'ENDED'].includes(payload.action) ||
-                (payload.action === 'SEEK' && !finiteNonNegative(payload.positionSec))) {
+                (payload.action === 'SEEK' && (!finiteNonNegative(payload.positionSec) ||
+                    (payload.requestedAtServerMs !== undefined && !finiteNonNegative(payload.requestedAtServerMs))))) {
                 return callback?.(protocolError('INVALID_COMMAND', 'The playback command is invalid.'));
             }
             if (room.recentCommandIds.has(payload.commandId)) {
@@ -707,7 +708,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.playback = {
                 ...reduceCommand({
                     playback: room.playback, action: payload.action,
-                    positionSec: Number(payload.positionSec), now,
+                    positionSec: Number(payload.positionSec), requestedAtServerMs: payload.requestedAtServerMs, now,
                     effectiveAt: now + 750, memberId: user.userId, durationSec
                 }),
                 commandId: payload.commandId,

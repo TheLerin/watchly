@@ -35,6 +35,7 @@ import './room-theater.css';
 import CinemaLuxeScene from './CinemaLuxeScene';
 import './cinema-luxe.css';
 import './appearance-panel.css';
+import './classic-desktop.css';
 
 const MotionDiv = motion.div;
 const MotionSpan = motion.span;
@@ -257,6 +258,40 @@ const PanelHeader = ({ icon, title, count, open, onToggle }) => (
     </button>
 );
 
+const roomTabs = [
+    { id: 'watch', label: 'Watch', icon: <Clapperboard size={19} />, controls: 'watchly-left-panel' },
+    { id: 'room', label: 'Room', icon: <Users size={19} />, controls: 'classic-room-panel' },
+    { id: 'call', label: 'Call', icon: <PhoneCall size={19} />, controls: 'classic-call-panel classic-share-panel' },
+    { id: 'chat', label: 'Chat', icon: <MessageSquare size={19} />, controls: 'classic-chat-panel' },
+];
+
+const RoomTabs = ({ activeTab, onChange, desktop = false }) => (
+    <nav className={desktop ? 'classic-desktop-tabs' : 'mobile-classic-tabs'}
+        aria-label={desktop ? 'Room sections' : 'Mobile room sections'} role={desktop ? 'tablist' : undefined}>
+        {roomTabs.map(({ id, label, icon, controls }, index) => (
+            <button type="button" key={id} data-active={activeTab === id}
+                id={desktop ? `classic-${id}-tab` : undefined}
+                role={desktop ? 'tab' : undefined}
+                aria-selected={desktop ? activeTab === id : undefined}
+                aria-controls={desktop ? controls : undefined}
+                aria-current={!desktop && activeTab === id ? 'page' : undefined}
+                tabIndex={desktop && activeTab !== id ? -1 : undefined}
+                onClick={() => onChange(id)}
+                onKeyDown={desktop ? event => {
+                    const next = event.key === 'ArrowRight' ? (index + 1) % roomTabs.length
+                        : event.key === 'ArrowLeft' ? (index + roomTabs.length - 1) % roomTabs.length
+                            : event.key === 'Home' ? 0 : event.key === 'End' ? roomTabs.length - 1 : null;
+                    if (next === null) return;
+                    event.preventDefault();
+                    onChange(roomTabs[next].id);
+                    event.currentTarget.parentElement.children[next].focus();
+                } : undefined}>
+                {icon}<span>{label}</span>
+            </button>
+        ))}
+    </nav>
+);
+
 const RoomLayout = () => {
     const { roomId } = useParams();
     const navigate = useNavigate();
@@ -385,6 +420,7 @@ const RoomLayout = () => {
             data-cinema-dim={String(appearanceSettings.dimWhilePlaying)}
             data-cinema-expansion={String(appearanceSettings.screenExpansion)}
             data-cinema-reduce-motion={String(appearanceSettings.reduceMotion)}
+            data-classic-tab={mobileTab}
             style={{ '--cinema-room-light': architecturalLight(appearanceSettings.roomBrightness) }}
         >
             {cinemaLuxe && <CinemaLuxeScene />}
@@ -430,7 +466,8 @@ const RoomLayout = () => {
                                     <span className="video-ambient-right" />
                                     <span className="video-ambient-bottom" />
                                 </div>
-                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} cinemaLuxe={cinemaLuxe} />
+                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} cinemaLuxe={cinemaLuxe}
+                                    controlsTabLabel={roomAppearance === 'classic' ? 'classic-watch-tab' : undefined} />
                                 {!cinemaLuxe && <div className="cinematic-sofa" aria-hidden="true">
                                     <picture>
                                         <source srcSet="/assets/sofa-couple.webp" type="image/webp" />
@@ -441,6 +478,7 @@ const RoomLayout = () => {
                         </main>
 
                         <aside id="watchly-right-panel" className="room-right-rail flex min-h-0 flex-col gap-3" data-open-tool={activeRightTool || ''}>
+                            {roomAppearance === 'classic' && <RoomTabs desktop activeTab={mobileTab} onChange={setMobileTab} />}
                             <nav className="theater-right-dock" aria-label="Room tools">
                                 {[
                                     { id: 'members', label: 'Members and queue', icon: <Users size={21} /> },
@@ -458,7 +496,10 @@ const RoomLayout = () => {
                                     />
                                 ))}
                             </nav>
-                            <section className={`room-members-group ${panelClass} overflow-hidden`} data-expanded={showUsersPanel}>
+                            <section className={`room-members-group ${panelClass} overflow-hidden`} data-expanded={showUsersPanel}
+                                id={roomAppearance === 'classic' ? 'classic-room-panel' : undefined}
+                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
+                                aria-labelledby={roomAppearance === 'classic' ? 'classic-room-tab' : undefined}>
                                 <PanelHeader
                                     icon={<Users size={15} className="text-zinc-400" />}
                                     title="Members & Queue"
@@ -467,7 +508,7 @@ const RoomLayout = () => {
                                     onToggle={() => setShowUsersPanel(v => !v)}
                                 />
                                 <AnimatePresence initial={false}>
-                                    {showUsersPanel && (
+                                    {(showUsersPanel || roomAppearance === 'classic') && (
                                         <MotionDiv
                                             key="members-queue"
                                             initial={{ height: 0, opacity: 0 }}
@@ -485,14 +526,21 @@ const RoomLayout = () => {
                                 </AnimatePresence>
                             </section>
 
-                            <section className="room-voice-group">
+                            <section className="room-voice-group" id={roomAppearance === 'classic' ? 'classic-call-panel' : undefined}
+                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
+                                aria-labelledby={roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
                                 <VoiceRoom variant={roomAppearance} />
                             </section>
-                            <section className="room-share-group">
+                            <section className="room-share-group" id={roomAppearance === 'classic' ? 'classic-share-panel' : undefined}
+                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
+                                aria-labelledby={roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
                                 <ScreenShareAdapter variant={roomAppearance} />
                             </section>
-                            <div className="room-chat-group min-h-0 flex-1">
-                                <ChatUI variant={roomAppearance} />
+                            <div className="room-chat-group min-h-0 flex-1" id={roomAppearance === 'classic' ? 'classic-chat-panel' : undefined}
+                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
+                                aria-labelledby={roomAppearance === 'classic' ? 'classic-chat-tab' : undefined}>
+                                <ChatUI variant={roomAppearance} hideHeader={roomAppearance === 'classic'}
+                                    visible={roomAppearance !== 'classic' || mobileTab === 'chat'} />
                             </div>
                         </aside>
                     </div>
@@ -527,24 +575,7 @@ const RoomLayout = () => {
                             </section>
                         </div>
 
-                        <nav className="mobile-classic-tabs" aria-label="Mobile room sections">
-                            {[
-                                { id: 'watch', label: 'Watch', icon: <Clapperboard size={19} /> },
-                                { id: 'room', label: 'Room', icon: <Users size={19} /> },
-                                { id: 'call', label: 'Call', icon: <PhoneCall size={19} /> },
-                                { id: 'chat', label: 'Chat', icon: <MessageSquare size={19} /> },
-                            ].map(tab => (
-                                <button
-                                    type="button"
-                                    key={tab.id}
-                                    data-active={mobileTab === tab.id}
-                                    aria-current={mobileTab === tab.id ? 'page' : undefined}
-                                    onClick={() => setMobileTab(tab.id)}
-                                >
-                                    {tab.icon}<span>{tab.label}</span>
-                                </button>
-                            ))}
-                        </nav>
+                        <RoomTabs activeTab={mobileTab} onChange={setMobileTab} />
                     </div>
                 )}
             </div>

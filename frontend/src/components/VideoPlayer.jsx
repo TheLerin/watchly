@@ -16,6 +16,8 @@ import { parseSubtitleFileOffThread } from '../utils/subtitleWorker';
 import { extractMatroskaSubtitle } from '../utils/matroskaSubtitles';
 import { createLocalRemuxSession, getRemuxEligibility } from '../utils/localMediaRemux';
 import { detectVideoSource } from '../utils/videoSources';
+import { commandId } from '../utils/protocol';
+import { createSeekCommandScheduler } from '../utils/seekCommandScheduler';
 import {
     applyAudioTrack,
     applySubtitleTrack,
@@ -115,7 +117,7 @@ async function resolveArchiveUrl(url) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '' }) => {
+const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '', controlsTabLabel }) => {
     const {
         videoState, currentUser, localReadiness, controllerMemberId, playback, clock, isConnected,
         loadVideo, addToQueue,
@@ -148,6 +150,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const seekEndTimerRef  = useRef(null);
     const playDebounceRef  = useRef(null);
     const pauseDebounceRef = useRef(null);
+    const localSeekRef = useRef(null);
+    const playbackRef = useRef(playback);
+    playbackRef.current = playback;
     const lastSyncedPosRef = useRef(0);
     // BUG-I FIX: track whether ReactPlayer is currently buffering.
     // Drift correction must NOT fire during a stall — it restarts the buffer
@@ -256,6 +261,23 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         clock, durationSec: videoState.localMedia?.duration || Infinity,
         mediaId: `${videoState.localMedia?.sessionId}:${videoState.localMedia?.declarationId}`, onPlayError: handleSyncPlayError,
     });
+    const localSeekCommands = useMemo(() => createSeekCommandScheduler({
+        send: (position, options) => {
+            void seekVideo(position, options)?.then(ok => {
+                if (ok || localSeekRef.current?.commandId !== options.commandId) return;
+                localSeekRef.current = null;
+                isSeekingRef.current = false;
+                applySynchronizedState(nativeVideoRef.current, playbackRef.current, { force: true });
+            });
+        },
+    }), [applySynchronizedState, seekVideo]);
+    useEffect(() => () => localSeekCommands.cancel(), [localSeekCommands]);
+    useEffect(() => {
+        if (isPrivileged) return;
+        localSeekCommands.cancel();
+        localSeekRef.current = null;
+        isSeekingRef.current = false;
+    }, [isPrivileged, localSeekCommands]);
 
     const isPlatformEmbed = isYouTube || isSupportedEmbed;
     const mediaCapabilities = useMemo(() => getMediaSourceCapabilities({
@@ -267,13 +289,22 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
     useEffect(() => {
         if (!isConnected || !isLocal || !isLocalReady || !playback || !nativeVideoRef.current || localPlaybackSwitchRef.current) return;
+        // An older confirmation must not pull the controller away from a newer
+        // native seek, including a target still queued by the network throttle.
+        if (localSeekRef.current && playback.updatedByMemberId === currentUser?.userId &&
+            playback.commandId !== localSeekRef.current.commandId) return;
+        localSeekRef.current = null;
+        isSeekingRef.current = false;
         applySynchronizedState(nativeVideoRef.current, playback);
-    }, [isConnected, isLocal, isLocalReady, playback, applySynchronizedState]);
+    }, [isConnected, isLocal, isLocalReady, playback, applySynchronizedState, currentUser?.userId]);
     useEffect(() => {
         const reconnected = isConnected && !wasConnectedRef.current;
         wasConnectedRef.current = isConnected;
         if (!isLocal || !isLocalReady || !nativeVideoRef.current) return;
         if (!isConnected) {
+            localSeekCommands.cancel();
+            localSeekRef.current = null;
+            isSeekingRef.current = false;
             cancelSynchronizedState();
             nativeVideoRef.current.pause();
             return;
@@ -281,7 +312,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         if (reconnected && playback) {
             applySynchronizedState(nativeVideoRef.current, playback, { force: true });
         }
-    }, [applySynchronizedState, cancelSynchronizedState, isConnected, isLocal, isLocalReady, playback]);
+    }, [applySynchronizedState, cancelSynchronizedState, isConnected, isLocal, isLocalReady, playback, localSeekCommands]);
     useEffect(() => {
         if (!isConnected || !isLocal || !isLocalReady || !playback) return undefined;
         const correct = (force = false) => {
@@ -561,6 +592,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         clearTimeout(playDebounceRef.current);
         clearTimeout(pauseDebounceRef.current);
         clearTimeout(seekEndTimerRef.current);
+        localSeekCommands.cancel();
+        localSeekRef.current = null;
         isSeekingRef.current = false;
         const hasActiveLocalFile = Boolean(
             localSessionId &&
@@ -799,18 +832,17 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         isSeekingRef.current = true;
     }, []);
 
-    // URL adapters need their play debounce enabled immediately after a seek.
-    // Local files keep drift correction suspended until the seek command is sent.
+    // Keep the existing URL/embed debounce separate from local native seeking.
     const endSeekGuard = useCallback((getTime) => {
         clearTimeout(seekEndTimerRef.current);
-        isSeekingRef.current = isLocal;
+        isSeekingRef.current = false;
         seekEndTimerRef.current = setTimeout(() => {
             const t = getTime();
             lastSyncedPosRef.current = t;
             seekVideo(t);
             isSeekingRef.current = false;
         }, 300);
-    }, [isLocal, seekVideo]);
+    }, [seekVideo]);
 
     // ── Keyboard shortcuts (host/mod) ─────────────────────────────────────
     useEffect(() => {
@@ -820,6 +852,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             if (e.key === ' ' || e.key === 'Spacebar') {
                 e.preventDefault();
+                if (isLocal) {
+                    localSeekCommands.flush();
+                    localSeekRef.current = null;
+                    isSeekingRef.current = false;
+                }
                 if (videoStateRef.current.isPlaying) {
                     const t = isNativePlayer
                         ? nativeVideoRef.current?.currentTime || 0
@@ -832,7 +869,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isPrivileged, isNativePlayer, playVideo, pauseVideo]);
+    }, [isPrivileged, isNativePlayer, isLocal, localSeekCommands, playVideo, pauseVideo]);
 
     const handleLoad = async (e) => {
         e.preventDefault();
@@ -1164,7 +1201,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                     />
                 ))}
             </nav>
-            <div id="watchly-left-panel" className="video-player-controls flex min-h-0 flex-col gap-3">
+            <div id="watchly-left-panel" className="video-player-controls flex min-h-0 flex-col gap-3"
+                role={controlsTabLabel ? 'tabpanel' : undefined} aria-labelledby={controlsTabLabel}>
                 <div className="cinematic-now-watching" aria-live="polite">
                     <span>Now Watching</span>
                     <strong title={nowWatchingLabel}>{nowWatchingLabel}</strong>
@@ -1517,8 +1555,12 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             if (!isConnected) { nativeVideoRef.current?.pause(); return; }
                                             if (localPlaybackSwitchRef.current) return;
                                             if (!isPrivileged) return;
+                                            if (isLocal && (nativeVideoRef.current?.seeking || isApplyingSeek(nativeVideoRef.current))) return;
                                             if (videoStateRef.current.isPlaying) return;
                                             if (isLocal && !videoStateRef.current.isPlaying) {
+                                                localSeekCommands.flush();
+                                                localSeekRef.current = null;
+                                                isSeekingRef.current = false;
                                                 nativeVideoRef.current?.pause();
                                                 debouncePlay();
                                                 return;
@@ -1530,24 +1572,42 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             if (localPlaybackSwitchRef.current) return;
                                             if (!isPrivileged || (isLocal && !videoStateRef.current.isPlaying)) return;
                                             if (isLocal) {
-                                                const position = nativeVideoRef.current?.currentTime || 0;
-                                                nativeVideoRef.current?.play().catch(() => {});
+                                                const video = nativeVideoRef.current;
+                                                // Chrome's native timeline queues pause before seeking.
+                                                // The element's current properties already expose the
+                                                // seek (or resumed playback), unlike React's event order.
+                                                if (!video?.paused || video.seeking || isApplyingSeek(video)) return;
+                                                localSeekCommands.flush();
+                                                localSeekRef.current = null;
+                                                isSeekingRef.current = false;
+                                                const position = video.currentTime || 0;
+                                                // Preserve the existing shared pause deadline only for
+                                                // an actual pause request; scrubbing never reaches here.
+                                                video.play().catch(handleSyncPlayError);
                                                 pauseVideo(position);
                                                 return;
                                             }
                                             debouncePause(() => nativeVideoRef.current?.currentTime || 0);
                                         }}
-                                        onSeeking={() => { if (localPlaybackSwitchRef.current || !isPrivileged || isApplyingSeek(nativeVideoRef.current)) return; startSeekGuard(); }}
+                                        onSeeking={() => {
+                                            const video = nativeVideoRef.current;
+                                            if (localPlaybackSwitchRef.current || !isPrivileged || isApplyingSeek(video)) return;
+                                            startSeekGuard();
+                                            if (!isLocal || !isConnected) return;
+                                            cancelSynchronizedState();
+                                            const options = { commandId: commandId(), requestedAtServerMs: clock.serverNow() };
+                                            // SEEK leaves the canonical play/pause intent unchanged;
+                                            // native controls preserve that intent locally as well.
+                                            localSeekRef.current = options;
+                                            lastSyncedPosRef.current = video.currentTime;
+                                            // Native controls already changed currentTime locally. Send
+                                            // immediately, without waiting for decoding or a seeked event.
+                                            localSeekCommands.enqueue(video.currentTime, options);
+                                        }}
                                         onSeeked={() => {
                                             if (isLocal) {
                                                 initialSeekDoneRef.current = true;
-                                                if (finishSeek(nativeVideoRef.current)) return;
-                                                if (localPlaybackSwitchRef.current) return;
-                                                if (Math.abs((nativeVideoRef.current?.currentTime || 0) - getExpectedPosition(videoStateRef.current)) < 0.15) {
-                                                    isSeekingRef.current = false;
-                                                    return;
-                                                }
-                                                if (isPrivileged && isConnected) endSeekGuard(() => nativeVideoRef.current?.currentTime || 0);
+                                                finishSeek(nativeVideoRef.current);
                                                 return;
                                             }
                                             // FIX #5: Initial seek completed — now safe to autoplay.

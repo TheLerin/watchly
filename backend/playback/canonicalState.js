@@ -17,13 +17,19 @@ const createPlayback = (now = Date.now()) => ({
     commandId: null
 });
 
-const reduceCommand = ({ playback, action, positionSec, now, effectiveAt, memberId, durationSec }) => {
+const reduceCommand = ({ playback, action, positionSec, requestedAtServerMs, now, effectiveAt, memberId, durationSec }) => {
     // Commands take effect at a shared future deadline. Preserve the position
     // the room will have reached at that deadline so a scheduled pause does not
     // freeze everyone at the earlier request-receipt position.
     const current = canonicalPosition(playback, Math.max(now, effectiveAt), durationSec);
+    // An optimistic seek is already advancing on the controller. Account for
+    // that elapsed time at the shared deadline instead of replaying its older
+    // target there. Legacy requests without a timestamp retain their behavior.
+    const seekElapsed = action === 'SEEK' && playback.status === 'playing' && Number.isFinite(requestedAtServerMs)
+        ? Math.max(0, effectiveAt - clamp(requestedAtServerMs, now - 10_000, now)) / 1000 * playback.rate
+        : 0;
     const position = action === 'SEEK'
-        ? clamp(positionSec, 0, durationSec)
+        ? clamp(positionSec + seekElapsed, 0, durationSec)
         : action === 'PLAY' && current >= durationSec ? 0 : current;
     return {
         seq: playback.seq + 1,

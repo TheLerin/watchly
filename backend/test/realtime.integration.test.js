@@ -25,10 +25,38 @@ test.before(async () => {
 });
 test.after(() => { clients.forEach(client => client.close()); server?.kill(); });
 
-const receive = (client, event) => new Promise((resolve, reject) => {
-    const handler = payload => { clearTimeout(timer); resolve(payload); };
+const receive = (client, event, matches = () => true) => new Promise((resolve, reject) => {
+    const handler = payload => { if (!matches(payload)) return; clearTimeout(timer); client.off(event, handler); resolve(payload); };
     const timer = setTimeout(() => { client.off(event, handler); reject(new Error(`Timed out waiting for ${event}`)); }, 3000);
-    client.once(event, handler);
+    client.on(event, handler);
+});
+
+test('local seek timestamps synchronize receivers, preserve intent and reject invalid metadata', async () => {
+    const host = await connect(), viewer = await connect();
+    const room = await emit(host, 'room:create', { nickname: 'Seek host', protocolVersion: 2 });
+    await emit(viewer, 'room:join', { roomId: room.roomId, nickname: 'Seek viewer', protocolVersion: 2 });
+    const fingerprint = 'b'.repeat(64);
+    const mediaId = `sampled-sha256-v1:100:${fingerprint}`;
+    await emit(host, 'media:declare', { descriptor: { sourceType: 'local-file', mediaId, fingerprintVersion: 'sampled-sha256-v1', displayTitle: 'Seek movie', sizeBytes: 100, durationMs: 100000 } });
+    await emit(viewer, 'media:ready', { mediaId, status: 'READY', fingerprint, size: 100, duration: 100 });
+    await emit(host, 'playback:command', { commandId: 'seek_test_play', mediaId, action: 'PLAY' });
+    const request = { commandId: 'optimistic_seek_1', mediaId, action: 'SEEK', positionSec: 40, requestedAtServerMs: Date.now() - 500 };
+    const received = receive(viewer, 'playback:state', state => state.commandId === request.commandId);
+    const result = await emit(host, 'playback:command', request);
+    assert.equal(result.ok, true);
+    assert.equal(result.playback.status, 'playing');
+    assert.ok(result.playback.positionSec >= 40.75, JSON.stringify({ playback: result.playback, request }));
+    const serverReceivedAt = result.playback.effectiveAtServerMs - 750;
+    const boundedRequestTime = Math.min(serverReceivedAt, Math.max(request.requestedAtServerMs, serverReceivedAt - 10000));
+    assert.equal(result.playback.positionSec, 40 + (result.playback.effectiveAtServerMs - boundedRequestTime) / 1000);
+    assert.deepEqual(await received, result.playback);
+    assert.equal((await emit(host, 'playback:command', request)).duplicate, true);
+    await emit(host, 'playback:command', { commandId: 'seek_test_pause', mediaId, action: 'PAUSE' });
+    const paused = await emit(host, 'playback:command', { ...request, commandId: 'optimistic_seek_2', positionSec: 5 });
+    assert.equal(paused.playback.status, 'paused');
+    assert.equal(paused.playback.positionSec, 5);
+    const invalid = await emit(host, 'playback:command', { ...request, commandId: 'optimistic_bad_time', requestedAtServerMs: 'invalid' });
+    assert.equal(invalid.error.code, 'INVALID_COMMAND');
 });
 
 test('one socket cannot create ghost rooms or join multiple rooms at once', async () => {

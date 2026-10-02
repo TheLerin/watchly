@@ -37,3 +37,30 @@ test('playing again after reaching the end restarts from zero', () => {
         assert.equal(next.positionSec, 0);
     }
 });
+
+test('optimistic playing seeks preserve local progress through network latency and the shared deadline', () => {
+    const playing = { ...createPlayback(1000), status: 'playing' };
+    const seek = reduceCommand({ playback: playing, action: 'SEEK', positionSec: 40,
+        requestedAtServerMs: 2000, now: 2500, effectiveAt: 3250, memberId: 'host', durationSec: 100 });
+    assert.equal(seek.status, 'playing');
+    assert.equal(seek.positionSec, 41.25);
+    assert.equal(canonicalPosition(seek, 3500, 100), 41.5);
+    assert.equal(seek.seq, playing.seq + 1);
+});
+
+test('optimistic paused seeks stay paused, and legacy seeks keep their existing semantics', () => {
+    const args = { action: 'SEEK', positionSec: 5, now: 2500, effectiveAt: 3250, memberId: 'host', durationSec: 100 };
+    const paused = reduceCommand({ ...args, playback: createPlayback(1000), requestedAtServerMs: 2000 });
+    assert.equal(paused.status, 'paused');
+    assert.equal(paused.positionSec, 5);
+    const legacy = reduceCommand({ ...args, playback: { ...createPlayback(1000), status: 'playing' } });
+    assert.equal(legacy.positionSec, 5);
+});
+
+test('seek timestamp compensation is bounded and clamps at the media duration', () => {
+    const args = { playback: { ...createPlayback(1000), status: 'playing' }, action: 'SEEK', positionSec: 5,
+        now: 20000, effectiveAt: 20750, memberId: 'host', durationSec: 100 };
+    assert.equal(reduceCommand({ ...args, requestedAtServerMs: 0 }).positionSec, 15.75);
+    assert.equal(reduceCommand({ ...args, requestedAtServerMs: 99999 }).positionSec, 5.75);
+    assert.equal(reduceCommand({ ...args, requestedAtServerMs: 0, durationSec: 10 }).positionSec, 10);
+});

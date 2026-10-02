@@ -28,6 +28,13 @@ test('URL and local playback controls use their respective server protocols', ()
     }
     assert.equal(playbackCommand(remote, 'ENDED').payload.sourceId, 'source-123');
 });
+
+test('optimistic seek timestamps are local-file metadata and do not change URL/embed messages', () => {
+    const options = { positionSec: 40, requestedAtServerMs: 12345 };
+    assert.deepEqual(playbackCommand({ sourceType: 'local', localMedia: { sessionId: 'movie' } }, 'SEEK', options).payload,
+        { mediaId: 'movie', action: 'SEEK', positionSec: 40, requestedAtServerMs: 12345 });
+    assert.deepEqual(playbackCommand({ sourceType: 'remote' }, 'SEEK', options).payload, { playedSeconds: 40 });
+});
 test('scheduled state and drift correction do not execute before the shared deadline', () => {
     const { sync, video, advance } = fixture();
     sync.apply(video, state());

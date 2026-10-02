@@ -3,7 +3,10 @@ export function playbackCommand(state, action, options = {}) {
     if (state.sourceType === 'local' && state.localMedia) {
         return { event: 'playback:command', payload: {
             mediaId: state.localMedia.sessionId, action,
-            ...(action === 'SEEK' ? { positionSec: options.positionSec } : {}),
+            ...(action === 'SEEK' ? {
+                positionSec: options.positionSec,
+                ...(Number.isFinite(options.requestedAtServerMs) ? { requestedAtServerMs: options.requestedAtServerMs } : {}),
+            } : {}),
             ...(action === 'PLAY' ? { startAnyway: options.startAnyway === true } : {}),
         } };
     }

@@ -1,0 +1,226 @@
+/* Keep the existing compact layout and theater styles outside this scope.
+   Flatten presentation wrappers so the single player's controls share the
+   workspace grid with the sidebar, without moving/remounting player state. */
+@media (min-width: 1180px) {
+    .room-shell[data-room-appearance="classic"] {
+        --classic-panel: #080808;
+        --classic-border: rgb(255 255 255 / 7%);
+        --classic-text: rgb(255 255 255 / 92%);
+        --classic-muted: rgb(255 255 255 / 50%);
+        --classic-selected: rgb(255 255 255 / 9%);
+        --classic-field: #0c0c0c;
+        background: #020202;
+    }
+
+    .room-shell[data-room-appearance="classic"] .classic-room-background,
+    .room-shell[data-room-appearance="classic"] .classic-player-heading { display: none; }
+
+    .room-shell[data-room-appearance="classic"] .room-header { height: 72px; }
+    .room-shell[data-room-appearance="classic"] .room-header > div { max-width: 2000px; padding-inline: 24px; }
+    .room-shell[data-room-appearance="classic"] .room-desktop-workspace {
+        height: calc(100dvh - 72px);
+        max-width: 2000px;
+        min-height: 0;
+        padding: 24px;
+        gap: 20px;
+        grid-template-columns: minmax(0, 1fr) clamp(360px, 26vw, 420px);
+        grid-template-rows: minmax(0, 1fr);
+        align-items: start;
+        isolation: isolate;
+    }
+    .room-shell[data-room-appearance="classic"] :is(.room-player-zone, .room-video-stage, .room-video-player) { display: contents; }
+    .room-shell[data-room-appearance="classic"] .room-player-surface {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: start;
+        width: min(100%, calc((100dvh - 120px) * 1.777778));
+        height: auto;
+        aspect-ratio: 16 / 9;
+        border: 1px solid var(--classic-border);
+        border-radius: 18px;
+        background: #030303;
+        box-shadow: none;
+    }
+    .room-shell[data-room-appearance="classic"] .room-player-surface:fullscreen {
+        width: 100vw;
+        height: 100dvh;
+        aspect-ratio: auto;
+        border: 0;
+        border-radius: 0;
+    }
+    .room-shell[data-room-appearance="classic"] .room-right-rail {
+        grid-column: 2;
+        grid-row: 1;
+        height: 100%;
+        min-width: 0;
+        gap: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        color: var(--classic-text);
+        background: var(--classic-panel);
+        border: 1px solid var(--classic-border);
+        border-radius: 20px;
+        scrollbar-width: thin;
+        scrollbar-color: #333 transparent;
+    }
+    .room-shell[data-room-appearance="classic"] .classic-desktop-tabs {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        display: grid;
+        flex: none;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        height: 64px;
+        padding: 6px;
+        background: var(--classic-panel);
+        border-bottom: 1px solid var(--classic-border);
+    }
+    .room-shell[data-room-appearance="classic"] .classic-desktop-tabs button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        min-width: 0;
+        border-radius: 13px;
+        background: transparent;
+        color: var(--classic-muted);
+        font-size: 11px;
+        font-weight: 600;
+        transition: color 150ms ease, background 150ms ease;
+    }
+    .room-shell[data-room-appearance="classic"] .classic-desktop-tabs button:is(:hover, [aria-selected="true"]) {
+        background: var(--classic-selected);
+        color: var(--classic-text);
+    }
+    .room-shell[data-room-appearance="classic"] :is(.classic-desktop-tabs, .video-player-controls) :is(button, input, select):focus-visible {
+        outline: 2px solid var(--classic-muted);
+        outline-offset: -2px;
+    }
+
+    .room-shell[data-room-appearance="classic"] .video-player-controls {
+        display: flex;
+        grid-column: 2;
+        grid-row: 1;
+        align-self: stretch;
+        z-index: 2;
+        min-width: 0;
+        margin: 65px 1px 1px;
+        padding: 18px;
+        gap: 12px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        color: var(--classic-text);
+        background: var(--classic-panel);
+        border: 0;
+        border-radius: 0 0 19px 19px;
+        box-shadow: none;
+        backdrop-filter: none;
+        scrollbar-width: thin;
+        scrollbar-color: #333 transparent;
+    }
+    .room-shell[data-room-appearance="classic"] .watch-source-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(0, .8fr);
+        gap: 10px;
+    }
+    .room-shell[data-room-appearance="classic"] .watch-source-controls form {
+        display: flex;
+        flex-direction: column;
+        grid-column: 1 / -1;
+        align-items: stretch;
+        gap: 10px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+    .room-shell[data-room-appearance="classic"] .watch-source-controls form > div:first-of-type {
+        min-height: 52px;
+        border: 1px solid var(--classic-border);
+        border-radius: 13px;
+        background: var(--classic-field);
+    }
+    .room-shell[data-room-appearance="classic"] .watch-source-controls input { min-width: 0; height: 52px; font-size: 12px; }
+    .room-shell[data-room-appearance="classic"] .watch-source-controls form > div:last-child {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+        gap: 10px;
+    }
+    .room-shell[data-room-appearance="classic"] .watch-source-controls button { min-height: 50px; border-radius: 13px; }
+    .room-shell[data-room-appearance="classic"] .watch-source-controls > button {
+        justify-content: center;
+        min-width: 0;
+        padding-inline: 8px;
+        background: var(--classic-field);
+        border-color: var(--classic-border);
+    }
+    .room-shell[data-room-appearance="classic"] .watch-source-controls > div {
+        justify-content: center;
+        min-width: 0;
+        padding-inline: 8px;
+        border: 0;
+        border-radius: 13px;
+        font-size: 10px;
+    }
+    .room-shell[data-room-appearance="classic"] .cinematic-no-media {
+        display: block;
+        margin-top: 4px;
+        color: var(--classic-muted);
+        font-size: 11px;
+        line-height: 1.6;
+    }
+    .room-shell[data-room-appearance="classic"] .media-track-controls { min-width: 0; border: 0; border-radius: 0; background: transparent; }
+    .room-shell[data-room-appearance="classic"] .media-track-controls .media-controls-body { display: block; padding: 0; }
+    .room-shell[data-room-appearance="classic"] .media-track-controls .media-controls-title { margin-bottom: 10px; }
+    .room-shell[data-room-appearance="classic"] .media-track-controls .media-controls-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .room-shell[data-room-appearance="classic"] .media-track-controls .media-control-field { min-width: 0; }
+    .room-shell[data-room-appearance="classic"] .media-track-controls .media-control-field > span:first-child { display: flex; }
+
+    .room-shell[data-room-appearance="classic"] .room-right-rail > :is(section, .room-chat-group),
+    .room-shell[data-room-appearance="classic"] :is(.room-voice, .room-screen-share, .room-chat) {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+    }
+    .room-shell[data-room-appearance="classic"] :is(.room-members-group, .room-voice-group, .room-share-group) { flex: none; }
+    .room-shell[data-room-appearance="classic"] :is(.room-voice-group, .room-share-group) { display: block; }
+    .room-shell[data-room-appearance="classic"] .room-members-group > button { display: none; }
+    .room-shell[data-room-appearance="classic"] .room-members-group .max-h-\[34vh\] { max-height: none; overflow: visible; }
+    .room-shell[data-room-appearance="classic"] .room-share-group { border-top: 1px solid var(--classic-border); }
+    .room-shell[data-room-appearance="classic"] .room-chat-group { overflow: hidden; }
+
+    .room-shell[data-room-appearance="classic"]:not([data-classic-tab="watch"]) .video-player-controls,
+    .room-shell[data-room-appearance="classic"]:not([data-classic-tab="room"]) .room-members-group,
+    .room-shell[data-room-appearance="classic"]:not([data-classic-tab="call"]) :is(.room-voice-group, .room-share-group),
+    .room-shell[data-room-appearance="classic"]:not([data-classic-tab="chat"]) .room-chat-group { display: none; }
+
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] {
+        --classic-panel: #ebebee;
+        --classic-border: rgb(0 0 0 / 10%);
+        --classic-text: #27272a;
+        --classic-muted: #66666f;
+        --classic-selected: rgb(0 0 0 / 8%);
+        --classic-field: #f4f4f5;
+        background: #e2e2e5;
+    }
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] :is(.video-player-controls, .room-right-rail) :is(.text-zinc-400, .text-zinc-500, .text-zinc-600) { color: var(--classic-muted); }
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] :is(.watch-source-controls, .room-chat) input { color: var(--classic-text); background: var(--classic-field); }
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] .watch-source-controls input { background: transparent; }
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] .watch-source-controls input::placeholder { color: var(--classic-muted); }
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] .watch-source-controls button[type="submit"] { background: #27272a; color: white; }
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] :is(.media-control-field select, .media-unavailable, .media-add-subtitle) {
+        color: var(--classic-text);
+        background: var(--classic-field);
+        border-color: var(--classic-border);
+    }
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] .media-control-field > span:first-child { color: var(--classic-muted); }
+    .room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"] .room-chat .break-words {
+        color: var(--classic-text) !important;
+        background: var(--classic-selected) !important;
+        border-color: var(--classic-border) !important;
+    }
+}
