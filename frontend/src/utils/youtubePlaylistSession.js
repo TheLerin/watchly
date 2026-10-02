@@ -103,5 +103,6 @@ export function createYouTubePlaylistSession({ getState, getPlayer, isController
         }
         if (readyIdentity !== key && now() - cueAt > 15000) fail('This playlist item could not become ready. Waiting for the next playable item.', true);
     }
-    return { tick, ready, canEmit, fail };
+    const resync = () => { readySent = null; failedIdentity = null; suppressUntil = now() + 600; };
+    return { tick, ready, canEmit, fail, resync };
 }

@@ -31,6 +31,55 @@ const receive = (client, event, matches = () => true) => new Promise((resolve, r
     client.on(event, handler);
 });
 
+test('resume credentials keep one member and fence a superseded active socket', async () => {
+    const host = await connect();
+    const room = await emit(host, 'room:create', { nickname: 'Resume host', protocolVersion: 2 });
+    const viewer = await connect();
+    const joined = await emit(viewer, 'room:join', { roomId: room.roomId, nickname: 'Resume viewer', protocolVersion: 2 });
+    const replacement = await connect();
+    const replaced = receive(viewer, 'room:error', error => error.code === 'SESSION_REPLACED');
+    const resumed = await emit(replacement, 'room:join', { roomId: room.roomId, nickname: 'Resume viewer', protocolVersion: 2,
+        resumeToken: joined.resumeToken, memberId: joined.memberId });
+    assert.equal((await replaced).code, 'SESSION_REPLACED');
+    assert.equal(resumed.memberId, joined.memberId);
+    assert.equal(resumed.resumeToken, joined.resumeToken);
+    assert.equal(resumed.snapshot.members.length, 2);
+    assert.equal(resumed.snapshot.members.filter(member => member.userId === joined.memberId).length, 1);
+    const invalid = await connect();
+    const rejected = await emit(invalid, 'room:join', { roomId: room.roomId, nickname: 'Resume viewer', protocolVersion: 2,
+        resumeToken: 'invalid'.repeat(12), memberId: joined.memberId });
+    assert.equal(rejected.error.code, 'SESSION_INVALID');
+    assert.equal((await emit(invalid, 'room:snapshot', {})).error.code, 'NOT_IN_ROOM');
+    assert.equal((await emit(host, 'room:snapshot', {})).snapshot.members.length, 2);
+});
+
+test('source epochs fence delayed source commands across local and remote snapshots', async () => {
+    const host = await connect();
+    const room = await emit(host, 'room:create', { nickname: 'Epoch host', protocolVersion: 2 });
+    const changed = receive(host, 'video_changed');
+    host.emit('change_video', { roomId: room.roomId, url: 'https://example.com/first.mp4' });
+    const first = await changed;
+    const mediaId = `sampled-sha256-v1:100:${'e'.repeat(64)}`;
+    await emit(host, 'media:declare', { descriptor: { sourceType: 'local-file', mediaId,
+        fingerprintVersion: 'sampled-sha256-v1', displayTitle: 'Epoch movie', sizeBytes: 100, durationMs: 120000 } });
+    const local = (await emit(host, 'room:snapshot', {})).snapshot;
+    assert.ok(local.videoState.sourceEpoch > first.sourceEpoch);
+    assert.equal(local.playback.sourceEpoch, local.videoState.sourceEpoch);
+    assert.equal(local.playback.mediaId, mediaId);
+    const declaredAt = local.media.declaredAtServerMs;
+    assert.ok(Number.isFinite(declaredAt));
+    const next = receive(host, 'video_changed');
+    host.emit('change_video', { roomId: room.roomId, url: 'https://example.com/second.mp4' });
+    const second = await next;
+    assert.ok(second.sourceEpoch > local.videoState.sourceEpoch);
+    host.emit('pause_video', { roomId: room.roomId, sourceId: first.sourceId, sourceEpoch: first.sourceEpoch, playedSeconds: 99 });
+    const snapshot = (await emit(host, 'room:snapshot', {})).snapshot;
+    assert.equal(snapshot.videoState.url, 'https://example.com/second.mp4');
+    assert.equal(snapshot.videoState.isPlaying, true);
+    assert.notEqual(snapshot.videoState.playedSeconds, 99);
+    assert.equal(snapshot.media, null);
+});
+
 test('local seek timestamps synchronize receivers, preserve intent and reject invalid metadata', async () => {
     const host = await connect(), viewer = await connect();
     const room = await emit(host, 'room:create', { nickname: 'Seek host', protocolVersion: 2 });

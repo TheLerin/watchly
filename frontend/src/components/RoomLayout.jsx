@@ -78,7 +78,7 @@ function useSupportsTheater() {
 
 const panelClass = 'rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl';
 
-const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, isConnected, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
+const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, isConnected, connectionPhase, retryConnection, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
     const [showSettings, setShowSettings] = useState(false);
     const [showRoomInfo, setShowRoomInfo] = useState(false);
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -116,7 +116,10 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
 
     const qualityKey = isConnected ? networkQuality : 'offline';
     const qualityMeta = NETWORK_QUALITY_META[qualityKey] || NETWORK_QUALITY_META.checking;
-    const connectionLabel = isConnected ? formatPing(networkPingMs) : 'Offline';
+    const connectionLabel = { connected: 'Synced', reconnecting: 'Reconnecting…', resyncing: 'Resyncing…', offline: 'Offline', failed: 'Sync failed' }[connectionPhase] || 'Offline';
+    const connectionDetail = connectionPhase === 'connected' ? `Synced · Ping ${formatPing(networkPingMs)} · ${qualityMeta.label}`
+        : connectionPhase === 'offline' ? 'Still offline. Watchly will reconnect automatically. Click to retry now.'
+            : connectionPhase === 'failed' ? 'Playback could not resync. Click to retry with fresh room state.' : connectionLabel;
 
     return (
         <header className="room-header relative z-40 h-16 flex-none border-b border-white/10 bg-black/75 backdrop-blur-xl">
@@ -184,15 +187,16 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
 
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={() => isConnected && measurePing?.()}
-                        disabled={!isConnected}
+                        onClick={() => connectionPhase === 'connected' ? measurePing?.() : retryConnection?.()}
+                        disabled={connectionPhase === 'resyncing'}
                         className="room-ping-button flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold transition disabled:cursor-not-allowed"
-                        aria-label={isConnected ? `Ping ${connectionLabel} · ${qualityMeta.label}` : 'Reconnecting'}
+                        aria-label={connectionDetail}
+                        data-connection-phase={connectionPhase}
                         style={roomAppearance === 'cinematic' ? undefined : { background: qualityMeta.bg, color: qualityMeta.color, border: `1px solid ${qualityMeta.border}` }}
-                        title={isConnected ? `Ping ${connectionLabel} - ${qualityMeta.label}` : 'Reconnecting...'}
+                        title={connectionDetail}
                     >
                         {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                        <span className="hidden sm:inline">{connectionLabel}</span>
+                        <span role="status" aria-live="polite">{connectionLabel}</span>
                     </button>
 
                     <div className="relative" ref={ref}>
@@ -301,6 +305,9 @@ const RoomLayout = () => {
         users,
         isRestoringSession,
         isConnected,
+        connectionPhase,
+        connectionError,
+        retryConnection,
         networkPingMs,
         networkQuality,
         measurePing,
@@ -338,8 +345,9 @@ const RoomLayout = () => {
                 <BackgroundLayers />
                 <div className={`${panelClass} relative z-10 flex flex-col items-center gap-5 p-10`}>
                     <div className="h-12 w-12 rounded-full border-4 border-white/10 border-t-white" style={{ animation: 'spin 0.9s linear infinite' }} />
-                    <p className="text-sm font-semibold text-white">Starting room server…</p>
-                    <p className="max-w-xs text-center text-xs text-zinc-500">A sleeping room server can take about a minute. Watchly will keep retrying for up to 90 seconds.</p>
+                    <p className="text-sm font-semibold text-white">{connectionPhase === 'offline' ? 'Still offline' : 'Reconnecting to your room…'}</p>
+                    <p className="max-w-xs text-center text-xs text-zinc-500">Watchly will reconnect automatically and restore the room when the server is available.</p>
+                    <button type="button" className="rounded-xl border border-white/10 px-4 py-2 text-xs text-zinc-300" onClick={retryConnection}>Retry now</button>
                 </div>
             </div>
         );
@@ -374,6 +382,7 @@ const RoomLayout = () => {
                     placeholder="Your nickname"
                 />
                 {joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{joinError}</p>}
+                {connectionError && !joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{connectionError}</p>}
                 {joinErrorCode === 'ROOM_NOT_FOUND' && (
                     <button
                         type="button"
@@ -439,6 +448,8 @@ const RoomLayout = () => {
                     leaveRoom={leaveRoom}
                     navigate={navigate}
                     isConnected={isConnected}
+                    connectionPhase={connectionPhase}
+                    retryConnection={retryConnection}
                     networkPingMs={networkPingMs}
                     networkQuality={networkQuality}
                     measurePing={measurePing}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createYouTubePlaylistSession } from '../utils/youtubePlaylistSession';
 
-export default function useYouTubePlaylist({ state, playerRef, isController, getPosition, send, onError }) {
+export default function useYouTubePlaylist({ state, playerRef, isController, getPosition, send, onError, resyncId }) {
     const latest = useRef({ state, isController, getPosition, send, onError });
     const [readyItem, setReadyItem] = useState(null);
     useEffect(() => { latest.current = { state, isController, getPosition, send, onError }; });
@@ -23,6 +23,7 @@ export default function useYouTubePlaylist({ state, playerRef, isController, get
     const canEmit = useCallback(() => runtime.current?.canEmit() || false, []);
     const fail = useCallback(message => runtime.current?.fail(message), []);
     const session = useMemo(() => ({ tick, ready, canEmit, fail }), [tick, ready, canEmit, fail]);
+    useEffect(() => { if (resyncId != null) runtime.current?.resync(); }, [resyncId]);
     useEffect(() => {
         if (state.sourceType !== 'youtube-playlist') return;
         const timer = setInterval(session.tick, 200);

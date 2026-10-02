@@ -6,7 +6,7 @@ const MAX_ROOM_USERS = 50;
 const MAX_VOICE_PARTICIPANTS = 6;
 const MAX_SIGNAL_BYTES = 64 * 1024;
 const MAX_MEDIA_SECONDS = 7 * 24 * 60 * 60;
-const ROOM_EMPTY_GRACE_MS = 30 * 1000;
+const ROOM_EMPTY_GRACE_MS = 5 * 60 * 1000;
 const CONTROLLER_LEASE_MS = Math.min(15000, Math.max(100, Number(process.env.CONTROLLER_LEASE_MS) || 15000));
 const ALLOWED_ROLES = new Set(['Host', 'Moderator']);
 
@@ -17,6 +17,7 @@ const cleanText = (value, max) => normalizedText(value, max).replace(/<[^>]*>/g,
 const createVideoState = () => ({
     sourceType: 'remote',
     sourceId: null,
+    sourceEpoch: 0,
     url: '',
     magnetURI: '',
     localMedia: null,
@@ -41,7 +42,7 @@ const advancePlayback = (room, now = Date.now()) => {
 const remoteVideoState = (previous, url, magnetURI = '', playing = true) => {
     const playlist = playlistSource(url);
     return {
-        ...createVideoState(), sourceId: crypto.randomUUID(), url, magnetURI,
+        ...createVideoState(), sourceId: crypto.randomUUID(), sourceEpoch: (previous.sourceEpoch || 0) + 1, url, magnetURI,
         isPlaying: playlist ? false : playing, stateVersion: previous.stateVersion + 1,
         ...(playlist || {}),
         // Queued playlists continue the queue's playback intent after discovery.
@@ -208,6 +209,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.mediaStatuses.get(user.userId) || { status: 'SELECT_FILE', reason: null }
         ]));
         return {
+            sourceEpoch: room.videoState.sourceEpoch || 0,
             mediaSessionId: room.media?.mediaId || room.videoState.localMedia?.sessionId || (room.videoState.sourceType === 'youtube-playlist' ? room.videoState.sourceId : null),
             sourceRevision: room.videoState.sourceRevision,
             readyUserIds,
@@ -217,7 +219,9 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         };
     };
 
+    const playbackSnapshot = room => ({ ...room.playback, mediaId: room.media?.mediaId || null, sourceEpoch: room.videoState.sourceEpoch || 0 });
     const roomSnapshot = (room, memberId) => ({
+        roomId: room.id,
         protocolVersion: PROTOCOL_VERSION,
         memberId,
         members: publicUsers(room),
@@ -226,7 +230,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         media: room.media,
         videoState: snapshot(room),
         readiness: readinessPayload(room),
-        playback: room.playback,
+        playback: playbackSnapshot(room),
         queue: room.queue,
         chatHistory: room.chatHistory,
         serverTimeMs: Date.now()
@@ -372,13 +376,16 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 return rejectRoom('ROOM_NOT_FOUND', 'This temporary room does not exist or has expired.');
             }
 
-            cancelRoomCleanup(roomId);
             const connectedBeforeJoin = room.users.filter(item => item.connected);
             const suppliedTokenHash = typeof payload.resumeToken === 'string' && payload.resumeToken.length >= 32
                 ? tokenHash(payload.resumeToken) : null;
             let user = suppliedTokenHash
                 ? room.users.find(item => item.resumeTokenHash === suppliedTokenHash)
                 : null;
+            if (!creating && (payload.resumeToken !== undefined || payload.memberId !== undefined) &&
+                (!user || (payload.memberId && payload.memberId !== user.userId))) {
+                return rejectRoom('SESSION_INVALID', 'This room session is no longer valid. Join again to continue.');
+            }
             if (user && room.kickedUserIds.has(user.userId)) {
                 return rejectRoom('MEMBER_BANNED', 'This membership was removed from the room.');
             }
@@ -415,6 +422,11 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                     room.voiceSocketIds.delete(oldSocketId);
                     const oldSocket = io.sockets.sockets.get(oldSocketId);
                     oldSocket?.leave(roomId);
+                    if (oldSocket) {
+                        oldSocket.data.roomId = null; oldSocket.data.memberId = null;
+                        oldSocket.emit('room:error', { code: 'SESSION_REPLACED', message: 'This room session was resumed in another connection.', retryable: false });
+                        oldSocket.disconnect(true);
+                    }
                 }
                 user.id = socket.id;
                 user.nickname = nickname;
@@ -425,6 +437,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 if (room.media) room.mediaStatuses.set(user.userId, { status: 'SELECT_FILE', reason: null });
             }
 
+            cancelRoomCleanup(roomId);
             socket.join(roomId);
             socket.roomId = roomId;
             socket.userId = user.userId;
@@ -459,7 +472,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
 
         socket.on('room:snapshot', (_payload, callback) => {
             const room = rooms.get(socket.data.roomId);
-            if (!room || !socket.data.memberId) return callback?.(protocolError('NOT_IN_ROOM', 'Join a room first.'));
+            if (!room || !getUserBySocket(room, socket.id)) return callback?.(protocolError('NOT_IN_ROOM', 'Join a room first.'));
             callback?.({ ok: true, snapshot: roomSnapshot(room, socket.data.memberId) });
         });
 
@@ -628,7 +641,9 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 cleanText(descriptor.displayTitle, 100);
             if (!access || !valid) return callback?.(protocolError('INVALID_MEDIA', 'The local media descriptor is invalid.'));
             const { room, user } = access;
+            room.videoState.sourceEpoch = (room.videoState.sourceEpoch || 0) + 1;
             room.media = {
+                declaredAtServerMs: Date.now(),
                 sourceType: 'local-file', mediaId: descriptor.mediaId,
                 fingerprintVersion: 'sampled-sha256-v1',
                 displayTitle: cleanText(descriptor.displayTitle, 100),
@@ -642,7 +657,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.playback = createPlayback();
             room.recentCommandIds.clear();
             room.lastEndedMediaId = null;
-            io.to(socket.data.roomId).emit('media:declared', { media: room.media, playback: room.playback });
+            io.to(socket.data.roomId).emit('media:declared', { media: room.media, playback: playbackSnapshot(room), sourceEpoch: room.videoState.sourceEpoch });
             emitReadiness(socket.data.roomId, room);
             callback?.({ ok: true, snapshot: roomSnapshot(room, user.userId) });
         });
@@ -724,7 +739,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             };
             room.recentCommandIds.set(payload.commandId, room.playback);
             while (room.recentCommandIds.size > 100) room.recentCommandIds.delete(room.recentCommandIds.keys().next().value);
-            const completedPlayback = room.playback;
+            const completedPlayback = playbackSnapshot(room);
             io.to(socket.data.roomId).emit('playback:state', completedPlayback);
             if (payload.action === 'ENDED') {
                 room.lastEndedMediaId = payload.mediaId;
@@ -749,6 +764,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         const mediaEventIsCurrent = (room, payload = {}) => {
             // Never let delayed URL-player events overwrite a local-file session.
             if (room.media) return false;
+            if (payload.sourceEpoch !== undefined && payload.sourceEpoch !== (room.videoState.sourceEpoch || 0)) return false;
             if (payload.sourceId && payload.sourceId !== room.videoState.sourceId) return false;
             if (payload.sourceRevision !== undefined && room.videoState.sourceType !== 'youtube-playlist') return false;
             if (room.videoState.sourceType === 'youtube-playlist') return currentPlaylistItem(room.videoState, payload);
@@ -861,6 +877,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.localReadyUserIds.add(user.userId);
             room.videoState = {
                 sourceType: 'local',
+                sourceEpoch: (room.videoState.sourceEpoch || 0) + 1,
                 url: '',
                 magnetURI: '',
                 localMedia: manifest,
@@ -1165,7 +1182,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                             memberId: user.userId, durationSec: room.media.durationMs / 1000 }),
                         commandId: `disconnect_${room.playback.seq + 1}`
                     };
-                    io.to(roomId).emit('playback:state', room.playback);
+                    io.to(roomId).emit('playback:state', playbackSnapshot(room));
                 }
                 room.controllerLeaseUntil = Date.now() + CONTROLLER_LEASE_MS;
                 io.to(roomId).emit('control:changed', {

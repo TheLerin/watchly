@@ -145,6 +145,32 @@ const ytDiagnostic = page => page.evaluate(() => {
         await host.getByRole('button', { name: 'Play Now', exact: true }).first().click();
         await wait(async () => (await state()).playlistIndex === 3 && (await yt(host))?.id === items[3] && !(await host.locator('.playlist-controls').getByRole('button', { name: 'Play Now', exact: true }).isDisabled()), 'selected video URL was ignored');
         assert.equal((await state()).isPlaying, false);
+        // Keep the actual iframe mounted while the host changes playlist items offline.
+        await viewer.evaluate(async () => {
+            const { socket } = await import('/src/socket.js'); window.recoverySocket = socket;
+            window.recoveryIframe = document.querySelector('.room-player-surface iframe');
+            window.recoveryMember = JSON.parse(sessionStorage.getItem('watchTogetherSession')).memberId;
+            window.recoveryWrites = [];
+            socket.onAnyOutgoing((event, payload) => { if (['play_video', 'pause_video', 'seek_video', 'playlist_update'].includes(event) && !['READY', 'RESOLVE'].includes(payload?.action)) window.recoveryWrites.push(event); });
+        });
+        await viewer.context().setOffline(true);
+        await viewer.evaluate(() => window.recoverySocket.io.engine.close());
+        await host.getByRole('button', { name: 'Next playlist video' }).click();
+        await wait(async () => (await state()).playlistIndex === 4 && (await yt(host))?.id === items[4], 'offline host playlist change failed');
+        await viewer.context().setOffline(false);
+        await wait(async () => await viewer.locator('.room-ping-button').getAttribute('data-connection-phase') === 'connected', 'playlist reconnect did not resync');
+        assert.equal((await yt(viewer)).id, items[4]);
+        assert.notEqual((await yt(viewer)).status, 1);
+        assert.equal(await viewer.evaluate(() => window.recoveryIframe === document.querySelector('.room-player-surface iframe')), true);
+        assert.deepEqual(await viewer.evaluate(() => window.recoveryWrites), []);
+        let recovered = (await socketCall(host, 'room:snapshot', {})).snapshot;
+        const recoveredMember = await viewer.evaluate(() => window.recoveryMember);
+        assert.equal(recovered.members.filter(member => member.userId === recoveredMember).length, 1);
+        await wait(async () => { recovered = (await socketCall(host, 'room:snapshot', {})).snapshot; return recovered.readiness.readyCount === recovered.readiness.totalCount; }, 'playlist readiness not restored');
+        await wait(async () => !(await host.locator('.playlist-controls').getByRole('button', { name: 'Play Now', exact: true }).isDisabled()), 'recovered playlist readiness missing');
+        await host.getByRole('button', { name: 'Previous playlist video' }).click();
+        await wait(async () => (await state()).playlistIndex === 3, 'return from reconnect item failed');
+        console.log('PASS actual playlist reconnect adopts the newest paused item, retains the iframe, restores readiness and sends no control echoes');
         await host.setViewportSize({ width: 390, height: 844 });
         await host.getByRole('button', { name: 'Watch', exact: true }).click();
         await host.getByRole('button', { name: 'Next playlist video' }).click();
@@ -170,6 +196,17 @@ const ytDiagnostic = page => page.evaluate(() => {
         assert.equal(await host.locator('.playlist-controls').count(), 0);
         assert.equal(await host.locator('.room-player-surface iframe').count(), 1);
         console.log('PASS real normal shortened YouTube URL after playlist playback');
+        await viewer.evaluate(() => { window.recoveryIframe = document.querySelector('.room-player-surface iframe'); window.recoveryWrites = []; });
+        await viewer.context().setOffline(true); await viewer.evaluate(() => window.recoverySocket.io.engine.close());
+        await host.evaluate(() => { const player = window.__ytPlayers.at(-1); player.seekTo(12, true); player.pauseVideo(); });
+        await wait(async () => !(await state()).isPlaying && (await state()).playedSeconds >= 11, 'single-video host pause/seek missing');
+        await viewer.context().setOffline(false);
+        await wait(async () => await viewer.locator('.room-ping-button').getAttribute('data-connection-phase') === 'connected', 'single YouTube reconnect did not resync');
+        assert.ok(Math.abs((await yt(viewer)).time - (await state()).playedSeconds) < 1.5);
+        assert.notEqual((await yt(viewer)).status, 1);
+        assert.equal(await viewer.evaluate(() => window.recoveryIframe === document.querySelector('.room-player-surface iframe')), true);
+        assert.deepEqual(await viewer.evaluate(() => window.recoveryWrites), []);
+        console.log('PASS real single YouTube reconnect restores paused time on the existing iframe without echoes');
         assert.deepEqual(errors, []);
         console.log('PASS real Next/Previous, seek, play/pause, repeated auto-next, late join, refresh, single iframe and no page errors');
     } catch (error) {

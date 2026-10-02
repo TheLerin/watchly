@@ -36,6 +36,8 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
         currentUser,
         users,
         isConnected,
+        roomActionsEnabled,
+        canSendRoomAction,
         networkPingMs,
         networkQuality,
         measurePing,
@@ -66,6 +68,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
     });
     const isVoiceActiveRef = useRef(false);
     const isMutedRef = useRef(false);
+    const voiceReconnectGeneration = useRef(0);
 
     useEffect(() => {
         isVoiceActiveRef.current = isVoiceActive;
@@ -205,7 +208,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
             const offer = await record.pc.createOffer({ iceRestart });
             if (record.pc.signalingState !== 'stable') return;
             await record.pc.setLocalDescription(offer);
-            socket.emit('webrtc_offer', {
+            if (socket.connected) socket.emit('webrtc_offer', {
                 targetSocketId: peerId,
                 offer: record.pc.localDescription.toJSON(),
             });
@@ -241,7 +244,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
 
         pc.onicecandidate = event => {
             if (event.candidate) {
-                socket.emit('webrtc_ice_candidate', {
+                if (socket.connected) socket.emit('webrtc_ice_candidate', {
                     targetSocketId: peerId,
                     candidate: event.candidate.toJSON(),
                 });
@@ -317,6 +320,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
     }, []);
 
     const joinVoiceOnServer = useCallback(() => new Promise((resolve, reject) => {
+        if (!socket.connected) return reject(new Error('Voice signaling is offline.'));
         socket.timeout(8000).emit('join_voice', {
             roomId,
             isMuted: isMutedRef.current,
@@ -331,14 +335,21 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
 
     const reconnectVoice = useCallback(async () => {
         if (!isVoiceActiveRef.current || !localStreamRef.current || !socket.connected) return;
+        const generation = ++voiceReconnectGeneration.current;
+        if (!localStreamRef.current.getAudioTracks().some(track => track.readyState === 'live')) {
+            setVoiceError('Your microphone is no longer available. Leave voice and rejoin.');
+            return;
+        }
         cleanupPeers();
         try {
             const response = await joinVoiceOnServer();
+            if (generation !== voiceReconnectGeneration.current || !isVoiceActiveRef.current || !socket.connected) return;
             for (const peer of response.peers || []) {
                 createPeerConnection(peer.id, true);
             }
             setVoiceError('');
         } catch (error) {
+            if (generation !== voiceReconnectGeneration.current) return;
             setVoiceError(`Voice reconnect failed: ${error.message}`);
         }
     }, [cleanupPeers, createPeerConnection, joinVoiceOnServer]);
@@ -359,7 +370,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                 await flushCandidates(senderSocketId);
                 const answer = await record.pc.createAnswer();
                 await record.pc.setLocalDescription(answer);
-                socket.emit('webrtc_answer', {
+                if (socket.connected) socket.emit('webrtc_answer', {
                     targetSocketId: senderSocketId,
                     answer: record.pc.localDescription.toJSON(),
                 });
@@ -394,13 +405,14 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
         };
         const handlePeerLeft = ({ userId }) => cleanupPeer(userId);
         const handleDisconnect = () => {
+            voiceReconnectGeneration.current++;
             if (!isVoiceActiveRef.current) return;
             cleanupPeers();
             setVoiceError('Signaling disconnected. Voice will reconnect automatically.');
         };
         const handleRoomJoined = () => {
             if (isVoiceActiveRef.current && localStreamRef.current) {
-                setTimeout(reconnectVoice, 150);
+                queueMicrotask(reconnectVoice);
             }
         };
 
@@ -437,7 +449,8 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
     }, [cleanupPeers, roomId, stopLocalStream]);
 
     const leaveVoice = useCallback(() => {
-        socket.emit('leave_voice', { roomId });
+        voiceReconnectGeneration.current++;
+        if (socket.connected) socket.emit('leave_voice', { roomId });
         cleanupPeers();
         stopLocalStream();
         isVoiceActiveRef.current = false;
@@ -453,7 +466,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
             leaveVoice();
             return;
         }
-        if (!isConnected) {
+        if (!canSendRoomAction()) {
             setVoiceError('The signaling server is reconnecting. Try again in a moment.');
             setIsExpanded(true);
             return;
@@ -477,6 +490,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                 video: false,
             });
             const track = stream.getAudioTracks()[0];
+            if (!canSendRoomAction()) { stream.getTracks().forEach(item => item.stop()); throw new Error('The room disconnected before voice joined. Try again when synced.'); }
             if (!track) throw new Error('No microphone audio track was created.');
             track.enabled = !isMutedRef.current;
             localStreamRef.current = stream;
@@ -515,7 +529,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
         track.enabled = !nextMuted;
         isMutedRef.current = nextMuted;
         setIsMuted(nextMuted);
-        socket.emit('update_voice_mute', { roomId, isMuted: nextMuted });
+        if (socket.connected) socket.emit('update_voice_mute', { roomId, isMuted: nextMuted });
     };
 
     const setAudioElement = useCallback((peerId, element) => {
@@ -663,6 +677,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                         <button
                             type="button"
                             onClick={toggleVoice}
+                            disabled={!roomActionsEnabled}
                             className="room-voice-join col-span-2 flex items-center justify-center gap-2 rounded-2xl border border-green-500/30 bg-green-500/15 px-3 py-2.5 text-xs font-bold text-green-400"
                         >
                             <PhoneCall size={15} />

@@ -15,6 +15,9 @@ import useServerClock from '../hooks/useServerClock';
 import { commandId, PROTOCOL_VERSION, protocolErrorMessage } from '../utils/protocol';
 import { playbackCommand } from '../utils/playbackCommands';
 import { createRoomRequester } from '../utils/roomRequest';
+import { createRoomRecovery, readRoomSession, terminalRoomError } from '../utils/roomRecovery';
+import { acceptsVideoState, mergeChatHistory } from '../utils/roomState';
+import { useLocation } from 'react-router-dom';
 
 const RoomContext = createContext();
 export const useRoom = () => useContext(RoomContext);
@@ -44,6 +47,7 @@ const emptyReadiness = {
 };
 
 export const RoomProvider = ({ children }) => {
+    const location = useLocation();
     const [isRestoringSession, setIsRestoringSession] = useState(true);
     const [isConnected, setIsConnected] = useState(socket.connected);
     const [connectionPhase, setConnectionPhase] = useState(socket.connected ? 'connected' : 'offline');
@@ -60,22 +64,26 @@ export const RoomProvider = ({ children }) => {
     const [mediaDescriptor, setMediaDescriptor] = useState(null);
     const [playback, setPlayback] = useState(null);
     const [protocolMismatch, setProtocolMismatch] = useState(false);
+    const [resyncRequest, setResyncRequest] = useState(null);
+    const [connectionError, setConnectionError] = useState('');
     const clock = useServerClock(isConnected);
     const roomRequester = useMemo(() => createRoomRequester(socket), []);
     useEffect(() => () => roomRequester.cancel(), [roomRequester]);
 
     const isKicked = useRef(false);
-    const restoreTimeoutRef = useRef(null);
     const serverClockOffsetRef = useRef(0);
     const activeMediaIdRef = useRef(null);
     const videoStateRef = useRef(videoState);
     const pendingPlayRef = useRef(new Map());
+    const sessionRef = useRef(null);
+    const recoveryRef = useRef(null);
+    const connectionPhaseRef = useRef(connectionPhase);
+    const routeRef = useRef(location.pathname);
     useEffect(() => {
         videoStateRef.current = videoState;
     }, [videoState]);
 
     const resetRoom = useCallback(() => {
-        clearTimeout(restoreTimeoutRef.current);
         setIsRestoringSession(false);
         setRoomId(null);
         setCurrentUser(null);
@@ -90,6 +98,7 @@ export const RoomProvider = ({ children }) => {
         setControllerMemberId(null);
         activeMediaIdRef.current = null;
         pendingPlayRef.current.clear();
+        setResyncRequest(null);
     }, []);
 
     const updateClockOffset = useCallback((serverTime, roundTripMs = 0) => {
@@ -149,6 +158,7 @@ export const RoomProvider = ({ children }) => {
         const knownMembers = new Map();
         const applyReadiness = payload => {
             if (!payload) return;
+            if (Number.isInteger(payload.sourceEpoch) && payload.sourceEpoch < (videoStateRef.current.sourceEpoch || 0)) return;
             const playlist = videoStateRef.current;
             if (playlist.sourceType === 'youtube-playlist' && (payload.mediaSessionId !== playlist.sourceId || payload.sourceRevision !== playlist.sourceRevision)) return;
             const activeSession = activeMediaIdRef.current || videoStateRef.current.localMedia?.sessionId;
@@ -180,16 +190,12 @@ export const RoomProvider = ({ children }) => {
         };
 
         const applyVideoState = nextState => {
-            if (!nextState || typeof nextState !== 'object') return;
+            if (!acceptsVideoState(videoStateRef.current, nextState)) return false;
             updateClockOffset(nextState.serverTime);
-            if (nextState.sourceId && nextState.sourceId === videoStateRef.current.sourceId && Number.isInteger(nextState.stateVersion) && nextState.stateVersion < videoStateRef.current.stateVersion) return;
-            videoStateRef.current = { ...emptyVideoState(), ...videoStateRef.current, ...nextState, localMedia: nextState.localMedia || null };
-            setVideoState(previous => ({
-                ...emptyVideoState(),
-                ...previous,
-                ...nextState,
-                localMedia: nextState.localMedia || null,
-            }));
+            const sameSource = nextState.sourceId === videoStateRef.current.sourceId && nextState.sourceType === videoStateRef.current.sourceType;
+            videoStateRef.current = { ...emptyVideoState(), ...(sameSource ? videoStateRef.current : {}), ...nextState, localMedia: nextState.localMedia || null };
+            setVideoState(videoStateRef.current);
+            return true;
         };
 
         const addSystemMessage = text => {
@@ -202,51 +208,39 @@ export const RoomProvider = ({ children }) => {
             }].slice(-200));
         };
 
-        const onConnect = () => { setIsConnected(true); setConnectionPhase('connected'); };
-        const onDisconnect = () => {
-            setIsConnected(false);
-            setConnectionPhase('reconnecting');
-            setNetworkPingMs(null);
-            setNetworkQuality('offline');
-        };
-        const onRoomJoined = ({
-            roomId: joinedRoomId,
-            resumeToken,
-            memberId,
-            user,
-            existingUsers,
-            videoState: initialVideoState,
-            localReadiness: initialReadiness,
-            queue: initialQueue,
-            chatHistory, snapshot,
-        }) => {
-            clearTimeout(restoreTimeoutRef.current);
+        const saveJoin = ({ roomId: joinedRoomId, resumeToken, memberId, user }) => {
+            setConnectionError('');
             isKicked.current = false;
-            activeMediaIdRef.current = snapshot?.media?.mediaId || initialVideoState?.localMedia?.sessionId || null;
             if (joinedRoomId && resumeToken) {
                 const session = { roomId: joinedRoomId, nickname: user.nickname, resumeToken, memberId };
-                sessionStorage.setItem('watchTogetherSession', JSON.stringify(session));
+                sessionRef.current = session;
+                try { sessionStorage.setItem('watchTogetherSession', JSON.stringify(session)); } catch { /* retained in memory */ }
                 setRoomId(joinedRoomId);
             }
             setCurrentUser(user);
+        };
+        const applySnapshot = (snapshot, id) => {
+            if (!snapshot) return;
+            const initialVideoState = snapshot.videoState;
+            activeMediaIdRef.current = snapshot.media?.mediaId || initialVideoState?.localMedia?.sessionId || null;
             knownMembers.clear();
-            for (const member of existingUsers || []) knownMembers.set(member.userId || member.id, member);
-            setUsers(existingUsers || []);
-            if (initialVideoState) applyVideoState(initialVideoState);
-            if (initialReadiness) applyReadiness(initialReadiness);
-            setQueue(initialQueue || []);
-            setMessages(chatHistory || []);
-            if (snapshot) {
-                setControllerMemberId(snapshot.controllerMemberId);
-                setMediaDescriptor(snapshot.media);
-                setPlayback(snapshot.playback);
-                if (snapshot.media) onMediaDeclared({ media: snapshot.media, playback: snapshot.playback });
-                if (snapshot.readiness) applyReadiness({
-                    ...snapshot.readiness,
-                    mediaSessionId: snapshot.media?.mediaId || null
-                });
-            }
+            for (const member of snapshot.members || []) knownMembers.set(member.userId || member.id, member);
+            setUsers(snapshot.members || []);
+            setCurrentUser(snapshot.members?.find(member => member.userId === sessionRef.current?.memberId) || null);
+            setQueue(snapshot.queue || []);
+            setMessages(previous => mergeChatHistory(previous, snapshot.chatHistory));
+            setControllerMemberId(snapshot.controllerMemberId);
+            setMediaDescriptor(snapshot.media);
+            setPlayback(snapshot.media ? snapshot.playback : null);
+            updateClockOffset(snapshot.serverTimeMs);
+            if (snapshot.media) onMediaDeclared({ media: snapshot.media, playback: snapshot.playback, sourceEpoch: initialVideoState?.sourceEpoch });
+            else if (initialVideoState) applyVideoState(initialVideoState);
+            if (snapshot.readiness) applyReadiness(snapshot.readiness);
+            setResyncRequest({ id });
             setIsRestoringSession(false);
+        };
+        const onRoomJoined = response => {
+            if (!recoveryRef.current?.isJoining()) recoveryRef.current?.acceptJoin(response);
         };
         const onUserJoined = newUser => {
             const memberKey = newUser.userId || newUser.id;
@@ -288,6 +282,7 @@ export const RoomProvider = ({ children }) => {
         };
         const onUserKicked = () => {
             isKicked.current = true;
+            recoveryRef.current?.stop(); sessionRef.current = null;
             sessionStorage.removeItem('watchTogetherSession');
             socket.disconnect();
             resetRoom();
@@ -295,30 +290,30 @@ export const RoomProvider = ({ children }) => {
             setTimeout(() => window.dispatchEvent(new CustomEvent('watchly:kicked')), 300);
         };
         const onVideoChanged = state => {
+            if (!recoveryRef.current?.acceptsEvents() || !applyVideoState(state)) return;
             activeMediaIdRef.current = null;
             setMediaDescriptor(null);
             setPlayback(null);
-            applyVideoState(state);
             setLocalReadiness(emptyReadiness);
             setUsers(previous => previous.map(user => ({ ...user, localReady: null })));
             addSystemMessage('The video has been changed.');
         };
         const onLocalMediaSelected = ({ videoState: state, readiness }) => {
+            if (!recoveryRef.current?.acceptsEvents() || !applyVideoState(state)) return;
             activeMediaIdRef.current = state.localMedia?.sessionId || null;
-            applyVideoState(state);
             applyReadiness(readiness);
             addSystemMessage(`${state.localMedia?.selectedBy || 'The host'} selected ${state.localMedia?.displayName || 'a local file'}.`);
         };
         const onVideoPlayed = state => {
-            applyVideoState(state);
+            if (!recoveryRef.current?.acceptsEvents() || !applyVideoState(state)) return;
             toast('▶ Playing', { duration: 1200 });
         };
         const onVideoPaused = state => {
-            applyVideoState(state);
+            if (!recoveryRef.current?.acceptsEvents() || !applyVideoState(state)) return;
             toast('⏸ Paused', { duration: 1200 });
         };
-        const onVideoProgress = state => applyVideoState(state);
-        const onVideoSeeked = state => applyVideoState(state);
+        const onVideoProgress = state => recoveryRef.current?.acceptsEvents() && applyVideoState(state);
+        const onVideoSeeked = state => recoveryRef.current?.acceptsEvents() && applyVideoState(state);
         const onQueueUpdated = nextQueue => setQueue(nextQueue || []);
         const onPlaylistNotice = payload => toast(payload.message, { duration: 2500 });
         const onVoiceUpdated = ({ userId, isVoiceActive, isMuted }) => {
@@ -335,22 +330,25 @@ export const RoomProvider = ({ children }) => {
         };
         const onErrorMessage = ({ message }) => toast.error(message || 'Server error', { duration: 4000 });
         const onControlChanged = payload => setControllerMemberId(payload.controllerMemberId);
-        const onMediaDeclared = ({ media, playback: nextPlayback }) => {
+        const onMediaDeclared = ({ media, playback: nextPlayback, sourceEpoch = nextPlayback?.sourceEpoch }) => {
+            if (Number.isInteger(sourceEpoch) && sourceEpoch < (videoStateRef.current.sourceEpoch || 0)) return;
             activeMediaIdRef.current = media.mediaId;
             setMediaDescriptor(media);
             setPlayback(nextPlayback);
             const fingerprint = media.mediaId.split(':').at(-1);
             applyVideoState({
-                sourceType: 'local', sourceId: null, url: '', magnetURI: '', isPlaying: nextPlayback.status === 'playing', playedSeconds: nextPlayback.positionSec,
+                sourceType: 'local', sourceId: null, sourceEpoch, url: '', magnetURI: '', isPlaying: nextPlayback.status === 'playing', playedSeconds: nextPlayback.positionSec,
                 updatedAt: nextPlayback.effectiveAtServerMs, stateVersion: nextPlayback.seq, seekVersion: 0,
                 localMedia: {
-                    sessionId: media.mediaId, declarationId: nextPlayback.effectiveAtServerMs, fingerprint, displayName: media.displayTitle,
+                    sessionId: media.mediaId, declarationId: media.declaredAtServerMs || sourceEpoch || nextPlayback.effectiveAtServerMs, fingerprint, displayName: media.displayTitle,
                     size: media.sizeBytes, duration: media.durationMs / 1000,
                     mimeType: 'video/*'
                 }
             });
         };
         const onPlaybackState = next => {
+            if (!recoveryRef.current?.acceptsEvents() || (next.mediaId && next.mediaId !== activeMediaIdRef.current) ||
+                (Number.isInteger(next.sourceEpoch) && next.sourceEpoch < (videoStateRef.current.sourceEpoch || 0))) return;
             setPlayback(previous => (!previous || next.seq > previous.seq) ? next : previous);
             setVideoState(previous => next.seq <= (previous.stateVersion ?? -1) ? previous : ({
                 ...previous,
@@ -362,17 +360,36 @@ export const RoomProvider = ({ children }) => {
             }));
         };
         const onRoomError = error => {
-            if (error?.code === 'PROTOCOL_MISMATCH') setProtocolMismatch(true);
-            else if (error?.code === 'ROOM_NOT_FOUND' || error?.code === 'MEMBER_BANNED') {
-                sessionStorage.removeItem('watchTogetherSession');
-                socket.disconnect();
-                resetRoom();
-                toast.error(error.message);
-            } else toast.error(error?.message || 'Room error');
+            if (terminalRoomError(error) && sessionRef.current) recoveryRef.current?.fail(error);
+            else if (error?.code === 'PROTOCOL_MISMATCH') setProtocolMismatch(true);
+            else toast.error(error?.message || 'Room error');
         };
 
-        socket.on('connect', onConnect);
-        socket.on('disconnect', onDisconnect);
+        const recovery = createRoomRecovery({
+            socket, getSession: () => sessionRef.current, isEntryPending: roomRequester.isPending,
+            onJoin: saveJoin, onSnapshot: applySnapshot,
+            onPhase: (phase, connected) => {
+                connectionPhaseRef.current = phase;
+                setConnectionPhase(phase); setIsConnected(connected);
+                if (!connected) { setNetworkPingMs(null); setNetworkQuality('offline'); setResyncRequest(null); }
+            },
+            onOutage: () => toast('Connection lost — reconnecting…', { id: 'watchly-connection', duration: 3000 }),
+            onRestored: () => toast.success('Back in sync', { id: 'watchly-connection', duration: 2000 }),
+            onFailure: error => {
+                sessionRef.current = null;
+                sessionStorage.removeItem('watchTogetherSession');
+                socket.disconnect(); resetRoom();
+                setConnectionError(error.message || 'This room session is no longer available.');
+                if (error.code === 'PROTOCOL_MISMATCH') setProtocolMismatch(true);
+                toast.error(error.message, { id: 'watchly-connection', duration: 4000 });
+            },
+        });
+        recoveryRef.current = recovery;
+        const wake = () => { if (document.visibilityState === 'visible') recovery.wake(); };
+        const online = () => recovery.wake(true);
+        const offline = () => { if (!socket.connected && sessionRef.current) { connectionPhaseRef.current = 'offline'; setConnectionPhase('offline'); } };
+        document.addEventListener('visibilitychange', wake);
+        window.addEventListener('focus', wake); window.addEventListener('online', online); window.addEventListener('offline', offline);
         socket.on('room_joined', onRoomJoined);
         socket.on('user_joined', onUserJoined);
         socket.on('user_left', onUserLeft);
@@ -397,8 +414,9 @@ export const RoomProvider = ({ children }) => {
         socket.on('room:error', onRoomError);
 
         return () => {
-            socket.off('connect', onConnect);
-            socket.off('disconnect', onDisconnect);
+            recovery.dispose(); recoveryRef.current = null;
+            document.removeEventListener('visibilitychange', wake);
+            window.removeEventListener('focus', wake); window.removeEventListener('online', online); window.removeEventListener('offline', offline);
             socket.off('room_joined', onRoomJoined);
             socket.off('user_joined', onUserJoined);
             socket.off('user_left', onUserLeft);
@@ -422,56 +440,18 @@ export const RoomProvider = ({ children }) => {
             socket.off('playback:state', onPlaybackState);
             socket.off('room:error', onRoomError);
         };
-    }, [resetRoom, updateClockOffset]);
+    }, [resetRoom, updateClockOffset, roomRequester]);
 
     useEffect(() => {
-        const attempting = attempt => setConnectionPhase(attempt > 1 ? 'starting-server' : 'reconnecting');
-        const failed = () => setConnectionPhase('offline');
-        socket.io.on('reconnect_attempt', attempting);
-        socket.io.on('reconnect_failed', failed);
-        return () => { socket.io.off('reconnect_attempt', attempting); socket.io.off('reconnect_failed', failed); };
-    }, []);
-
-    useEffect(() => {
-        const savedSession = sessionStorage.getItem('watchTogetherSession');
-        if (!savedSession) {
-            setIsRestoringSession(false);
-            return undefined;
-        }
-        try {
-            const session = JSON.parse(savedSession);
-            if (!session?.roomId || !session?.nickname || !session?.resumeToken) throw new Error('Invalid saved session');
-        } catch {
+        const session = readRoomSession(sessionStorage);
+        if (!session || window.location.pathname !== `/room/${session.roomId}`) {
             sessionStorage.removeItem('watchTogetherSession');
             setIsRestoringSession(false);
             return undefined;
         }
-        restoreTimeoutRef.current = setTimeout(() => {
-            setIsRestoringSession(false);
-            sessionStorage.removeItem('watchTogetherSession');
-            socket.disconnect();
-            setConnectionPhase('offline');
-            toast.error('Could not reconnect to the server. Please rejoin.', { duration: 4000 });
-        }, 90000);
-        if (!socket.connected) socket.connect();
-        return () => clearTimeout(restoreTimeoutRef.current);
+        sessionRef.current = session;
+        recoveryRef.current?.resume();
     }, []);
-
-    useEffect(() => {
-        const saved = sessionStorage.getItem('watchTogetherSession');
-        if (!saved || !isConnected || roomRequester.isPending()) return;
-        try {
-            const session = JSON.parse(saved);
-            if (session.roomId && session.nickname) {
-                setRoomId(session.roomId);
-                socket.emit('room:join', { ...session, protocolVersion: PROTOCOL_VERSION });
-            }
-        } catch {
-            sessionStorage.removeItem('watchTogetherSession');
-            clearTimeout(restoreTimeoutRef.current);
-            setIsRestoringSession(false);
-        }
-    }, [isConnected, roomRequester]);
 
     const requestRoom = useCallback((event, payload) => roomRequester.request(event, {
         ...payload, protocolVersion: PROTOCOL_VERSION,
@@ -489,15 +469,35 @@ export const RoomProvider = ({ children }) => {
     const createRoom = useCallback(nickname => requestRoom('room:create', { nickname }), [requestRoom]);
 
     const leaveRoom = useCallback(() => {
+        recoveryRef.current?.stop(); sessionRef.current = null;
         roomRequester.cancel();
-        clearTimeout(restoreTimeoutRef.current);
-        if (!isKicked.current) socket.emit('leave_room', { roomId });
+        if (!isKicked.current && socket.connected) socket.emit('leave_room', { roomId });
         sessionStorage.removeItem('watchTogetherSession');
         socket.disconnect();
         resetRoom();
         setProtocolMismatch(false);
         isKicked.current = false;
     }, [resetRoom, roomId, roomRequester]);
+
+    useEffect(() => {
+        const previous = routeRef.current;
+        routeRef.current = location.pathname;
+        if (previous.startsWith('/room/') && previous !== location.pathname && sessionRef.current) leaveRoom();
+    }, [location.pathname, leaveRoom]);
+
+    const completeResync = useCallback(id => {
+        if (recoveryRef.current?.complete(id)) setResyncRequest(null);
+    }, []);
+    const failResync = useCallback(id => {
+        if (recoveryRef.current?.failResync(id)) setResyncRequest(null);
+    }, []);
+    const retryConnection = useCallback(() => recoveryRef.current?.wake(true), []);
+    const canSendRoomAction = useCallback(() => socket.connected && connectionPhaseRef.current === 'connected', []);
+    const emitRoomAction = useCallback((event, payload) => {
+        if (!canSendRoomAction()) { toast('Room actions are unavailable while reconnecting or resyncing.', { id: 'watchly-offline-action' }); return false; }
+        socket.emit(event, payload);
+        return true;
+    }, [canSendRoomAction]);
 
     const sendMessage = useCallback(text => {
         if (!text.trim() || !currentUser || !roomId) return;
@@ -506,15 +506,17 @@ export const RoomProvider = ({ children }) => {
             text,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
-        socket.emit('send_message', { roomId, message });
-    }, [roomId, currentUser]);
+        emitRoomAction('send_message', { roomId, message });
+    }, [roomId, currentUser, emitRoomAction]);
 
     const emitControl = useCallback((eventName, payload = {}) => {
+        if (!canSendRoomAction()) return false;
         const state = videoStateRef.current;
         socket.emit(eventName, {
             roomId,
             mediaSessionId: state.localMedia?.sessionId || null,
             stateVersion: state.stateVersion || 0,
+            sourceId: state.sourceId, sourceEpoch: state.sourceEpoch,
             ...(state.sourceType === 'youtube-playlist' ? {
                 sourceId: state.sourceId, sourceRevision: state.sourceRevision,
                 playlistId: state.playlistId, playlistIndex: state.playlistIndex,
@@ -522,14 +524,16 @@ export const RoomProvider = ({ children }) => {
             } : {}),
             ...payload,
         });
-    }, [roomId]);
+        return true;
+    }, [roomId, canSendRoomAction]);
 
     const loadVideo = useCallback((url, magnetURI = '') => {
         if (!url && !magnetURI) return;
-        socket.emit('change_video', { roomId, url: url || '', magnetURI: magnetURI || '' });
-    }, [roomId]);
+        return emitRoomAction('change_video', { roomId, url: url || '', magnetURI: magnetURI || '' });
+    }, [roomId, emitRoomAction]);
 
     const selectLocalMedia = useCallback(localMedia => new Promise((resolve, reject) => {
+        if (!canSendRoomAction()) return reject(new Error('Wait for the room to reconnect before selecting a new source.'));
         const mediaId = `sampled-sha256-v1:${localMedia.size}:${localMedia.fingerprint}`;
         const descriptor = {
             sourceType: 'local-file', mediaId, fingerprintVersion: 'sampled-sha256-v1',
@@ -543,9 +547,10 @@ export const RoomProvider = ({ children }) => {
             }
             resolve(response.snapshot);
         });
-    }), []);
+    }), [canSendRoomAction]);
 
     const markLocalMediaReady = useCallback(({ mediaSessionId, fingerprint, size, duration }) => {
+        if (!recoveryRef.current?.acceptsEvents()) return;
         socket.emit('media:ready', {
             mediaId: mediaSessionId, status: 'READY',
             fingerprint, size, duration
@@ -553,9 +558,11 @@ export const RoomProvider = ({ children }) => {
     }, []);
 
     const markLocalMediaNotReady = useCallback(mediaSessionId => {
+        if (!recoveryRef.current?.acceptsEvents()) return;
         socket.emit('media:ready', { mediaId: mediaSessionId, status: 'MISMATCH', reason: 'Different file' });
     }, []);
     const markLocalMediaStatus = useCallback((mediaId, status, reason) => {
+        if (!recoveryRef.current?.acceptsEvents()) return;
         const media = videoStateRef.current.localMedia;
         const proof = status === 'READY' && media?.sessionId === mediaId
             ? { fingerprint: media.fingerprint, size: media.size, duration: media.duration }
@@ -564,7 +571,7 @@ export const RoomProvider = ({ children }) => {
     }, []);
 
     const sendPlaybackCommand = useCallback((action, options = {}) => {
-        if (!socket.connected) return Promise.resolve(false);
+        if (!canSendRoomAction()) return Promise.resolve(false);
         const { event, payload } = playbackCommand(videoStateRef.current, action, options);
         if (event !== 'playback:command') {
             emitControl(event, payload);
@@ -585,7 +592,7 @@ export const RoomProvider = ({ children }) => {
             });
         }
         return request;
-    }, [emitControl]);
+    }, [emitControl, canSendRoomAction]);
     const playVideo = useCallback((options = {}) => sendPlaybackCommand('PLAY', options), [sendPlaybackCommand]);
     const pauseVideo = useCallback(positionSec => sendPlaybackCommand('PAUSE', { positionSec }), [sendPlaybackCommand]);
 
@@ -599,27 +606,33 @@ export const RoomProvider = ({ children }) => {
         return sendPlaybackCommand('SEEK', { ...options, positionSec: playedSeconds });
     }, [sendPlaybackCommand]);
     const endVideo = useCallback(positionSec => sendPlaybackCommand('ENDED', { positionSec }), [sendPlaybackCommand]);
-    const requestControl = useCallback(() => socket.emit('control:request', {}, response => {
+    const requestControl = useCallback(() => {
+        if (!canSendRoomAction()) return;
+        socket.emit('control:request', {}, response => {
         if (!response?.ok) toast.error(protocolErrorMessage(response));
-    }), []);
+        });
+    }, [canSendRoomAction]);
     const sendPlaybackTelemetry = useCallback(telemetry => {
         if (!mediaDescriptor?.mediaId) return;
+        if (!canSendRoomAction()) return;
         socket.emit('playback:telemetry', { mediaId: mediaDescriptor.mediaId, ...telemetry });
-    }, [mediaDescriptor]);
+    }, [mediaDescriptor, canSendRoomAction]);
 
-    const promoteUser = useCallback(targetId => socket.emit('promote_to_moderator', { roomId, targetId }), [roomId]);
-    const demoteUser = useCallback(targetId => socket.emit('demote_to_viewer', { roomId, targetId }), [roomId]);
-    const transferHost = useCallback(targetId => socket.emit('transfer_host', { roomId, targetId }), [roomId]);
-    const kickUser = useCallback(targetId => socket.emit('kick_user', { roomId, targetId }), [roomId]);
+    const promoteUser = useCallback(targetId => emitRoomAction('promote_to_moderator', { roomId, targetId }), [roomId, emitRoomAction]);
+    const demoteUser = useCallback(targetId => emitRoomAction('demote_to_viewer', { roomId, targetId }), [roomId, emitRoomAction]);
+    const transferHost = useCallback(targetId => emitRoomAction('transfer_host', { roomId, targetId }), [roomId, emitRoomAction]);
+    const kickUser = useCallback(targetId => emitRoomAction('kick_user', { roomId, targetId }), [roomId, emitRoomAction]);
     const addToQueue = useCallback((url, magnetURI = '', label = '') => {
-        if (url || magnetURI) socket.emit('add_to_queue', { roomId, url, magnetURI, label: label || url });
-    }, [roomId]);
-    const removeFromQueue = useCallback(itemId => socket.emit('remove_from_queue', { roomId, itemId }), [roomId]);
-    const playNext = useCallback(() => socket.emit('play_next', { roomId }), [roomId]);
+        if (url || magnetURI) return emitRoomAction('add_to_queue', { roomId, url, magnetURI, label: label || url });
+    }, [roomId, emitRoomAction]);
+    const removeFromQueue = useCallback(itemId => emitRoomAction('remove_from_queue', { roomId, itemId }), [roomId, emitRoomAction]);
+    const playNext = useCallback(() => emitRoomAction('play_next', { roomId }), [roomId, emitRoomAction]);
 
     const updatePlaylist = useCallback((action, options = {}, expectedState) => new Promise(resolve => {
         const state = expectedState || videoStateRef.current;
         if (!socket.connected || state.sourceType !== 'youtube-playlist') return resolve(false);
+        if (!canSendRoomAction() && !['READY', 'RESOLVE', 'ERROR'].includes(action)) return resolve(false);
+        if (!recoveryRef.current?.acceptsEvents()) return resolve(false);
         socket.timeout(10000).emit('playlist_update', {
             roomId, sourceId: state.sourceId, sourceRevision: state.sourceRevision,
             playlistId: state.playlistId, playlistIndex: state.playlistIndex,
@@ -628,13 +641,20 @@ export const RoomProvider = ({ children }) => {
             if (error || !response?.ok) return resolve(false);
             resolve(true);
         });
-    }), [roomId]);
+    }), [roomId, canSendRoomAction]);
 
     return (
         <RoomContext.Provider value={{
             isRestoringSession,
             isConnected,
             connectionPhase,
+            connectionError,
+            resyncRequest,
+            failResync,
+            completeResync,
+            retryConnection,
+            canSendRoomAction,
+            roomActionsEnabled: isConnected && connectionPhase === 'connected',
             networkPingMs,
             networkQuality,
             currentUser,

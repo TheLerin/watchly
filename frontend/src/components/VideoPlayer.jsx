@@ -20,6 +20,8 @@ import { createLocalRemuxSession, getRemuxEligibility } from '../utils/localMedi
 import { detectVideoSource } from '../utils/videoSources';
 import { commandId } from '../utils/protocol';
 import { createSeekCommandScheduler } from '../utils/seekCommandScheduler';
+import { createPlayerResync } from '../utils/playerResync';
+import { canonicalPosition } from '../utils/playbackMath';
 import {
     applyAudioTrack,
     applySubtitleTrack,
@@ -122,6 +124,8 @@ async function resolveArchiveUrl(url) {
 const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '', controlsTabLabel }) => {
     const {
         videoState, currentUser, localReadiness, controllerMemberId, playback, clock, isConnected,
+        connectionPhase, resyncRequest, completeResync, failResync, canSendRoomAction,
+        roomActionsEnabled,
         loadVideo, addToQueue, updatePlaylist,
         selectLocalMedia, markLocalMediaReady, markLocalMediaNotReady, markLocalMediaStatus,
         playVideo, pauseVideo, syncProgress, seekVideo, endVideo, getExpectedPosition, sendPlaybackTelemetry
@@ -137,6 +141,10 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const localFileUrlRef    = useRef('');
     const localSessionRef    = useRef(null);
     const wasConnectedRef    = useRef(isConnected);
+    const resyncSuppressionRef = useRef(false);
+    const resyncRequestRef = useRef(resyncRequest);
+    resyncRequestRef.current = resyncRequest;
+    const resyncSeekTargetRef = useRef(null);
     const externalSubtitlesRef = useRef([]);
     const embeddedSubtitlesRef = useRef([]);
     const embeddedSubtitleAbortRef = useRef(null);
@@ -241,8 +249,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const isPlaylist    = videoState.sourceType === 'youtube-playlist';
     const isYouTube     = source.kind === 'youtube' || source.kind === 'youtube-playlist';
     const playlist = useYouTubePlaylist({ state: videoState, playerRef, isController: isPrivileged,
-        getPosition: getExpectedPosition, send: updatePlaylist, onError: setPlayerError });
+        getPosition: getExpectedPosition, send: updatePlaylist, onError: setPlayerError, resyncId: resyncRequest?.id });
     const isArchive     = !!(playerUrl && playerUrl.includes('archive.org'));
+    const { serverNow } = clock;
     const isLocalReady  = isLocal && !!localFileUrl && localSessionRef.current === videoState.localMedia?.sessionId;
     useEffect(() => {
         if (!hasContent || isPlayerReady || playerError || isPlaylist || (isLocal && !isLocalReady)) return undefined;
@@ -260,8 +269,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             })()
             : 'Waiting for a movie';
     const handleSyncPlayError = useCallback(error => {
-        if (error.name === 'NotAllowedError') setAutoplayBlocked(true);
-    }, []);
+        if (error.name === 'NotAllowedError') {
+            setAutoplayBlocked(true);
+            if (resyncRequestRef.current) completeResync(resyncRequestRef.current.id);
+        }
+    }, [completeResync]);
     const { apply: applySynchronizedState, correct: correctSynchronizedState, cancel: cancelSynchronizedState, isApplyingSeek, finishSeek } = useSynchronizedMedia({
         clock, durationSec: videoState.localMedia?.duration || Infinity,
         mediaId: `${videoState.localMedia?.sessionId}:${videoState.localMedia?.declarationId}`, onPlayError: handleSyncPlayError,
@@ -293,7 +305,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     }), [activeMediaElement, isLocal, isPlatformEmbed, mediaInspection]);
 
     useEffect(() => {
-        if (!isConnected || !isLocal || !isLocalReady || !playback || !nativeVideoRef.current || localPlaybackSwitchRef.current) return;
+        if (connectionPhase !== 'connected' || !isConnected || !isLocal || !isLocalReady || !playback || !nativeVideoRef.current || localPlaybackSwitchRef.current) return;
         // An older confirmation must not pull the controller away from a newer
         // native seek, including a target still queued by the network throttle.
         if (localSeekRef.current && playback.updatedByMemberId === currentUser?.userId &&
@@ -301,7 +313,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         localSeekRef.current = null;
         isSeekingRef.current = false;
         applySynchronizedState(nativeVideoRef.current, playback);
-    }, [isConnected, isLocal, isLocalReady, playback, applySynchronizedState, currentUser?.userId]);
+    }, [connectionPhase, isConnected, isLocal, isLocalReady, playback, applySynchronizedState, currentUser?.userId]);
     useEffect(() => {
         const reconnected = isConnected && !wasConnectedRef.current;
         wasConnectedRef.current = isConnected;
@@ -314,20 +326,18 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             nativeVideoRef.current.pause();
             return;
         }
-        if (reconnected && playback) {
+        if (reconnected && playback && connectionPhase === 'connected') {
             applySynchronizedState(nativeVideoRef.current, playback, { force: true });
         }
-    }, [applySynchronizedState, cancelSynchronizedState, isConnected, isLocal, isLocalReady, playback, localSeekCommands]);
+    }, [connectionPhase, applySynchronizedState, cancelSynchronizedState, isConnected, isLocal, isLocalReady, playback, localSeekCommands]);
     useEffect(() => {
-        if (!isConnected || !isLocal || !isLocalReady || !playback) return undefined;
+        if (connectionPhase !== 'connected' || !isConnected || !isLocal || !isLocalReady || !playback) return undefined;
         const correct = (force = false) => {
             if (!isSeekingRef.current && !isBufferingRef.current && !localPlaybackSwitchRef.current) correctSynchronizedState(nativeVideoRef.current, playback, force);
         };
         const interval = setInterval(correct, 1000);
-        const visible = () => { if (document.visibilityState === 'visible') correct(true); };
-        document.addEventListener('visibilitychange', visible);
-        return () => { clearInterval(interval); document.removeEventListener('visibilitychange', visible); };
-    }, [isConnected, isLocal, isLocalReady, playback, correctSynchronizedState]);
+        return () => clearInterval(interval);
+    }, [connectionPhase, isConnected, isLocal, isLocalReady, playback, correctSynchronizedState]);
     useEffect(() => {
         if (!isLocal || !isLocalReady || !playback) return undefined;
         const report = () => {
@@ -689,7 +699,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     // to the host's ever-advancing time restarts the buffer from a further
     // position → infinite buffer death-loop. We skip correction until playback resumes.
     useEffect(() => {
-        if (isPrivileged || !isPlayerReady || !playerRef.current || isNativePlayer || (isPlaylist && !playlist.ready)) return;
+        if (connectionPhase !== 'connected' || isPrivileged || !isPlayerReady || !playerRef.current || isNativePlayer || (isPlaylist && !playlist.ready)) return;
         if (isBufferingRef.current) return; // BUG-I: skip during buffer stall
 
         const stateTime    = getExpectedPosition(videoState);
@@ -710,13 +720,13 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                     : 1;
             }
         }
-    }, [videoState, isPlayerReady, isPrivileged, isNativePlayer, getExpectedPosition, isPlaylist, playlist.ready]);
+    }, [connectionPhase, videoState, isPlayerReady, isPrivileged, isNativePlayer, getExpectedPosition, isPlaylist, playlist.ready]);
 
     // ── 3. Drift correction – GDrive native video viewers ────────────────────
     // Guard with isPlayerReady so we don't seek before video is loaded
     // FIX #6: Also guard with isBufferingRef — same protection as ReactPlayer path
     useEffect(() => {
-        if (!isNativePlayer || isLocal || isPrivileged || !nativeVideoRef.current || !isPlayerReady || localPlaybackSwitchRef.current) return;
+        if (connectionPhase !== 'connected' || !isNativePlayer || isLocal || isPrivileged || !nativeVideoRef.current || !isPlayerReady || localPlaybackSwitchRef.current) return;
         if (isBufferingRef.current) return; // FIX #6: skip during buffer stall
         const stateTime   = getExpectedPosition(videoState);
         const currentTime = nativeVideoRef.current.currentTime || 0;
@@ -744,11 +754,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                 if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
             }
         }
-    }, [videoState, isNativePlayer, isLocal, isLocalReady, isPrivileged, isPlayerReady, getExpectedPosition]);
+    }, [connectionPhase, videoState, isNativePlayer, isLocal, isLocalReady, isPrivileged, isPlayerReady, getExpectedPosition]);
 
     // ── 4. GDrive play / pause control ────────────────────────────────────────
     useEffect(() => {
-        if (!isNativePlayer || isLocal || !nativeVideoRef.current || !isPlayerReady) return;
+        if (connectionPhase !== 'connected' || !isNativePlayer || isLocal || !nativeVideoRef.current || !isPlayerReady) return;
 
         if (videoState.isPlaying) {
             if (nativeVideoRef.current.paused) {
@@ -761,7 +771,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                 nativeVideoRef.current.pause();
             }
         }
-    }, [videoState.isPlaying, isNativePlayer, isLocal, isLocalReady, isPlayerReady]);
+    }, [connectionPhase, videoState.isPlaying, isNativePlayer, isLocal, isLocalReady, isPlayerReady]);
 
     // ── 4b. BUG-H FIX: Autoplay-blocked detection for ReactPlayer viewers ─────
     // ReactPlayer forwards the `playing` prop but browsers can silently block
@@ -807,6 +817,46 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         return () => clearTimeout(timer);
     }, [isPlaylist, playlist.ready, videoState.sourceRevision, videoState.playlistStatus]);
 
+    // Snapshot restoration also applies to the controller. Preserve the player
+    // and verified file URL, suppress callbacks, and wait for actual readiness.
+    useEffect(() => {
+        if (connectionPhase === 'connected') {
+            resyncSuppressionRef.current = false;
+            return;
+        }
+        resyncSuppressionRef.current = true;
+        clearTimeout(playDebounceRef.current); clearTimeout(pauseDebounceRef.current); clearTimeout(seekEndTimerRef.current);
+        localSeekCommands.cancel(); localSeekRef.current = null; isSeekingRef.current = false;
+        cancelSynchronizedState();
+    }, [connectionPhase, cancelSynchronizedState, localSeekCommands]);
+    useEffect(() => {
+        if (!resyncRequest || !isConnected) return;
+        const id = resyncRequest.id;
+        if (!hasContent) { completeResync(id); return; }
+        if (isLocal && !isLocalReady) return;
+        const resync = createPlayerResync({
+            getPlayer: () => isNativePlayer ? nativeVideoRef.current : isYouTube ? playerRef.current?.getInternalPlayer?.() : playerRef.current,
+            youtube: isYouTube,
+            embed: !isNativePlayer && !isYouTube,
+            isReady: () => isNativePlayer ? nativeVideoRef.current?.readyState >= 2 : isPlayerReady && (!isPlaylist || playlist.session.ready() || videoStateRef.current.playlistStatus === 'finished'),
+            getTarget: () => {
+                const state = videoStateRef.current, local = playbackRef.current;
+                if (isLocal && local) return {
+                    position: canonicalPosition(local, serverNow(), state.localMedia?.duration),
+                    playing: local.status === 'playing', version: local.seq,
+                    waitMs: local.effectiveAtServerMs - serverNow(),
+                };
+                return { position: getExpectedPosition(state), playing: state.isPlaying, videoId: state.currentVideoId || source.videoId, version: state.seekVersion };
+            },
+            applyLocal: isLocal ? () => applySynchronizedState(nativeVideoRef.current, playbackRef.current, { force: true }) : undefined,
+            onComplete: () => completeResync(id), onPlayError: handleSyncPlayError,
+            onSeek: position => { resyncSeekTargetRef.current = position; },
+            onTimeout: () => { setPlayerError('Playback could not resync. Check the source or retry the connection.'); failResync(id); },
+        });
+        return resync.dispose;
+    }, [resyncRequest, isConnected, hasContent, isLocal, isLocalReady, isNativePlayer, isYouTube, isPlaylist, isPlayerReady, playlist.session,
+        videoState.sourceId, videoState.sourceRevision, source.videoId, getExpectedPosition, serverNow, applySynchronizedState, completeResync, failResync, handleSyncPlayError]);
+
     // ── 6. Host progress sync interval (ReactPlayer + GDrive host) ───────────
     // BUG-G FIX: syncProgress is ONLY called here (every 2s), not in onProgress.
     // Previously both the interval and onProgress emitted sync_progress, causing
@@ -814,6 +864,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     useEffect(() => {
         if (!isPrivileged || isLocal) return;
         syncIntervalRef.current = setInterval(() => {
+            if (!canSendRoomAction()) return;
             if (isSeekingRef.current) return;
             if (videoStateRef.current.sourceType === 'youtube-playlist' && !playlist.session.canEmit()) return;
             if (isNativePlayer) {
@@ -826,7 +877,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             }
         }, SYNC_INTERVAL_MS);
         return () => clearInterval(syncIntervalRef.current);
-    }, [isPrivileged, isLocal, syncProgress, isNativePlayer, playlist.session]);
+    }, [isPrivileged, isLocal, syncProgress, isNativePlayer, playlist.session, canSendRoomAction]);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     // P5 FIX: Wrap all helper functions in useCallback so they are stable across renders.
@@ -836,17 +887,17 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         clearTimeout(pauseDebounceRef.current);
         clearTimeout(playDebounceRef.current);
         playDebounceRef.current = setTimeout(() => {
-            if (!isSeekingRef.current && (videoStateRef.current.sourceType !== 'youtube-playlist' || playlist.session.canEmit())) playVideo();
+            if (canSendRoomAction() && !resyncSuppressionRef.current && !isSeekingRef.current && (videoStateRef.current.sourceType !== 'youtube-playlist' || playlist.session.canEmit())) playVideo();
         }, 200);
-    }, [playVideo, playlist.session]);
+    }, [playVideo, playlist.session, canSendRoomAction]);
 
     const debouncePause = useCallback((getTime) => {
         clearTimeout(playDebounceRef.current);
         clearTimeout(pauseDebounceRef.current);
         pauseDebounceRef.current = setTimeout(() => {
-            if (!isSeekingRef.current && (videoStateRef.current.sourceType !== 'youtube-playlist' || playlist.session.canEmit())) pauseVideo(getTime());
+            if (canSendRoomAction() && !resyncSuppressionRef.current && !isSeekingRef.current && (videoStateRef.current.sourceType !== 'youtube-playlist' || playlist.session.canEmit())) pauseVideo(getTime());
         }, 200);
-    }, [pauseVideo, playlist.session]);
+    }, [pauseVideo, playlist.session, canSendRoomAction]);
 
     const startSeekGuard = useCallback(() => {
         clearTimeout(playDebounceRef.current);
@@ -1252,11 +1303,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             />
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
-                            <button type="submit" disabled={!inputUrl.trim()}
+                            <button type="submit" disabled={!roomActionsEnabled || !inputUrl.trim()}
                                 className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 active:scale-95 disabled:opacity-40">
                                 Play Now
                             </button>
-                            <button type="button" disabled={!inputUrl.trim()} onClick={handleQueueAdd}
+                            <button type="button" disabled={!roomActionsEnabled || !inputUrl.trim()} onClick={handleQueueAdd}
                                 className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/[0.06] active:scale-95 disabled:opacity-40">
                                 Queue
                             </button>
@@ -1577,6 +1628,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         onPlay={() => {
                                             setAutoplayBlocked(false);
                                             if (!isConnected) { nativeVideoRef.current?.pause(); return; }
+                                            if (!canSendRoomAction() || resyncSuppressionRef.current) return;
                                             if (localPlaybackSwitchRef.current) return;
                                             if (!isPrivileged) return;
                                             if (isLocal && (nativeVideoRef.current?.seeking || isApplyingSeek(nativeVideoRef.current))) return;
@@ -1592,9 +1644,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             debouncePlay();
                                         }}
                                         onPause={() => {
-                                            if (!isConnected || nativeVideoRef.current?.ended) return;
+                                            if (!canSendRoomAction() || resyncSuppressionRef.current || nativeVideoRef.current?.ended) return;
                                             if (localPlaybackSwitchRef.current) return;
-                                            if (!isPrivileged || (isLocal && !videoStateRef.current.isPlaying)) return;
+                                            if (!isPrivileged || !videoStateRef.current.isPlaying) return;
                                             if (isLocal) {
                                                 const video = nativeVideoRef.current;
                                                 // Chrome's native timeline queues pause before seeking.
@@ -1615,7 +1667,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         }}
                                         onSeeking={() => {
                                             const video = nativeVideoRef.current;
-                                            if (localPlaybackSwitchRef.current || !isPrivileged || isApplyingSeek(video)) return;
+                                            if (resyncSeekTargetRef.current != null && Math.abs(video.currentTime - resyncSeekTargetRef.current) < 0.5) return;
+                                            resyncSeekTargetRef.current = null;
+                                            if (!canSendRoomAction() || resyncSuppressionRef.current || localPlaybackSwitchRef.current || !isPrivileged || isApplyingSeek(video)) return;
                                             startSeekGuard();
                                             if (!isLocal || !isConnected) return;
                                             cancelSynchronizedState();
@@ -1634,6 +1688,10 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                                 finishSeek(nativeVideoRef.current);
                                                 return;
                                             }
+                                            if (resyncSeekTargetRef.current != null && Math.abs(nativeVideoRef.current.currentTime - resyncSeekTargetRef.current) < 0.5) {
+                                                resyncSeekTargetRef.current = null; initialSeekDoneRef.current = true; return;
+                                            }
+                                            if (!canSendRoomAction() || resyncSuppressionRef.current) return;
                                             // FIX #5: Initial seek completed — now safe to autoplay.
                                             // FIX #1-code: onSeeked fires before the isPlayerReady state
                                             // update from onCanPlay propagates in some browsers.
@@ -1757,10 +1815,10 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         width="100%"
                                         height="100%"
                                         onReady={handleReady}
-                                        onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged || videoStateRef.current.isPlaying || (isPlaylist && !playlist.session.canEmit())) return; debouncePlay(); }}
-                                        onPause={() => { if (!isPrivileged || !videoStateRef.current.isPlaying || (isPlaylist && !playlist.session.canEmit())) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
+                                        onPlay={() => { setAutoplayBlocked(false); if (!canSendRoomAction() || resyncSuppressionRef.current || !isPrivileged || videoStateRef.current.isPlaying || (isPlaylist && !playlist.session.canEmit())) return; debouncePlay(); }}
+                                        onPause={() => { if (!canSendRoomAction() || resyncSuppressionRef.current || !isPrivileged || !videoStateRef.current.isPlaying || (isPlaylist && !playlist.session.canEmit())) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
                                         onSeek={() => {
-                                            if (!isPrivileged || (isPlaylist && !playlist.session.canEmit())) return;
+                                            if (!canSendRoomAction() || resyncSuppressionRef.current || !isPrivileged || (isPlaylist && !playlist.session.canEmit())) return;
                                             endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
                                         }}
                                         onError={() => isPlaylist ? playlist.session.fail('This playlist item is unavailable. Waiting for the host to select the next playable item.') : setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.')}

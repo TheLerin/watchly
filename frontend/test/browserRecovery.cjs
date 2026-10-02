@@ -1,0 +1,143 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const { fork } = require('node:child_process');
+const { existsSync, readFileSync } = require('node:fs');
+const path = require('node:path');
+const net = require('node:net');
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const freePort = () => new Promise(resolve => { const server = net.createServer(); server.listen(0, '127.0.0.1', () => { const port = server.address().port; server.close(() => resolve(port)); }); });
+const wait = async (predicate, message, timeout = 30000) => {
+    const end = Date.now() + timeout;
+    while (Date.now() < end) { if (await predicate()) return; await sleep(150); }
+    throw new Error(message);
+};
+(async () => {
+    const backendPort = await freePort(), frontendPort = await freePort();
+    const base = `http://127.0.0.1:${frontendPort}`, backendUrl = `http://127.0.0.1:${backendPort}`;
+    const startBackend = () => fork(path.resolve(__dirname, '../../backend/server.js'), [], { env: { ...process.env, PORT: String(backendPort), CORS_ORIGIN: base }, stdio: 'ignore' });
+    let backend = startBackend(), browser;
+    const frontend = fork(path.resolve(__dirname, '../node_modules/vite/bin/vite.js'), ['--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], { cwd: path.resolve(__dirname, '..'), env: { ...process.env, VITE_BACKEND_URL: backendUrl }, stdio: 'ignore' });
+    const errors = [];
+    try {
+        await wait(async () => { try { return (await fetch(base)).ok && (await fetch(backendUrl)).ok; } catch { return false; } }, 'servers did not start');
+        const executablePath = process.env.BROWSER_EXECUTABLE || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
+        browser = await chromium.launch({ executablePath, headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+        const makePage = async () => {
+            const page = await browser.newPage();
+            page.on('pageerror', error => errors.push(error.message)); page.on('dialog', dialog => dialog.accept('Reconnect movie'));
+            await page.addInitScript(() => { localStorage.setItem('watchly-theme', 'dark-glass'); localStorage.setItem('watchly-room-appearance', 'classic'); });
+            return page;
+        };
+        const host = await makePage(), viewer = await makePage();
+        const synced = page => wait(async () => await page.locator('.room-ping-button').getAttribute('data-connection-phase') === 'connected', 'room did not finish resync');
+        const instrument = page => page.evaluate(async () => {
+            const { socket } = await import('/src/socket.js'); window.recoverySocket = socket;
+            window.recoveryWrites = []; window.snapshotRequests = 0;
+            socket.onAnyOutgoing((event, payload) => { if (event === 'room:snapshot') window.snapshotRequests++; if (['play_video', 'pause_video', 'seek_video', 'change_video', 'playback:command', 'playlist_update'].includes(event)) window.recoveryWrites.push({ event, payload }); });
+        });
+        const call = (page, event, payload = {}) => page.evaluate(({ event, payload }) => new Promise(resolve => window.recoverySocket.emit(event, payload, resolve)), { event, payload });
+        const snapshot = async () => (await call(host, 'room:snapshot')).snapshot;
+        const video = page => page.locator('.room-player-surface video');
+        const values = page => video(page).evaluate(element => ({ time: element.currentTime, paused: element.paused, source: element.currentSrc }));
+        const offline = async page => {
+            await page.context().setOffline(true);
+            await page.evaluate(() => window.recoverySocket.io.engine.close());
+            await wait(async () => ['offline', 'reconnecting'].includes(await page.locator('.room-ping-button').getAttribute('data-connection-phase')), 'outage status missing');
+        };
+        const online = async page => { await page.context().setOffline(false); await synced(page); };
+        await host.goto(base, { waitUntil: 'domcontentloaded' });
+        await host.getByRole('button', { name: 'Create room', exact: true }).first().click();
+        await host.getByPlaceholder('Your nickname').fill('Recovery host'); await host.locator('.room-launcher-submit').click(); await host.waitForURL('**/room/**'); await synced(host);
+        const roomId = host.url().split('/').pop();
+        await viewer.goto(`${base}/room/${roomId}`, { waitUntil: 'domcontentloaded' });
+        await viewer.getByRole('textbox', { name: 'Nickname' }).fill('Recovery viewer'); await viewer.getByRole('button', { name: 'Join room', exact: true }).click(); await synced(viewer);
+        await instrument(host); await instrument(viewer);
+        const memberId = await viewer.evaluate(() => JSON.parse(sessionStorage.getItem('watchTogetherSession')).memberId);
+        const listenerCounts = page => page.evaluate(() => ['room_joined', 'video_progress', 'playback:state', 'disconnect'].map(name => window.recoverySocket.listeners(name).length));
+        const listeners = await listenerCounts(viewer);
+        await host.locator('#room-link-input').fill(`${base}/bg-video.mp4`); await host.locator('.watch-source-controls').getByRole('button', { name: 'Play Now', exact: true }).click();
+        await wait(async () => (await values(host)).time > 1 && !(await values(viewer)).paused, 'direct source not playing');
+        await viewer.evaluate(() => { window.originalRecoveryPlayer = document.querySelector('.room-player-surface video'); window.recoveryWrites = []; });
+        await offline(viewer); await sleep(5000); await online(viewer);
+        assert.equal(await viewer.evaluate(() => window.originalRecoveryPlayer === document.querySelector('.room-player-surface video')), true);
+        assert.ok(Math.abs((await values(host)).time - (await values(viewer)).time) < 1.5);
+        assert.equal((await snapshot()).members.filter(member => member.userId === memberId).length, 1);
+        assert.deepEqual(await viewer.evaluate(() => window.recoveryWrites), []);
+        console.log('PASS five-second real network outage: same member/player, playing time restored, no viewer command echoes');
+
+        await video(host).evaluate(element => element.pause()); await wait(async () => !(await snapshot()).videoState.isPlaying, 'pause not applied');
+        await video(host).evaluate(element => { element.currentTime = 25; }); await wait(async () => Math.abs((await snapshot()).videoState.playedSeconds - 25) < 0.5, 'paused seek not applied');
+        await offline(viewer); await online(viewer);
+        assert.equal((await values(viewer)).paused, true); assert.ok(Math.abs((await values(viewer)).time - 25) < 0.5);
+        await host.evaluate(roomId => { window.recoverySocket.emit('add_to_queue', { roomId, url: 'https://youtu.be/GvgqDSnpRQM', label: 'Retained queue' }); window.recoverySocket.emit('send_message', { roomId, message: { id: 'before_outage', text: 'Before outage' } }); }, roomId);
+        await offline(viewer);
+        await host.locator('#room-link-input').fill(`${base}/bg-video.mp4?source=B`); await host.locator('.watch-source-controls').getByRole('button', { name: 'Play Now', exact: true }).click();
+        await wait(async () => (await values(host)).source.endsWith('?source=B') && !(await values(host)).paused && (await values(host)).time > 0.2, 'replacement source not ready');
+        await video(host).evaluate(element => element.pause());
+        await wait(async () => !(await snapshot()).videoState.isPlaying, 'replacement source not paused');
+        await video(host).evaluate(element => { element.currentTime = 40; });
+        await wait(async () => Math.abs((await snapshot()).videoState.playedSeconds - 40) < 0.5, 'replacement paused seek not applied');
+        await host.evaluate(roomId => window.recoverySocket.emit('send_message', { roomId, message: { id: 'during_outage', text: 'During outage' } }), roomId);
+        const longOutageMs = Number(process.env.RECOVERY_LONG_OUTAGE_MS || 60000);
+        console.log(`TEST ${longOutageMs / 1000}-second outage while host replaces the source and updates chat/queue`);
+        await sleep(longOutageMs); await online(viewer);
+        assert.ok((await values(viewer)).source.endsWith('?source=B')); assert.equal((await values(viewer)).paused, true); assert.ok(Math.abs((await values(viewer)).time - 40) < 0.5);
+        let room = await snapshot(); assert.equal(room.queue.length, 1); assert.equal(room.members.length, 2); assert.equal(room.members.filter(member => member.userId === memberId).length, 1);
+        await viewer.locator('#classic-chat-tab').click();
+        assert.equal(await viewer.getByText('Before outage', { exact: true }).count(), 1); assert.equal(await viewer.getByText('During outage', { exact: true }).count(), 1);
+        console.log(`PASS ${longOutageMs / 1000}-second outage: newest source, paused time, stable identity, reconciled chat/queue`);
+        for (let index = 0; index < 3; index++) { await offline(viewer); await online(viewer); }
+        assert.deepEqual(await listenerCounts(viewer), listeners); assert.equal((await snapshot()).members.length, 2);
+        assert.equal(await viewer.evaluate(() => window.recoverySocket.sendBuffer.length), 0);
+        await sleep(5100);
+        await viewer.evaluate(() => { document.querySelector('.room-player-surface video').currentTime = 0; window.recoveryWrites = []; window.snapshotRequests = 0; window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
+        await synced(viewer); await wait(async () => Math.abs((await values(viewer)).time - 40) < 0.5, 'foreground did not restore authoritative time');
+        assert.deepEqual(await viewer.evaluate(() => window.recoveryWrites), []);
+        assert.equal(await viewer.evaluate(() => window.snapshotRequests), 1);
+        console.log('PASS rapid flapping and foreground resync: no duplicate listeners/members, stale buffered commands or seek echoes');
+
+        await require('./browserRecoveryMedia.cjs')({ host, viewer, snapshot, offline, online, wait });
+
+        await host.locator('#classic-watch-tab').click(); await viewer.locator('#classic-watch-tab').click();
+        await viewer.setViewportSize({ width: 390, height: 844 });
+        const file = { name: 'reconnect.mp4', mimeType: 'video/mp4', buffer: readFileSync(path.resolve(__dirname, '../public/bg-video.mp4')) };
+        await host.locator('input[type=file][accept^="video/"]').setInputFiles(file);
+        await viewer.getByRole('heading', { name: 'Choose the same local file', exact: true }).waitFor(); await viewer.locator('input[type=file][accept^="video/"]').setInputFiles(file);
+        await wait(async () => (await snapshot()).readiness.readyCount === 2, 'local readiness missing');
+        await call(host, 'playback:command', { mediaId: (await snapshot()).media.mediaId, action: 'PLAY', commandId: crypto.randomUUID() });
+        await wait(async () => !(await values(viewer)).paused, 'local movie not playing');
+        const blob = (await values(viewer)).source;
+        await viewer.evaluate(() => { window.originalLocalRecoveryPlayer = document.querySelector('.room-player-surface video'); window.recoveryWrites = []; });
+        await offline(viewer); await sleep(5000); await online(viewer);
+        assert.equal((await values(viewer)).source, blob); assert.equal(await viewer.evaluate(() => window.originalLocalRecoveryPlayer === document.querySelector('.room-player-surface video')), true);
+        assert.ok(Math.abs((await values(host)).time - (await values(viewer)).time) < 1.5);
+        assert.deepEqual(await viewer.evaluate(() => window.recoveryWrites), []);
+        console.log('PASS local file outage retains the exact object URL/player and restores canonical playback without echoes');
+        await viewer.reload({ waitUntil: 'domcontentloaded' }); await viewer.getByRole('heading', { name: 'Choose the same local file', exact: true }).waitFor();
+        assert.equal(await video(viewer).count(), 0);
+        await viewer.locator('input[type=file][accept^="video/"]').setInputFiles(file); await synced(viewer);
+        assert.ok(Math.abs((await values(host)).time - (await values(viewer)).time) < 1.5);
+        console.log('PASS full reload truthfully asks for the same local file and then automatically resynchronizes');
+        await instrument(viewer);
+        await viewer.evaluate(() => { document.querySelector('.room-player-surface video').currentTime = 0; window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
+        await wait(async () => await viewer.evaluate(() => window.snapshotRequests === 1), 'mobile foreground did not request fresh state');
+        await synced(viewer); assert.ok(Math.abs((await values(host)).time - (await values(viewer)).time) < 1.5);
+        assert.deepEqual(await viewer.evaluate(() => window.recoveryWrites), []);
+        console.log('PASS mobile-layout foreground recovery requests one fresh snapshot and restores local playback');
+        await viewer.locator('.room-leave-button').click();
+        if (viewer.url().includes('/room/')) await viewer.locator('.room-leave-popover').getByRole('button', { name: 'Leave room', exact: true }).click();
+        await viewer.waitForURL(base + '/');
+        await viewer.evaluate(() => { window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus')); }); await sleep(1200);
+        assert.equal(await viewer.evaluate(() => window.recoverySocket.connected), false); assert.equal(await viewer.evaluate(() => sessionStorage.getItem('watchTogetherSession')), null);
+        console.log('PASS intentional Leave stops automatic recovery');
+        backend.kill(); await sleep(500); backend = startBackend();
+        await wait(async () => { try { return (await fetch(backendUrl)).ok; } catch { return false; } }, 'backend did not restart');
+        await host.getByText('This temporary room does not exist or has expired.', { exact: true }).first().waitFor();
+        assert.equal(await host.evaluate(() => window.recoverySocket.connected), false); assert.equal(await host.evaluate(() => sessionStorage.getItem('watchTogetherSession')), null);
+        console.log('PASS server restart/expired room stops retries and shows a meaningful error');
+        assert.deepEqual(errors, []);
+    } catch (error) {
+        if (browser) for (const context of browser.contexts()) for (const page of context.pages()) console.error('PAGE', page.url(), await page.locator('body').innerText().catch(() => ''), await page.evaluate(() => ({ phase: document.querySelector('.room-ping-button')?.dataset.connectionPhase, writes: window.recoveryWrites, player: [...document.querySelectorAll('.room-player-surface video')].map(element => ({ time: element.currentTime, paused: element.paused, ready: element.readyState })) })).catch(() => null));
+        console.error('PAGE ERRORS', errors); throw error;
+    } finally { await browser?.close(); backend.kill(); frontend.kill(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });
