@@ -1764,7 +1764,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
                                         }}
                                         onError={() => isPlaylist ? playlist.session.fail('This playlist item is unavailable. Waiting for the host to select the next playable item.') : setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.')}
-                                        onEnded={() => { if (isPrivileged && (!isPlaylist || playlist.session.ready())) endVideo(playerRef.current?.getCurrentTime?.()); }}
+                                        onEnded={() => { if (isPrivileged && (!isPlaylist || (playlist.session.ready() && playerRef.current?.getInternalPlayer?.()?.getPlayerState?.() === 0))) endVideo(playerRef.current?.getCurrentTime?.()); }}
                                         onProgress={(p) => { lastSyncedPosRef.current = p.playedSeconds; }}
                                         progressInterval={1000}
                                         onBuffer={() => { isBufferingRef.current = true; }}

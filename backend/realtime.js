@@ -749,6 +749,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         const mediaEventIsCurrent = (room, payload = {}) => {
             // Never let delayed URL-player events overwrite a local-file session.
             if (room.media) return false;
+            if (payload.sourceId && payload.sourceId !== room.videoState.sourceId) return false;
+            if (payload.sourceRevision !== undefined && room.videoState.sourceType !== 'youtube-playlist') return false;
             if (room.videoState.sourceType === 'youtube-playlist') return currentPlaylistItem(room.videoState, payload);
             if (room.videoState.sourceType === 'local') {
                 if (payload.mediaSessionId !== room.videoState.localMedia?.sessionId) return false;

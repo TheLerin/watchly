@@ -8,13 +8,13 @@ export default function useYouTubePlaylist({ state, playerRef, isController, get
     const runtime = useRef(null);
     useEffect(() => {
         runtime.current = createYouTubePlaylistSession({
-        getState: () => latest.current.state,
-        getPlayer: () => playerRef.current?.getInternalPlayer?.(),
-        isController: () => latest.current.isController,
-        getPosition: value => latest.current.getPosition(value),
-        send: (...args) => latest.current.send(...args),
-        onError: message => latest.current.onError(message),
-        onReady: (ready, key) => setReadyItem(ready ? key : null),
+            getState: () => latest.current.state,
+            getPlayer: () => playerRef.current?.getInternalPlayer?.(),
+            isController: () => latest.current.isController,
+            getPosition: value => latest.current.getPosition(value),
+            send: (...args) => latest.current.send(...args),
+            onError: message => latest.current.onError(message),
+            onReady: (ready, key) => setReadyItem(ready ? key : null),
         });
         return () => { runtime.current = null; };
     }, [playerRef]);

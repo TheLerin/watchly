@@ -30,7 +30,8 @@ function fixture(host = true) {
     const state = { sourceType: 'youtube-playlist', sourceId: 'source', sourceRevision: 0, playlistId: list, playlistIndex: 0, playlistStatus: 'loading', currentVideoId: null, isPlaying: false, playedSeconds: 0 };
     const player = {
         items: videos, data: { video_id: videos[0], title: 'Actual API title' }, state: 5,
-        cuePlaylist(...args) { calls.push(args); if (Array.isArray(args[0])) this.items = [...args[0]]; },
+        cuePlaylist(...args) { calls.push(args); },
+        cueVideoById(value) { calls.push(value); this.items = null; },
         getPlaylist() { return this.items; }, getVideoData() { return this.data; }, getPlayerState() { return this.state; }, setLoop() {}, setShuffle() {},
     };
     const session = createYouTubePlaylistSession({
@@ -39,7 +40,7 @@ function fixture(host = true) {
         onReady: (...args) => status.push(args), onError: value => errors.push(value), now: () => time,
     });
     const resolve = () => Object.assign(state, { playlistItems: videos, playlistStatus: 'ready', currentVideoId: videos[0], sourceRevision: 1 });
-    return { state, player, session, calls, commands, status, errors, resolve, time: value => { time = value; } };
+    return { state, player, session, calls, commands, status, errors, resolve, controller: value => { host = value; }, time: value => { time = value; } };
 }
 
 test('controller discovers the real API list once and cues only the authoritative item', () => {
@@ -51,7 +52,7 @@ test('controller discovers the real API list once and cues only the authoritativ
     assert.equal(f.session.ready(), false);
     f.resolve();
     f.session.tick();
-    assert.deepEqual(f.calls[1], [[videos[0]], 0, 0]);
+    assert.deepEqual(f.calls[1], { videoId: videos[0], startSeconds: 0 });
     assert.equal(f.session.ready(), false);
     f.session.tick();
     assert.equal(f.session.ready(), true);
@@ -67,7 +68,7 @@ test('late viewer restores current item/time without publishing navigation or di
     f.session.tick(); assert.equal(f.commands.length, 0);
     Object.assign(f.state, { playlistItems: videos, playlistStatus: 'ready', playlistIndex: 2, currentVideoId: videos[2], sourceRevision: 7, playedSeconds: 102, isPlaying: true });
     f.session.tick();
-    assert.deepEqual(f.calls[0], [[videos[2]], 0, 102]);
+    assert.deepEqual(f.calls[0], { videoId: videos[2], startSeconds: 102 });
     f.player.state = 1; f.player.data.video_id = videos[2];
     f.session.tick(); assert.equal(f.session.ready(), false, 'only a real CUED event marks a new item ready');
     f.player.state = 5; f.session.tick();
@@ -83,7 +84,7 @@ test('new item identity suppresses stale events, avoids echo commands and preser
     assert.equal(f.session.ready(), false);
     assert.equal(f.session.canEmit(), false);
     f.session.tick();
-    assert.deepEqual(f.calls.at(-1), [[videos[1]], 0, 8]);
+    assert.deepEqual(f.calls.at(-1), { videoId: videos[1], startSeconds: 8 });
     f.session.fail('old error');
     assert.equal(f.commands.filter(command => command.action === 'ERROR').length, 0);
     f.player.data.video_id = videos[1]; f.player.state = 5; f.session.tick();
@@ -99,4 +100,41 @@ test('empty/unavailable playlist discovery fails finitely without marking it rea
     f.session.tick(); f.time(16000); f.session.tick(); f.session.tick();
     assert.equal(f.session.ready(), false);
     assert.equal(f.commands.filter(command => command.action === 'ERROR').length, 1);
+});
+
+test('a timed-out new item skips once even when YouTube still exposes the old item', () => {
+    const f = fixture(); f.resolve(); f.session.tick(); f.session.tick();
+    Object.assign(f.state, { currentVideoId: videos[1], playlistIndex: 1, sourceRevision: 2 });
+    f.session.tick(); f.session.fail('stale error');
+    assert.equal(f.commands.filter(command => command.action === 'ERROR').length, 0);
+    f.time(16000); f.session.tick(); f.session.tick();
+    assert.equal(f.commands.filter(command => command.action === 'ERROR').length, 1);
+    assert.equal(f.commands.at(-1).expected.sourceRevision, 2);
+});
+
+test('refresh at playlist completion cues the final item without restarting or declaring readiness', () => {
+    const f = fixture(false); f.resolve();
+    Object.assign(f.state, { playlistStatus: 'finished', playlistIndex: 2, currentVideoId: videos[2], playedSeconds: 60, sourceRevision: 4 });
+    f.session.tick(); f.player.data.video_id = videos[2]; f.session.tick();
+    assert.deepEqual(f.calls[0], { videoId: videos[2], startSeconds: 60 });
+    assert.equal(f.session.canEmit(), false);
+    assert.equal(f.commands.length, 0);
+});
+
+test('a viewer failure does not prevent the new controller skipping a stalled item', () => {
+    const f = fixture(false); f.resolve(); f.session.tick();
+    f.player.state = -1; f.time(16000); f.session.tick();
+    assert.equal(f.commands.length, 0);
+    assert.equal(f.errors.length, 1);
+    f.controller(true); f.session.tick(); f.session.tick();
+    assert.deepEqual(f.commands.map(command => command.action), ['ERROR']);
+    assert.equal(f.errors.length, 1);
+});
+
+test('an API that never initializes produces a finite controller failure', () => {
+    const f = fixture(); f.player.cuePlaylist = undefined;
+    f.session.tick(); f.time(21000); f.session.tick(); f.session.tick();
+    assert.deepEqual(f.commands.map(command => command.action), ['ERROR']);
+    assert.equal(f.errors.length, 1);
+    assert.equal(f.session.ready(), false);
 });

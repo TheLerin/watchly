@@ -4,7 +4,7 @@ const identity = state => `${state.sourceId}:${state.sourceRevision}`;
 // clock/playback store. The room owns order, while the iframe cues one item.
 export function createYouTubePlaylistSession({ getState, getPlayer, isController, getPosition, send, onReady, onError, now = Date.now }) {
     let sourceId, discoveryAt, discoverySent = false, cueIdentity, readyIdentity, readySent;
-    let suppressUntil = 0, failedIdentity, cueAt, startupAt;
+    let suppressUntil = 0, failedIdentity, reportedFailureIdentity, cueAt, startupAt;
     const currentId = player => player?.getVideoData?.()?.video_id || null;
     const ready = () => {
         const state = getState();
@@ -12,7 +12,21 @@ export function createYouTubePlaylistSession({ getState, getPlayer, isController
     };
     const canEmit = () => ready() && now() >= suppressUntil && getState().playlistStatus === 'ready';
 
-    function fail(message) {
+    function reportFailure(state, message) {
+        const key = identity(state);
+        if (reportedFailureIdentity !== key) {
+            reportedFailureIdentity = key;
+            onError(message);
+        }
+        if (isController()) {
+            failedIdentity = key;
+            void send('ERROR', {}, state).then(ok => {
+                if (!ok && identity(getState()) === key) failedIdentity = null;
+            });
+        }
+    }
+
+    function fail(message, timedOut = false) {
         const state = getState();
         const key = identity(state);
         if (state.playlistStatus === 'loading' && (discoveryAt == null || now() - discoveryAt < 15000)) {
@@ -21,10 +35,8 @@ export function createYouTubePlaylistSession({ getState, getPlayer, isController
         }
         if (failedIdentity === key || !['loading', 'ready'].includes(state.playlistStatus)) return;
         const videoId = currentId(getPlayer());
-        if (state.currentVideoId && videoId && videoId !== state.currentVideoId) return;
-        failedIdentity = key;
-        onError(message);
-        if (isController()) void send('ERROR', {}, state);
+        if (!timedOut && state.currentVideoId && videoId && videoId !== state.currentVideoId) return;
+        reportFailure(state, message);
     }
 
     function tick() {
@@ -34,14 +46,12 @@ export function createYouTubePlaylistSession({ getState, getPlayer, isController
         if (sourceId !== state.sourceId) {
             sourceId = state.sourceId;
             discoveryAt = null; discoverySent = false; cueIdentity = null;
-            readyIdentity = null; readySent = null; failedIdentity = null;
+            readyIdentity = null; readySent = null; failedIdentity = null; reportedFailureIdentity = null;
             startupAt = now();
         }
-        if (!player?.cuePlaylist) {
-            if (state.playlistStatus === 'loading' && now() - startupAt > 20000 && failedIdentity !== identity(state)) {
-                failedIdentity = identity(state);
-                onError('The YouTube player could not initialize. Check your connection and try again.');
-                if (isController()) void send('ERROR', {}, state);
+        if (!player?.cuePlaylist || !player?.cueVideoById) {
+            if (['loading', 'ready'].includes(state.playlistStatus) && now() - startupAt > 20000 && failedIdentity !== identity(state)) {
+                reportFailure(state, 'The YouTube player could not initialize. Check your connection and try again.');
             }
             return;
         }
@@ -64,7 +74,7 @@ export function createYouTubePlaylistSession({ getState, getPlayer, isController
             }
             return;
         }
-        if (state.playlistStatus !== 'ready' || !state.currentVideoId) return;
+        if (!['ready', 'finished'].includes(state.playlistStatus) || !state.currentVideoId) return;
         const key = identity(state);
         if (cueIdentity !== key) {
             cueIdentity = key;
@@ -75,23 +85,23 @@ export function createYouTubePlaylistSession({ getState, getPlayer, isController
             onReady(false, key);
             player.setLoop?.(false);
             player.setShuffle?.(false);
-            // A one-item native playlist prevents YouTube independently moving
-            // viewers ahead. The complete ordered list remains in room state.
-            player.cuePlaylist([state.currentVideoId], 0, getPosition(state));
+            // Clear the native playlist so only the controller can advance.
+            // The complete ordered playlist remains authoritative room state.
+            player.cueVideoById({ videoId: state.currentVideoId, startSeconds: getPosition(state) });
             return;
         }
         const nativeItems = player.getPlaylist?.();
-        if (readyIdentity !== key && player.getPlayerState?.() === 5 && currentId(player) === state.currentVideoId && nativeItems?.length === 1 && nativeItems[0] === state.currentVideoId) {
+        if (readyIdentity !== key && player.getPlayerState?.() === 5 && currentId(player) === state.currentVideoId && (!nativeItems?.length || (nativeItems.length === 1 && nativeItems[0] === state.currentVideoId))) {
             readyIdentity = key;
             onReady(true, key);
         }
-        if (readyIdentity === key && readySent !== key) {
+        if (state.playlistStatus === 'ready' && readyIdentity === key && readySent !== key) {
             readySent = key;
             void send('READY', { title: player.getVideoData?.()?.title || '' }, state).then(ok => {
                 if (!ok && getState().sourceId === state.sourceId && identity(getState()) === key) readySent = null;
             });
         }
-        if (readyIdentity !== key && now() - cueAt > 15000) fail('This playlist item could not become ready. Waiting for the next playable item.');
+        if (readyIdentity !== key && now() - cueAt > 15000) fail('This playlist item could not become ready. Waiting for the next playable item.', true);
     }
     return { tick, ready, canEmit, fail };
 }

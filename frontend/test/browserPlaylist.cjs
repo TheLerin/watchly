@@ -10,6 +10,10 @@ const wait = async (predicate, message, timeout = 45000) => {
     while (Date.now() < until) { if (await predicate()) return; await new Promise(resolve => setTimeout(resolve, 200)); }
     throw new Error(message);
 };
+const ytDiagnostic = page => page.evaluate(() => {
+    const player = window.__ytPlayers?.at(-1), data = player?.getVideoData?.();
+    return { id: data?.video_id, title: data?.title, state: player?.getPlayerState?.(), playlist: player?.getPlaylist?.(), time: player?.getCurrentTime?.() };
+}).catch(() => null);
 
 (async () => {
     const backendPort = await freePort(), frontendPort = await freePort();
@@ -23,6 +27,7 @@ const wait = async (predicate, message, timeout = 45000) => {
         browser = await chromium.launch({ executablePath, headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
         const makePage = async () => {
             const page = await browser.newPage();
+            page.setDefaultNavigationTimeout(45000);
             page.on('pageerror', error => { errors.push(error.message); console.error('JS ERROR', error.message); });
             page.on('requestfailed', request => { if (/iframe_api|\/embed\//.test(request.url())) console.error('YT NETWORK', request.url(), request.failure()?.errorText); });
             await page.addInitScript(() => {
@@ -50,13 +55,13 @@ const wait = async (predicate, message, timeout = 45000) => {
             return page;
         };
         const host = await makePage(), viewer = await makePage();
-        await host.goto(base);
+        await host.goto(base, { waitUntil: 'domcontentloaded' });
         await host.getByRole('button', { name: 'Create room', exact: true }).first().click();
         await host.getByPlaceholder('Your nickname').fill('Playlist host');
         await host.locator('.room-launcher-submit').click();
         await host.waitForURL('**/room/**');
         const roomId = host.url().split('/').pop();
-        await viewer.goto(`${base}/room/${roomId}`);
+        await viewer.goto(`${base}/room/${roomId}`, { waitUntil: 'domcontentloaded' });
         await viewer.getByRole('textbox', { name: 'Nickname' }).fill('Playlist viewer');
         await viewer.getByRole('button', { name: 'Join room', exact: true }).click();
         await viewer.locator('.room-shell').waitFor();
@@ -67,7 +72,7 @@ const wait = async (predicate, message, timeout = 45000) => {
         const state = async () => (await socketCall(host, 'room:snapshot', {})).snapshot.videoState;
         const yt = page => page.evaluate(() => {
             const player = window.__ytPlayers?.at(-1);
-            return player ? { id: player.getVideoData()?.video_id, time: player.getCurrentTime(), status: player.getPlayerState(), duration: player.getDuration(), playlist: player.getPlaylist() } : null;
+            return player?.getVideoData ? { id: player.getVideoData()?.video_id, time: player.getCurrentTime(), status: player.getPlayerState(), duration: player.getDuration(), playlist: player.getPlaylist() } : null;
         });
         await host.locator('#room-link-input').fill(process.env.YOUTUBE_PLAYLIST_URL || 'https://www.youtube.com/playlist?list=PLBCF2DAC6FFB574DE');
         await host.getByRole('button', { name: 'Play Now', exact: true }).first().click();
@@ -77,8 +82,8 @@ const wait = async (predicate, message, timeout = 45000) => {
         assert.equal(current.isPlaying, false);
         assert.equal(current.playlistIndex, 0);
         await wait(async () => (await yt(viewer))?.id === current.currentVideoId, 'viewer did not cue the same item');
-        assert.equal((await yt(host)).playlist.length, 1);
-        assert.equal((await yt(viewer)).playlist.length, 1);
+        assert.ok(((await yt(host)).playlist?.length || 0) <= 1);
+        assert.ok(((await yt(viewer)).playlist?.length || 0) <= 1);
         console.log('PASS real playlist discovery, paused readiness and same selected video', { count: current.playlistItems.length, id: current.currentVideoId });
         await host.getByRole('button', { name: 'Next playlist video' }).click();
         await wait(async () => (await state()).playlistIndex === 1, 'paused Next failed');
@@ -109,7 +114,7 @@ const wait = async (predicate, message, timeout = 45000) => {
         const late = await makePage();
         await host.evaluate(() => window.__ytPlayers.at(-1).seekTo(14, true));
         await new Promise(resolve => setTimeout(resolve, 1700));
-        await late.goto(`${base}/room/${roomId}`);
+        await late.goto(`${base}/room/${roomId}`, { waitUntil: 'domcontentloaded' });
         await late.getByRole('textbox', { name: 'Nickname' }).fill('Late playlist viewer');
         await late.getByRole('button', { name: 'Join room', exact: true }).click();
         current = await state();
@@ -119,11 +124,57 @@ const wait = async (predicate, message, timeout = 45000) => {
         assert.equal(await host.locator('.room-player-surface iframe').count(), 1);
         assert.equal(await viewer.locator('.room-player-surface iframe').count(), 1);
         assert.equal(await host.evaluate(() => window.__ytPlayers.length), 1);
+        // Every remaining genuine ENDED event must advance exactly one item.
+        for (let index = current.playlistIndex; index < current.playlistItems.length; index++) {
+            await wait(async () => (await yt(host))?.status === 1 && (await yt(viewer))?.status === 1, 'remaining item did not start');
+            await host.evaluate(() => { const player = window.__ytPlayers.at(-1); player.seekTo(player.getDuration() - 1, true); });
+            if (index < current.playlistItems.length - 1) {
+                await wait(async () => (await state()).playlistIndex === index + 1, `playlist stopped after item ${index + 1}`);
+            } else {
+                await wait(async () => (await state()).playlistStatus === 'finished', 'final item did not stop the playlist');
+                assert.equal((await state()).isPlaying, false);
+            }
+            console.log(`PASS real completion of playlist item ${index + 1}`);
+        }
+        const items = current.playlistItems;
+        await viewer.reload();
+        await wait(async () => (await yt(viewer))?.id === items.at(-1), 'finished playlist refresh selected the wrong video');
+        assert.notEqual((await yt(viewer)).status, 1);
+        // The same input accepts a selected video with a conflicting URL index.
+        await host.locator('#room-link-input').fill(`https://youtu.be/${items[3]}?list=PLBCF2DAC6FFB574DE&index=1`);
+        await host.getByRole('button', { name: 'Play Now', exact: true }).first().click();
+        await wait(async () => (await state()).playlistIndex === 3 && (await yt(host))?.id === items[3] && !(await host.locator('.playlist-controls').getByRole('button', { name: 'Play Now', exact: true }).isDisabled()), 'selected video URL was ignored');
+        assert.equal((await state()).isPlaying, false);
+        await host.setViewportSize({ width: 390, height: 844 });
+        await host.getByRole('button', { name: 'Watch', exact: true }).click();
+        await host.getByRole('button', { name: 'Next playlist video' }).click();
+        await wait(async () => (await state()).playlistIndex === 4, 'mobile playlist Next failed');
+        const buttons = await host.locator('.playlist-controls button').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+        assert.ok(buttons.every(height => height >= 40));
+        assert.ok(await host.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await host.setViewportSize({ width: 1280, height: 720 });
+        await host.getByRole('button', { name: 'Room settings', exact: true }).click();
+        await host.getByRole('button', { name: /Cinematic Immersive theater room/ }).click();
+        await host.getByRole('button', { name: 'Room settings', exact: true }).click();
+        await host.getByRole('button', { name: 'Watch controls', exact: true }).click();
+        assert.ok(await host.locator('.cinema-luxe-scene').count());
+        await wait(async () => !(await host.locator('.playlist-controls').getByRole('button', { name: 'Play Now', exact: true }).isDisabled()), 'Cinema Luxe playlist not ready');
+        await host.getByRole('button', { name: 'Next playlist video' }).click();
+        await wait(async () => (await state()).playlistIndex === 5, 'Cinema Luxe playlist Next failed');
+        assert.equal(await host.locator('.room-player-surface iframe').count(), 1);
+        console.log('PASS entire real playlist, stopped completion/refresh, selected-video URL, mobile and Cinema Luxe controls');
+        // Switching back to a shortened single-video URL retains existing autoplay.
+        await host.locator('#room-link-input').fill(`https://youtu.be/${items[0]}`);
+        await host.locator('.watch-source-controls').getByRole('button', { name: 'Play Now', exact: true }).click();
+        await wait(async () => (await state()).sourceType === 'remote' && (await yt(host))?.id === items[0] && (await yt(viewer))?.id === items[0] && (await yt(host)).status === 1 && (await yt(viewer)).status === 1, 'single YouTube video regression');
+        assert.equal(await host.locator('.playlist-controls').count(), 0);
+        assert.equal(await host.locator('.room-player-surface iframe').count(), 1);
+        console.log('PASS real normal shortened YouTube URL after playlist playback');
         assert.deepEqual(errors, []);
         console.log('PASS real Next/Previous, seek, play/pause, repeated auto-next, late join, refresh, single iframe and no page errors');
     } catch (error) {
         console.error('PAGE ERRORS', errors);
-        if (browser) for (const context of browser.contexts()) for (const page of context.pages()) console.error('PAGE', page.url(), (await page.locator('.playlist-controls').textContent().catch(() => '')), await page.evaluate(() => ({ video: window.__ytPlayers?.at(-1)?.getVideoData?.(), yt: !!window.YT, loaded: window.YT?.loaded, frames: [...document.querySelectorAll('iframe')].map(frame => frame.outerHTML), scripts: [...document.scripts].map(script => script.src).filter(url => url.includes('youtube')) })).catch(() => null));
+        if (browser) for (const context of browser.contexts()) for (const page of context.pages()) console.error('PAGE', page.url(), (await page.locator('.playlist-controls').textContent().catch(() => '')), await ytDiagnostic(page));
         throw error;
     } finally { await browser?.close(); backend.kill(); frontend.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

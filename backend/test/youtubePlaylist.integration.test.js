@@ -103,3 +103,17 @@ test('unavailable items skip finitely and queue remains separate until playlist 
     value = await control(host, roomId, value, 'video_ended'); assert.equal(value.sourceType, 'remote'); assert.equal(value.url, 'https://cdn.example/next.mp4'); assert.equal(value.isPlaying, true);
     assert.equal((await emit(host, 'room:snapshot', {})).snapshot.queue.length, 0);
 });
+
+test('old playlist events cannot overwrite a replacement playlist or a queued single video', async () => {
+    const { host, roomId } = await create();
+    const old = (await update(host, roomId, await change(host, roomId), 'RESOLVE', { items: videos })).videoState;
+    let value = await change(host, roomId, `https://youtube.com/playlist?list=${list}&index=5`);
+    await control(host, roomId, old, 'seek_video', { playedSeconds: 90 });
+    assert.equal((await state(host)).playedSeconds, 0);
+    assert.equal((await update(host, roomId, old, 'NEXT')).error.code, 'STALE_PLAYLIST');
+    value = await change(host, roomId, 'https://youtu.be/dQw4w9WgXcQ');
+    await control(host, roomId, old, 'pause_video', { playedSeconds: 90 });
+    value = await state(host);
+    assert.equal(value.isPlaying, true);
+    assert.ok(value.playedSeconds < 1);
+});
