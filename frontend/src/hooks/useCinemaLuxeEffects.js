@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTheme } from '../context/ThemeContext';
 
 const CHROME = '.room-header, .theater-left-dock, .theater-right-dock';
 const OPEN_UI = '[data-open-tool]:not([data-open-tool=""]), .room-settings-popover, .room-header-popover, [role="dialog"], dialog[open], [aria-modal="true"], [role="menu"], [role="listbox"]';
@@ -18,6 +19,8 @@ function canSample(video) {
 }
 
 export default function useCinemaLuxeEffects(media, targetRef, enabled, playing) {
+    const { appearanceSettings } = useTheme();
+    const { ambientLighting, cinemaPreset, autoHideControls, hideDelay } = appearanceSettings;
     useEffect(() => {
         const target = targetRef?.current;
         if (!enabled || !target) return undefined;
@@ -33,7 +36,7 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
         const compact = window.matchMedia('(max-width: 1179px), (max-height: 649px)');
         const neutral = () => {
             COLOUR_PROPERTIES.forEach(property => target.style.removeProperty(property));
-            target.dataset.cinemaAmbient = 'neutral';
+            target.dataset.cinemaAmbient = ambientLighting ? 'neutral' : 'disabled';
         };
         const stopSampling = () => {
             window.clearInterval(sampleTimer);
@@ -72,21 +75,23 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
 
         const mustStayVisible = () => {
             const focused = document.activeElement;
-            return !actualPlayback || target.dataset.roomAppearance !== 'cinematic' ||
+            return !autoHideControls || hideDelay === 'never' || !actualPlayback || target.dataset.roomAppearance !== 'cinematic' ||
                 Boolean(target.querySelector(OPEN_UI) || document.querySelector('[role="dialog"], dialog[open], [aria-modal="true"]')) ||
                 (focused instanceof Element && target.contains(focused) && focused.matches(INTERACTIVE)) ||
                 Boolean(target.querySelector(`${CHROME.split(', ').map(selector => `${selector}:hover`).join(', ')}`));
         };
         const scheduleHide = () => {
             window.clearTimeout(hideTimer);
+            if (!autoHideControls || hideDelay === 'never' || !actualPlayback || compact.matches || document.hidden) return;
             hideTimer = window.setTimeout(() => {
                 if (mustStayVisible()) {
                     target.removeAttribute('data-cinema-controls-hidden');
                     if (actualPlayback) scheduleHide();
                 } else target.dataset.cinemaControlsHidden = 'true';
-            }, 3000);
+            }, hideDelay * 1000);
         };
         const reveal = () => {
+            window.clearTimeout(hideTimer);
             target.removeAttribute('data-cinema-controls-hidden');
             if (actualPlayback) scheduleHide();
         };
@@ -96,7 +101,7 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
             target.dataset.cinemaPlaying = String(actualPlayback);
             neutral();
             reveal();
-            if (!actualPlayback || document.hidden || compact.matches || !canSample(media)) return;
+            if (!ambientLighting || cinemaPreset === 'minimal' || !actualPlayback || document.hidden || compact.matches || !canSample(media)) return;
             if (sample()) sampleTimer = window.setInterval(sample, 480);
         };
         // Reading the existing readiness/playing state plus native media events
@@ -126,5 +131,5 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
             ['data-cinema-playing', 'data-cinema-controls-hidden', 'data-cinema-ambient'].forEach(attribute => target.removeAttribute(attribute));
             COLOUR_PROPERTIES.forEach(property => target.style.removeProperty(property));
         };
-    }, [media, targetRef, enabled, playing]);
+    }, [media, targetRef, enabled, playing, ambientLighting, cinemaPreset, autoHideControls, hideDelay]);
 }

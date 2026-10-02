@@ -4,8 +4,9 @@ const path = require('node:path');
 module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait }) => {
  const shell = page => page.locator('.room-shell');
  const select = async (page, name) => {
+  await page.mouse.move(640, 350);
   await page.getByRole('button', { name: 'Room settings', exact: true }).click();
-  await page.getByRole('button', { name, exact: true }).click();
+  await page.locator('.appearance-panel').getByRole('button', { name: new RegExp('^' + name + '(?: |$)') }).click();
   await page.getByRole('button', { name: 'Room settings', exact: true }).click();
  };
  const originalStyle = page => page.locator('.room-player-surface').evaluate(element => {
@@ -17,23 +18,26 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
  await select(host, 'Light Glass');
  const lightStyle = await originalStyle(host);
  for (let cycle = 0; cycle < 2; cycle++) {
-  await select(host, 'Cinema Luxe');
-  assert.equal(await shell(host).getAttribute('data-theme'), 'cinema-luxe');
-  assert.equal(await host.locator('.cinema-luxe-scene').count(), 1);
-  await select(host, 'Dark Glass');
+  await select(host, 'Classic');
   assert.equal(await host.locator('.cinema-luxe-scene').count(), 0);
   assert.equal(await shell(host).getAttribute('data-cinema-playing'), null);
   assert.equal(await shell(host).getAttribute('data-cinema-controls-hidden'), null);
   assert.equal(await shell(host).evaluate(element => element.style.getPropertyValue('--cinema-video-r')), '');
+  await select(host, 'Dark Glass');
+  assert.equal(await shell(host).getAttribute('data-theme'), 'glass-dark');
+  await select(host, 'Cinematic');
+  await select(host, 'Luxe');
+  assert.equal(await shell(host).getAttribute('data-theme'), 'cinema-luxe');
+  assert.equal(await host.locator('.cinema-luxe-scene').count(), 1);
   assert.deepEqual(await originalStyle(host), darkStyle);
-  await select(host, 'Cinema Luxe');
   await select(host, 'Light Glass');
   assert.deepEqual(await originalStyle(host), lightStyle);
  }
- await select(host, 'Cinema Luxe');
- await select(viewer, 'Cinema Luxe');
+ await select(host, 'Dark Glass');
+ await select(host, 'Luxe');
+ await select(viewer, 'Luxe');
  assert.equal(await host.evaluate(() => window.cinemaOriginalVideo === document.querySelector('.room-player-surface video')), true,
-  'theme switches must preserve the authoritative video element');
+  'appearance switches must preserve the authoritative video element');
  await wait(async () => await shell(host).getAttribute('data-cinema-ambient') === 'sampled', 'same-origin video was not sampled');
  await host.waitForTimeout(800);
  const geometry = await host.evaluate(() => {
@@ -99,8 +103,9 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
  assert.equal(await host.evaluate(() => window.cinemaSampleFailures), 1, 'failed sampling should stop');
  assert.equal((await values(host)).paused, false, 'ambient failure must not pause playback');
  await host.evaluate(() => { CanvasRenderingContext2D.prototype.getImageData = window.cinemaReadPixels; });
- await select(host, 'Dark Glass');
- await select(host, 'Cinema Luxe');
+ await select(host, 'Classic');
+ await select(host, 'Cinematic');
+ await select(host, 'Luxe');
  await wait(async () => await shell(host).getAttribute('data-cinema-ambient') === 'sampled', 'ambient sampling did not recover');
  await host.evaluate(() => {
   const media = document.querySelector('.room-player-surface video');
@@ -134,7 +139,7 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
  await host.waitForTimeout(800);
  assert.equal(await host.locator('.luxe-wall').first().evaluate(element => getComputedStyle(element).opacity), '0.6');
  assert.equal(await host.locator('.luxe-ceiling').evaluate(element => getComputedStyle(element).opacity), '0.5');
- assert.equal(await viewer.evaluate(() => localStorage.getItem('watchly-theme')), 'cinema-luxe');
+ assert.equal(await viewer.evaluate(() => JSON.parse(localStorage.getItem('watchly-appearance-settings')).cinemaPreset), 'luxe');
  for (const page of [host, viewer]) {
   await page.evaluate(() => {
    window.cinemaAudioContext = new AudioContext();
@@ -163,6 +168,7 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
  await host.screenshot({ path: path.resolve(__dirname, '../../cinema-luxe-playing-visual-verification.png') });
  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1024, height: 768 }, { width: 1280, height: 600 }]) {
   await host.setViewportSize(viewport);
+  await wait(async () => await shell(host).getAttribute('data-room-appearance') === 'classic', 'compact viewport should settle into the existing Classic layout');
   assert.equal(await shell(host).getAttribute('data-room-appearance'), 'classic');
   assert.equal(await host.locator('.luxe-sofa').isVisible(), false);
   assert.equal(await host.locator('.luxe-aisle').first().isVisible(), false);
@@ -175,6 +181,7 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
   }
  }
  await host.setViewportSize({ width: 1280, height: 720 });
+ await wait(async () => await shell(host).getAttribute('data-room-appearance') === 'cinematic', 'desktop should restore the selected cinematic style');
  await host.getByRole('button', { name: 'Watch controls', exact: true }).click();
  const idle = await browser.newPage({ viewport: { width: 1440, height: 900 } });
  await idle.addInitScript(() => localStorage.setItem('watchly-theme', 'cinema-luxe'));

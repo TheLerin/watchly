@@ -25,13 +25,16 @@ import TheaterIconButton from './TheaterIconButton';
 import ReadinessPanel from './player/ReadinessPanel';
 import ScreenShareAdapter from './player/ScreenShareAdapter';
 import { useRoom } from '../context/RoomContext';
-import { useTheme, THEME_META, ROOM_APPEARANCE_META } from '../context/ThemeContext';
+import { useTheme } from '../context/ThemeContext';
+import { architecturalLight } from '../utils/appearanceSettings';
+import AppearancePanel from './AppearancePanel';
 import { BackgroundLayers } from './BackgroundLayers';
 import toast from 'react-hot-toast';
 import { NETWORK_QUALITY_META, formatPing } from '../utils/networkQuality';
 import './room-theater.css';
 import CinemaLuxeScene from './CinemaLuxeScene';
 import './cinema-luxe.css';
+import './appearance-panel.css';
 
 const MotionDiv = motion.div;
 const MotionSpan = motion.span;
@@ -74,77 +77,7 @@ function useSupportsTheater() {
 
 const panelClass = 'rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl';
 
-const ThemePicker = ({ theme, setTheme, roomAppearance, setRoomAppearance, supportsTheater }) => (
-    <MotionDiv
-        initial={{ opacity: 0, scale: 0.96, y: -8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: -8 }}
-        transition={{ type: 'spring', damping: 22, stiffness: 320 }}
-        className="room-settings-popover absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-white/10 bg-black p-3 shadow-2xl shadow-black/60"
-    >
-        {supportsTheater && (
-            <>
-                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Room appearance</p>
-                <div className="mb-4 grid grid-cols-2 gap-2">
-                    {Object.entries(ROOM_APPEARANCE_META).map(([id, meta]) => (
-                        <button
-                            type="button"
-                            key={id}
-                            aria-pressed={roomAppearance === id}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setRoomAppearance(id);
-                            }}
-                            className="rounded-xl border p-2.5 text-left transition hover:bg-white/[0.06]"
-                            style={{
-                                background: roomAppearance === id ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.02)',
-                                borderColor: roomAppearance === id ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)',
-                            }}
-                        >
-                            <span className="flex items-center justify-between text-xs font-bold text-zinc-100">
-                                {meta.label}
-                                {roomAppearance === id && <Check size={12} className="text-emerald-400" />}
-                            </span>
-                            <span className="mt-1 block text-[10px] leading-4 text-zinc-500">{meta.description}</span>
-                        </button>
-                    ))}
-                </div>
-            </>
-        )}
-
-        <p className={`mb-3 px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 ${supportsTheater ? 'border-t border-white/10 pt-3' : ''}`}>Color theme</p>
-        <div className="grid grid-cols-2 gap-2">
-            {Object.entries(THEME_META).map(([id, meta]) => (
-                <button
-                    key={id}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setTheme(id);
-                    }}
-                    className="flex flex-col items-center gap-2 rounded-xl border p-2.5 transition hover:bg-white/[0.04]"
-                    style={{
-                        background: theme === id ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)',
-                        borderColor: theme === id ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.10)',
-                    }}
-                >
-                    <div
-                        className="relative h-8 w-8 rounded-full"
-                        style={{ background: `radial-gradient(circle at 40% 40%,${meta.orb[0]},${meta.orb[1]})` }}
-                    >
-                        {theme === id && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <Check size={12} className="text-white" />
-                            </div>
-                        )}
-                    </div>
-                    <span className="text-[11px] font-semibold leading-tight text-zinc-300">{meta.label}</span>
-                </button>
-            ))}
-        </div>
-    </MotionDiv>
-);
-
-const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, supportsTheater, leaveRoom, navigate, isConnected, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
+const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, isConnected, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
     const [showSettings, setShowSettings] = useState(false);
     const [showRoomInfo, setShowRoomInfo] = useState(false);
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -160,7 +93,17 @@ const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, su
             if (leaveRef.current && !leaveRef.current.contains(e.target)) setShowLeaveConfirm(false);
         };
         document.addEventListener('mousedown', close);
-        return () => document.removeEventListener('mousedown', close);
+        const escape = event => {
+            if (event.key === 'Escape' && ref.current?.querySelector('.room-settings-popover')) {
+                setShowSettings(false);
+                ref.current.querySelector('.room-settings-button')?.focus();
+            }
+        };
+        document.addEventListener('keydown', escape);
+        return () => {
+            document.removeEventListener('mousedown', close);
+            document.removeEventListener('keydown', escape);
+        };
     }, []);
 
     const copyCode = () => {
@@ -257,18 +200,14 @@ const Header = ({ roomId, theme, setTheme, roomAppearance, setRoomAppearance, su
                             className="room-settings-button flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-zinc-400 transition hover:border-white/25 hover:text-white"
                             title="Room settings"
                             aria-label="Room settings"
+                            aria-expanded={showSettings}
+                            aria-controls="watchly-appearance"
                         >
                             <Settings size={16} />
                         </button>
                         <AnimatePresence>
                             {showSettings && (
-                                <ThemePicker
-                                    theme={theme}
-                                    setTheme={setTheme}
-                                    roomAppearance={roomAppearance}
-                                    setRoomAppearance={setRoomAppearance}
-                                    supportsTheater={supportsTheater}
-                                />
+                                <AppearancePanel supportsTheater={supportsTheater} />
                             )}
                         </AnimatePresence>
                     </div>
@@ -333,7 +272,7 @@ const RoomLayout = () => {
         joinRoom,
         createRoom,
     } = useRoom();
-    const { theme, setTheme, roomAppearance: preferredRoomAppearance, setRoomAppearance } = useTheme();
+    const { theme, roomAppearance: preferredRoomAppearance, appearanceSettings } = useTheme();
     const ambientTargetRef = useRef(null);
     const [showUsersPanel, setShowUsersPanel] = useState(true);
     const [activeRightTool, setActiveRightTool] = useState(null);
@@ -345,8 +284,8 @@ const RoomLayout = () => {
     const isPortrait = useOrientation();
     const isDesktop = useIsDesktop();
     const supportsTheater = useSupportsTheater();
-    const cinemaLuxe = theme === 'cinema-luxe';
-    const roomAppearance = supportsTheater ? (cinemaLuxe ? 'cinematic' : preferredRoomAppearance) : 'classic';
+    const cinemaLuxe = preferredRoomAppearance === 'cinematic';
+    const roomAppearance = supportsTheater ? preferredRoomAppearance : 'classic';
 
     useEffect(() => {
         const closePanels = event => {
@@ -436,7 +375,17 @@ const RoomLayout = () => {
             ref={ambientTargetRef}
             className="room-shell relative h-[100dvh] w-full overflow-hidden bg-black text-white"
             data-room-appearance={roomAppearance}
-            data-theme={theme}
+            data-theme={cinemaLuxe ? 'cinema-luxe' : theme}
+            data-ui-theme={theme}
+            data-cinema-preset={cinemaLuxe ? appearanceSettings.cinemaPreset : undefined}
+            data-cinema-ambient-enabled={String(appearanceSettings.ambientLighting)}
+            data-cinema-aisle={String(appearanceSettings.aisleLights)}
+            data-cinema-sofa={String(appearanceSettings.sofa)}
+            data-cinema-wall-details={String(appearanceSettings.wallDetails)}
+            data-cinema-dim={String(appearanceSettings.dimWhilePlaying)}
+            data-cinema-expansion={String(appearanceSettings.screenExpansion)}
+            data-cinema-reduce-motion={String(appearanceSettings.reduceMotion)}
+            style={{ '--cinema-room-light': architecturalLight(appearanceSettings.roomBrightness) }}
         >
             {cinemaLuxe && <CinemaLuxeScene />}
             <div className="classic-room-background"><BackgroundLayers /></div>
@@ -449,10 +398,7 @@ const RoomLayout = () => {
             <div className="relative z-10 flex h-full w-full flex-col">
                 <Header
                     roomId={roomId}
-                    theme={theme}
-                    setTheme={setTheme}
                     roomAppearance={roomAppearance}
-                    setRoomAppearance={setRoomAppearance}
                     supportsTheater={supportsTheater}
                     leaveRoom={leaveRoom}
                     navigate={navigate}

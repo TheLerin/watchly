@@ -101,8 +101,8 @@ const ready = async url => {
  await host.locator('.room-mobile-workspace[data-mobile-tab="watch"]').waitFor();
  assert.ok(await host.locator('.watch-source-controls').isVisible());
  await host.getByRole('button', { name: 'Room settings' }).click();
- assert.equal(await host.getByText('Room appearance', { exact: true }).count(), 0);
- assert.equal(await host.getByText('Color theme', { exact: true }).count(), 1);
+ assert.equal(await host.getByText('Room style', { exact: true }).count(), 1);
+ assert.equal(await host.getByText('UI theme', { exact: true }).count(), 1);
  await host.getByRole('button', { name: 'Room settings' }).click();
  await host.setViewportSize({ width: 844, height: 390 });
  await wait(async () => await host.locator('.room-mobile-workspace').getAttribute('data-orientation') === 'landscape', 'mobile landscape layout did not activate');
@@ -122,20 +122,21 @@ const ready = async url => {
  assert.equal(await host.locator('.room-shell').getAttribute('data-room-appearance'), 'classic');
  await host.setViewportSize({ width: 1280, height: 720 });
  await wait(async () => await host.locator('.room-shell').getAttribute('data-room-appearance') === 'cinematic', 'theater preference did not return on supported screen');
- await wait(async () => host.locator('.cinematic-sofa img').evaluate(element => element.currentSrc.endsWith('/sofa-couple.webp') && element.complete), 'theater sofa did not load');
+ assert.ok(await host.locator('.luxe-sofa').isVisible(), 'Luxe sofa should use the existing theater scene');
  await host.getByRole('button', { name: 'Room settings' }).click();
- assert.equal(await host.getByText('Room appearance', { exact: true }).count(), 1);
+ assert.equal(await host.getByText('Room style', { exact: true }).count(), 1);
  await host.getByRole('button', { name: /Classic Original dashboard room/ }).click();
  assert.equal(await host.locator('.room-shell').getAttribute('data-room-appearance'), 'classic');
  await host.getByRole('button', { name: /Cinematic Immersive theater room/ }).click();
  assert.equal(await host.locator('.room-shell').getAttribute('data-room-appearance'), 'cinematic');
  await host.getByRole('button', { name: 'Room settings' }).click();
  console.log('PASS theater mode only appears on supported screens; mobile uses classic without a room switch');
+ await host.waitForTimeout(800);
  const stage = await host.locator('.room-player-surface').boundingBox();
  assert.ok(Math.abs(stage.x + stage.width / 2 - 640) < 3, 'the screen should be centered in the viewport');
- assert.ok(stage.width > 800, 'the theater screen should use the available wall space');
- assert.equal(await host.locator('.theater-side-wall').count(), 2);
- assert.equal(await host.locator('.theater-floor').count(), 1);
+ assert.ok(stage.width > 750, 'the theater screen should use the established Cinema Luxe wall space');
+ assert.equal(await host.locator('.luxe-wall').count(), 2);
+ assert.equal(await host.locator('.luxe-floor').count(), 1);
  const roomGeometry = await host.evaluate(() => {
   const polygon = selector => getComputedStyle(document.querySelector(selector)).clipPath
    .match(/^polygon\((.*)\)$/)[1].split(',').map(value => {
@@ -143,10 +144,10 @@ const ready = async url => {
     return { x, y };
    });
   return {
-   back: polygon('.theater-back-wall'),
-   left: polygon('.theater-wall-left'),
-   right: polygon('.theater-wall-right'),
-   floor: polygon('.theater-floor'),
+   back: polygon('.luxe-back-wall'),
+   left: polygon('.luxe-wall-left'),
+   right: polygon('.luxe-wall-right'),
+   floor: polygon('.luxe-floor'),
   };
  });
  assert.equal(roomGeometry.back[0].x, roomGeometry.back[3].x, 'left room corner should be vertical');
@@ -162,27 +163,28 @@ const ready = async url => {
  await host.getByRole('button',{name:'Play Now',exact:true}).click();
  await video(host).waitFor(); await video(viewer).waitFor();
  await wait(async()=>{const a=await values(host),b=await values(viewer);return a.time>1&&b.time>1},'remote did not play');
- await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='1'),'video ambient light did not start');
- assert.match(await host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--video-left-rgb')), /^\d+ \d+ \d+$/);
+ await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').dataset.cinemaAmbient==='sampled'),'video ambient light did not start');
+ assert.match(await host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--cinema-video-r')), /^\d+$/);
  await host.evaluate(() => {
   Object.defineProperty(document, 'hidden', { configurable: true, value: true });
   document.dispatchEvent(new Event('visibilitychange'));
  });
- await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='0'),'hidden tab did not stop ambient sampling');
+ await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').dataset.cinemaAmbient==='neutral'),'hidden tab did not stop ambient sampling');
  await host.evaluate(() => {
   delete document.hidden;
   document.dispatchEvent(new Event('visibilitychange'));
  });
- await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='1'),'visible tab did not resume ambient sampling');
+ await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').dataset.cinemaAmbient==='sampled'),'visible tab did not resume ambient sampling');
  await video(host).evaluate(v=>v.pause());
  await wait(async()=> (await values(viewer)).paused,'remote pause did not synchronize');
- await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').style.getPropertyValue('--ambient-opacity')==='0'),'video ambient light did not stop on pause');
+ await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').dataset.cinemaAmbient==='neutral'),'video ambient light did not stop on pause');
  await video(host).evaluate(v=>{v.currentTime=5});
  await wait(async()=>Math.abs((await values(viewer)).time-5)<0.3,'remote seek did not synchronize');
  await video(host).evaluate(v=>v.play());
  await wait(async()=>!(await values(viewer)).paused,'remote resume failed');
  console.log('PASS remote play, pause, seek, resume',await values(host),await values(viewer));
  await require('./cinemaLuxeChecks.cjs')({ host, viewer, browser, baseUrl, video, values, wait });
+ await require('./appearanceChecks.cjs')({ host, viewer, browser, baseUrl, video, values, wait });
 
  await host.evaluate(() => {
   navigator.mediaDevices.getDisplayMedia = async () => {

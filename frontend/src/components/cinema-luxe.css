@@ -9,6 +9,7 @@
     --cinema-muted: #a1a1aa;
     --cinema-glass: rgb(6 6 6 / 72%);
     --cinema-warm: 255 211 166;
+    --cinema-recess-rgb: 255 185 110;
     --cinema-video-r: 180;
     --cinema-video-g: 186;
     --cinema-video-b: 192;
@@ -132,9 +133,9 @@
     width: calc(var(--luxe-wall-screen-width) + 100px);
     height: clamp(16px, 2.5dvh, 24px);
     background:
-        radial-gradient(ellipse at 50% 85%, rgb(255 185 110 / 4%), transparent 75%),
+        radial-gradient(ellipse at 50% 85%, rgb(var(--cinema-recess-rgb) / 4%), transparent 75%),
         linear-gradient(#121212 0%, #0c0c0c 45%, #030303 48%, #040404);
-    box-shadow: inset 0 1px 1px rgb(255 185 110 / 3%), 0 8px 30px rgb(255 185 110 / 4%);
+    box-shadow: inset 0 1px 1px rgb(255 185 110 / 3%), 0 8px 30px rgb(var(--cinema-recess-rgb) / 4%);
     clip-path: polygon(2% 0, 98% 0, 100% 45%, 100% 100%, 0 100%, 0 45%);
     transform: translateX(-50%);
     transition: opacity 700ms ease;
@@ -153,7 +154,7 @@
     height: calc(var(--theater-screen-width) * 0.5625 + 32px);
     border-radius: 3px;
     background: #050505;
-    box-shadow: inset 0 1px 2px rgb(var(--cinema-warm) / 11%), inset 0 0 24px rgb(0 0 0 / 95%), 0 0 24px rgb(0 0 0 / 75%), 0 0 35px rgb(255 185 110 / 4%);
+    box-shadow: inset 0 1px 2px rgb(var(--cinema-warm) / 11%), inset 0 0 24px rgb(0 0 0 / 95%), 0 0 24px rgb(0 0 0 / 75%), 0 0 35px rgb(var(--cinema-recess-rgb) / 4%);
 }
 
 .room-shell[data-theme="cinema-luxe"] .luxe-ambient {
@@ -311,15 +312,15 @@
     outline-offset: 3px;
 }
 
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.luxe-wall, .luxe-back-wall, .luxe-platform) { opacity: 0.6; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-wall::before { opacity: 0.85; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ceiling { opacity: 0.5; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ceiling i { opacity: 0.6; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.luxe-floor, .luxe-sofa) { opacity: 0.6; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-aisle { opacity: 0.29; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-ambient { opacity: 0.55; }
-.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] .luxe-screen-recess {
-    box-shadow: inset 0 1px 2px rgb(var(--cinema-warm) / 8%), inset 0 0 24px rgb(0 0 0 / 95%), 0 0 24px rgb(0 0 0 / 75%), 0 0 35px rgb(255 185 110 / 2.5%);
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-dim="true"] :is(.luxe-wall, .luxe-back-wall, .luxe-platform) { opacity: 0.6; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-dim="true"] .luxe-wall::before { opacity: 0.85; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-dim="true"] .luxe-ceiling { opacity: 0.5; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-dim="true"] .luxe-ceiling i { opacity: 0.6; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-dim="true"] :is(.luxe-floor, .luxe-sofa) { opacity: 0.6; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-dim="true"] .luxe-aisle { opacity: 0.29; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-dim="true"] .luxe-ambient { opacity: 0.55; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-dim="true"] .luxe-screen-recess {
+    box-shadow: inset 0 1px 2px rgb(var(--cinema-warm) / 8%), inset 0 0 24px rgb(0 0 0 / 95%), 0 0 24px rgb(0 0 0 / 75%), 0 0 35px rgb(var(--cinema-recess-rgb) / 2.5%);
 }
 
 @media (min-width: 1180px) and (min-height: 650px) {
@@ -328,7 +329,7 @@
         --theater-screen-top: calc(var(--luxe-wall-screen-top) + var(--luxe-wall-screen-width) * 0.5625 * 0.015);
     }
 
-    .room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"] :is(.room-player-surface:not(:fullscreen), .luxe-screen-recess, .luxe-ambient) {
+    .room-shell[data-theme="cinema-luxe"][data-cinema-playing="true"][data-cinema-expansion="true"]:not([data-cinema-reduce-motion="true"]) :is(.room-player-surface:not(:fullscreen), .luxe-screen-recess, .luxe-ambient) {
         transform: translateX(-50%) scale(1.04);
     }
 
@@ -348,6 +349,49 @@
 }
 
 @keyframes luxe-arrive { from { opacity: 0; } to { opacity: 1; } }
+
+/* Preferences affect decorative surfaces only, never the actual player/UI. */
+.room-shell[data-theme="cinema-luxe"] :is(.luxe-back-wall, .luxe-wall, .luxe-ceiling, .luxe-floor, .luxe-platform, .luxe-screen-recess) {
+    filter: brightness(var(--cinema-room-light, 1));
+}
+.room-shell[data-theme="cinema-luxe"][data-cinema-ambient-enabled="false"] .luxe-ambient,
+.room-shell[data-theme="cinema-luxe"][data-cinema-aisle="false"] .luxe-aisle,
+.room-shell[data-theme="cinema-luxe"][data-cinema-sofa="false"] .luxe-sofa { display: none; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-wall-details="false"] .luxe-wall-left {
+    background: linear-gradient(90deg, #080808, #111 6%, #0a0a0a 12%, #050505 18%);
+}
+.room-shell[data-theme="cinema-luxe"][data-cinema-wall-details="false"] .luxe-wall-right {
+    background: linear-gradient(270deg, #080808, #111 6%, #0a0a0a 12%, #050505 18%);
+}
+.room-shell[data-theme="cinema-luxe"][data-cinema-wall-details="false"] .luxe-ceiling {
+    background: radial-gradient(ellipse 34% 10% at 50% var(--luxe-ceiling-end), rgb(var(--cinema-warm) / 3.5%), transparent), #060606;
+}
+.room-shell[data-theme="cinema-luxe"][data-cinema-preset="minimal"] {
+    --cinema-warm: 180 180 180;
+    --cinema-recess-rgb: 0 0 0;
+}
+.room-shell[data-theme="cinema-luxe"][data-cinema-preset="minimal"] .luxe-wall::before { display: none; }
+.room-shell[data-theme="cinema-luxe"][data-cinema-preset="minimal"] .luxe-back-wall {
+    background: radial-gradient(ellipse 58% 48% at 50% 40%, #070707, #030303 80%);
+}
+.room-shell[data-theme="cinema-luxe"][data-cinema-preset="minimal"] .luxe-platform {
+    background: linear-gradient(#0c0c0c 0%, #080808 45%, #030303 48%, #040404);
+    box-shadow: inset 0 1px 1px rgb(255 255 255 / 2%);
+}
+.room-shell[data-theme="cinema-luxe"][data-cinema-preset="minimal"] .luxe-ambient {
+    background: radial-gradient(ellipse, rgb(180 180 180 / 2.5%), transparent 76%);
+}
+.room-shell[data-theme="cinema-luxe"][data-cinema-reduce-motion="true"],
+.room-shell[data-theme="cinema-luxe"][data-cinema-reduce-motion="true"] *,
+.room-shell[data-theme="cinema-luxe"][data-cinema-reduce-motion="true"] *::before,
+.room-shell[data-theme="cinema-luxe"][data-cinema-reduce-motion="true"] *::after {
+    animation: none !important;
+    transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) and (min-width: 1180px) and (min-height: 650px) {
+    .room-shell[data-theme="cinema-luxe"] :is(.room-player-surface:not(:fullscreen), .luxe-screen-recess, .luxe-ambient) { transform: translateX(-50%) !important; }
+}
 
 @media (prefers-reduced-motion: reduce) {
     .room-shell[data-theme="cinema-luxe"],

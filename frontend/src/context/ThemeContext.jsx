@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { APPEARANCE_STORAGE_KEY, CINEMA_DEFAULTS, DEFAULT_APPEARANCE, normalizeAppearance, readAppearance } from '../utils/appearanceSettings';
 
 const ThemeContext = createContext();
 export const useTheme = () => useContext(ThemeContext);
@@ -7,7 +8,6 @@ export const useTheme = () => useContext(ThemeContext);
 export const THEME_META = {
     'glass-dark':  { label: 'Dark Glass',  orb: ['#333','#111'] },
     'glass-light': { label: 'Light Glass', orb: ['#eee','#ccc'] },
-    'cinema-luxe': { label: 'Cinema Luxe', orb: ['#39342e','#050505'] },
 };
 
 export const ROOM_APPEARANCE_META = {
@@ -21,43 +21,46 @@ export const ROOM_APPEARANCE_META = {
     },
 };
 
-const ROOM_APPEARANCE_STORAGE_KEY = 'watchly-room-appearance';
-
 export const ThemeProvider = ({ children }) => {
-    const [theme, setThemeState] = useState(() => {
-        const s = localStorage.getItem('watchly-theme');
-        if (s === 'light' || s === 'glass-light') return 'glass-light';
-        if (s === 'cinema-luxe') return s;
-        return 'glass-dark';
-    });
+    const [appearanceSettings, setAppearanceSettings] = useState(() => readAppearance(localStorage));
+    const theme = appearanceSettings.uiTheme;
+    const roomAppearance = appearanceSettings.roomStyle;
 
-    const [roomAppearance, setRoomAppearanceState] = useState(() => {
-        const savedAppearance = localStorage.getItem(ROOM_APPEARANCE_STORAGE_KEY);
-        return ROOM_APPEARANCE_META[savedAppearance] ? savedAppearance : 'cinematic';
-    });
+    const updateAppearance = (patch) => {
+        setAppearanceSettings(current => normalizeAppearance({ ...current, ...patch }));
+    };
 
     const setTheme = (t) => {
-        if (!THEME_META[t]) t = 'glass-dark';
-        setThemeState(t);
-        localStorage.setItem('watchly-theme', t);
+        // Keep the legacy internal selection usable without exposing it as a UI theme.
+        if (t === 'cinema-luxe') {
+            updateAppearance({ roomStyle: 'cinematic', uiTheme: 'glass-dark', cinemaPreset: 'luxe', ...CINEMA_DEFAULTS.luxe });
+        } else updateAppearance({ uiTheme: THEME_META[t] ? t : 'glass-dark' });
     };
 
     const setRoomAppearance = (appearance) => {
-        const nextAppearance = ROOM_APPEARANCE_META[appearance] ? appearance : 'cinematic';
-        setRoomAppearanceState(nextAppearance);
-        localStorage.setItem(ROOM_APPEARANCE_STORAGE_KEY, nextAppearance);
+        updateAppearance({ roomStyle: ROOM_APPEARANCE_META[appearance] ? appearance : 'cinematic' });
     };
+
+    const setCinemaPreset = (preset) => {
+        if (CINEMA_DEFAULTS[preset]) updateAppearance({ cinemaPreset: preset, ...CINEMA_DEFAULTS[preset] });
+    };
+
+    const resetAppearance = () => setAppearanceSettings({ ...DEFAULT_APPEARANCE });
+
+    useEffect(() => {
+        try { localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(appearanceSettings)); }
+        catch { /* Preferences still work for this session when storage is unavailable. */ }
+    }, [appearanceSettings]);
 
     useEffect(() => {
         const root = document.documentElement;
-        root.className = '';
-        if (theme !== 'glass-dark') {
-            root.classList.add(`theme-${theme}`);
-        }
+        root.classList.remove('theme-glass-light', 'theme-cinema-luxe');
+        root.classList.toggle('theme-glass-light', theme === 'glass-light');
     }, [theme]);
 
     return (
-        <ThemeContext.Provider value={{ theme, setTheme, roomAppearance, setRoomAppearance }}>
+        <ThemeContext.Provider value={{ theme, setTheme, roomAppearance, setRoomAppearance,
+            appearanceSettings, updateAppearance, setCinemaPreset, resetAppearance }}>
             {children}
         </ThemeContext.Provider>
     );
