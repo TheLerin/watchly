@@ -333,7 +333,7 @@
         transform: translateX(-50%) scale(1.04);
     }
 
-    .room-shell[data-theme="cinema-luxe"][data-cinema-controls-hidden="true"] :is(.room-header, .theater-left-dock, .theater-right-dock):not(:focus-within) {
+    .room-shell[data-theme="cinema-luxe"][data-cinema-controls-hidden="true"] :is(.room-header, .theater-left-dock, .theater-right-dock, .viewer-player-controls):not(:focus-within) {
         opacity: 0;
         pointer-events: none;
     }

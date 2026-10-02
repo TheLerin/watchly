@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
-const CHROME = '.room-header, .theater-left-dock, .theater-right-dock';
+const CHROME = '.room-header, .theater-left-dock, .theater-right-dock, .viewer-player-controls, .video-player-controls, .playlist-controls, .media-track-controls';
 const OPEN_UI = '[data-open-tool]:not([data-open-tool=""]), .room-settings-popover, .room-header-popover, [role="dialog"], dialog[open], [aria-modal="true"], [role="menu"], [role="listbox"]';
 const INTERACTIVE = 'button, a, input, textarea, select, [contenteditable], [tabindex]';
 const COLOUR_PROPERTIES = ['--cinema-video-r', '--cinema-video-g', '--cinema-video-b'];
@@ -28,6 +28,8 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
         let sampleTimer;
         let hideTimer;
         let actualPlayback = false;
+        const heldPointers = new Set();
+        let touchActive = false, overNativeControls = false;
         let blockedSource = '';
         let context;
         const canvas = document.createElement('canvas');
@@ -75,7 +77,7 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
 
         const mustStayVisible = () => {
             const focused = document.activeElement;
-            return !autoHideControls || hideDelay === 'never' || !actualPlayback || target.dataset.roomAppearance !== 'cinematic' ||
+            return !autoHideControls || hideDelay === 'never' || !actualPlayback || heldPointers.size > 0 || touchActive || overNativeControls || target.dataset.roomAppearance !== 'cinematic' ||
                 Boolean(target.querySelector(OPEN_UI) || document.querySelector('[role="dialog"], dialog[open], [aria-modal="true"]')) ||
                 (focused instanceof Element && target.contains(focused) && focused.matches(INTERACTIVE)) ||
                 Boolean(target.querySelector(`${CHROME.split(', ').map(selector => `${selector}:hover`).join(', ')}`));
@@ -95,6 +97,18 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
             target.removeAttribute('data-cinema-controls-hidden');
             if (actualPlayback) scheduleHide();
         };
+        const interaction = event => {
+            if (event.type === 'pointerdown') heldPointers.add(event.pointerId);
+            if (event.type === 'pointerup' || event.type === 'pointercancel') heldPointers.delete(event.pointerId);
+            if (event.type === 'touchstart') touchActive = true;
+            if (event.type === 'touchend' || event.type === 'touchcancel') touchActive = event.touches.length > 0;
+            if (event.type === 'pointermove') {
+                const video = event.target instanceof HTMLVideoElement ? event.target : null;
+                overNativeControls = Boolean(video?.controls && event.clientY >= video.getBoundingClientRect().bottom - 80);
+            }
+            if (event.type === 'blur' && event.target === window) { heldPointers.clear(); touchActive = false; overNativeControls = false; }
+            reveal();
+        };
         const updatePlayback = () => {
             stopSampling();
             actualPlayback = playing && (!native || (!media.paused && !media.ended));
@@ -110,8 +124,8 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
         if (native) playbackEvents.forEach(event => media.addEventListener(event, updatePlayback));
         document.addEventListener('visibilitychange', updatePlayback);
         compact.addEventListener('change', updatePlayback);
-        const interactionEvents = ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'focusin', 'focusout'];
-        interactionEvents.forEach(event => window.addEventListener(event, reveal, { capture: true, passive: true }));
+        const interactionEvents = ['pointermove', 'pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'touchcancel', 'keydown', 'focusin', 'focusout', 'blur', 'watchly:player-interaction'];
+        interactionEvents.forEach(event => window.addEventListener(event, interaction, { capture: true, passive: true }));
         // Existing drawer/menu state stays authoritative; observe only relevant
         // DOM changes instead of introducing a second panel state or polling.
         const observer = new MutationObserver(() => {
@@ -127,7 +141,7 @@ export default function useCinemaLuxeEffects(media, targetRef, enabled, playing)
             if (native) playbackEvents.forEach(event => media.removeEventListener(event, updatePlayback));
             document.removeEventListener('visibilitychange', updatePlayback);
             compact.removeEventListener('change', updatePlayback);
-            interactionEvents.forEach(event => window.removeEventListener(event, reveal, true));
+            interactionEvents.forEach(event => window.removeEventListener(event, interaction, true));
             ['data-cinema-playing', 'data-cinema-controls-hidden', 'data-cinema-ambient'].forEach(attribute => target.removeAttribute(attribute));
             COLOUR_PROPERTIES.forEach(property => target.style.removeProperty(property));
         };

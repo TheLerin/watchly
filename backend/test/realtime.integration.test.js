@@ -108,6 +108,61 @@ test('local seek timestamps synchronize receivers, preserve intent and reject in
     assert.equal(invalid.error.code, 'INVALID_COMMAND');
 });
 
+test('Host and Moderator share direct controls, queue management and local initiation; Viewer claims cannot grant rights', async () => {
+    const host = await connect(), moderator = await connect(), viewer = await connect();
+    const room = await emit(host, 'room:create', { nickname: 'Permission host', protocolVersion: 2 });
+    const mod = await emit(moderator, 'room:join', { roomId: room.roomId, nickname: 'Permission mod', protocolVersion: 2 });
+    await emit(viewer, 'room:join', { roomId: room.roomId, nickname: 'Permission viewer', protocolVersion: 2 });
+    const promoted = receive(moderator, 'role_updated'); host.emit('promote_to_moderator', { roomId: room.roomId, targetId: moderator.id });
+    assert.equal((await promoted).member.permissions.canControlPlayback, true);
+    let changed = receive(host, 'video_changed'); moderator.emit('change_video', { roomId: room.roomId, url: 'https://example.com/mod.mp4' });
+    let state = await changed; assert.equal(state.isPlaying, true);
+    for (const actor of [host, moderator]) {
+        let received = receive(viewer, 'video_paused'); actor.emit('pause_video', { roomId: room.roomId, sourceEpoch: state.sourceEpoch, playedSeconds: 10 });
+        state = await received; assert.equal(state.isPlaying, false);
+        received = receive(viewer, 'video_seeked'); actor.emit('seek_video', { roomId: room.roomId, sourceEpoch: state.sourceEpoch, playedSeconds: 90 });
+        state = await received; assert.equal(state.playedSeconds, 90);
+        received = receive(viewer, 'video_played'); actor.emit('play_video', { roomId: room.roomId, sourceEpoch: state.sourceEpoch });
+        state = await received; assert.equal(state.isPlaying, true);
+    }
+    const before = (await emit(host, 'room:snapshot', {})).snapshot;
+    for (const event of ['pause_video', 'seek_video', 'change_video', 'add_to_queue']) viewer.emit(event, { roomId: room.roomId, role: 'Host', permissions: { canControlPlayback: true }, sourceEpoch: state.sourceEpoch, playedSeconds: 150, url: 'https://example.com/forged.mp4' });
+    const after = (await emit(viewer, 'room:snapshot', {})).snapshot;
+    assert.equal(after.videoState.url, before.videoState.url); assert.equal(after.videoState.isPlaying, true);
+    assert.equal(after.videoState.seekVersion, before.videoState.seekVersion); assert.equal(after.queue.length, 0);
+    assert.equal(after.members.find(member => member.id === viewer.id).permissions.canControlPlayback, false);
+    for (const label of ['first', 'second']) {
+        const queued = receive(host, 'queue_updated'); moderator.emit('add_to_queue', { roomId: room.roomId, url: `https://example.com/${label}.mp4`, label }); await queued;
+    }
+    let queue = (await emit(host, 'room:snapshot', {})).snapshot.queue;
+    let updated = receive(host, 'queue_updated'); moderator.emit('reorder_queue', { roomId: room.roomId, itemId: queue[1].id, direction: 'up' });
+    queue = await updated; assert.equal(queue[0].label, 'second');
+    updated = receive(host, 'queue_updated'); moderator.emit('remove_from_queue', { roomId: room.roomId, itemId: queue[1].id });
+    assert.equal((await updated).length, 1);
+    changed = receive(viewer, 'video_changed'); moderator.emit('play_next', { roomId: room.roomId });
+    assert.equal((await changed).url, 'https://example.com/second.mp4');
+    moderator.emit('kick_user', { roomId: room.roomId, targetId: host.id });
+    moderator.emit('transfer_host', { roomId: room.roomId, targetId: moderator.id });
+    moderator.emit('promote_to_moderator', { roomId: room.roomId, targetId: viewer.id });
+    let snapshot = (await emit(moderator, 'room:snapshot', {})).snapshot;
+    assert.equal(snapshot.members.find(member => member.id === host.id).role, 'Host');
+    assert.equal(snapshot.members.find(member => member.id === viewer.id).role, 'Viewer');
+    const mediaId = `sampled-sha256-v1:100:${'f'.repeat(64)}`;
+    assert.equal((await emit(moderator, 'media:declare', { descriptor: { sourceType: 'local-file', mediaId,
+        fingerprintVersion: 'sampled-sha256-v1', displayTitle: 'Moderator local movie', sizeBytes: 100, durationMs: 120000 } })).ok, true);
+    for (const actor of [host, viewer]) await emit(actor, 'media:ready', { mediaId, status: 'READY', fingerprint: 'f'.repeat(64), size: 100, duration: 120 });
+    for (const actor of [host, moderator]) for (const action of ['PLAY', 'PAUSE', 'SEEK']) {
+        const result = await emit(actor, 'playback:command', { commandId: `role_${actor.id}_${action}`, mediaId, action, positionSec: 90 });
+        assert.equal(result.ok, true); if (action === 'SEEK') assert.equal(result.playback.positionSec, 90);
+    }
+    assert.equal((await emit(viewer, 'playback:command', { commandId: 'forged_viewer_play', mediaId, action: 'PLAY', role: 'Moderator' })).error.code, 'FORBIDDEN');
+    const demoted = receive(moderator, 'role_updated'); host.emit('demote_to_viewer', { roomId: room.roomId, targetId: moderator.id });
+    assert.equal((await demoted).member.permissions.canControlPlayback, false);
+    assert.equal((await emit(moderator, 'playback:command', { commandId: 'demoted_mod_play', mediaId, action: 'PLAY' })).error.code, 'FORBIDDEN');
+    snapshot = (await emit(host, 'room:snapshot', {})).snapshot;
+    assert.equal(snapshot.members.find(member => member.userId === mod.memberId).role, 'Viewer');
+});
+
 test('one socket cannot create ghost rooms or join multiple rooms at once', async () => {
     const host = await connect();
     const original = await emit(host, 'room:create', { nickname: 'Host', protocolVersion: 2 });
@@ -312,7 +367,7 @@ test('Start anyway bypasses only this start; verified buffering stays ready and 
     assert.equal((await emit(host, 'room:snapshot', {})).snapshot.queue.length, 0);
 });
 
-test('create, join, expiration error, readiness and controller-only playback', async () => {
+test('create, join, expiration error, readiness and role-authorized playback', async () => {
     const host = await connect();
     const created = await emit(host, 'room:create', { nickname: 'Host', protocolVersion: 2 });
     assert.equal(created.ok, true); assert.match(created.roomId, /^[A-Z0-9]{7}$/);
@@ -335,7 +390,7 @@ test('create, join, expiration error, readiness and controller-only playback', a
     const declared = await emit(host, 'media:declare', { descriptor: { sourceType: 'local-file', mediaId, fingerprintVersion: 'sampled-sha256-v1', displayTitle: 'Movie', sizeBytes: 100, durationMs: 10000 } });
     assert.equal(declared.ok, true);
     const forbidden = await emit(stranger, 'playback:command', { commandId: 'viewer_cmd_123', mediaId, action: 'PLAY' });
-    assert.equal(forbidden.error.code, 'NOT_CONTROLLER');
+    assert.equal(forbidden.error.code, 'FORBIDDEN');
     await emit(stranger, 'media:ready', { mediaId, status: 'READY', fingerprint: 'a'.repeat(64), size: 100, duration: 10 });
     const played = await emit(host, 'playback:command', { commandId: 'host_cmd_12345', mediaId, action: 'PLAY' });
     assert.equal(played.ok, true); assert.equal(played.playback.seq, 1);
@@ -345,7 +400,7 @@ test('create, join, expiration error, readiness and controller-only playback', a
     host.emit('promote_to_moderator', { roomId: created.roomId, targetId: stranger.id });
     await new Promise(resolve => setTimeout(resolve, 20));
     const moderatorWithoutControl = await emit(stranger, 'playback:command', { commandId: 'moderator_cmd_1', mediaId, action: 'PAUSE' });
-    assert.equal(moderatorWithoutControl.error.code, 'NOT_CONTROLLER');
+    assert.equal(moderatorWithoutControl.ok, true);
     assert.equal((await emit(stranger, 'control:request', {})).ok, true);
     assert.equal((await emit(host, 'control:request', {})).ok, true);
 

@@ -1,0 +1,47 @@
+const assert = require('node:assert/strict');
+module.exports = async ({ host, viewer, setSource, base, snapshot, video, values, wait, sleep }) => {
+    await setSource(host, `${base}/bg-video.mp4?controls=luxe`);
+    await wait(async () => !(await values(host)).paused && !(await values(viewer)).paused, 'Luxe fixture not playing');
+    const select = async page => {
+        await page.getByRole('button', { name: 'Room settings', exact: true }).click();
+        await page.getByRole('button', { name: /Cinematic Immersive theater room/ }).click();
+        await page.getByRole('button', { name: /Luxe Warm, immersive/ }).click();
+        await page.locator('#appearance-hide-delay').selectOption('2');
+        await page.getByRole('button', { name: 'Room settings', exact: true }).click();
+        await page.evaluate(() => document.activeElement?.blur());
+    };
+    for (const page of [host, viewer]) await select(page);
+    const shell = host.locator('.room-shell');
+    await host.mouse.move(640, 350);
+    await wait(async () => await shell.getAttribute('data-cinema-controls-hidden') === 'true', 'inactive Luxe controls did not hide');
+    await host.mouse.move(641, 350); assert.equal(await shell.getAttribute('data-cinema-controls-hidden'), null);
+    // Native timeline/volume region remains visible while hovered or held.
+    const bounds = await video(host).boundingBox();
+    await host.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height - 20); await sleep(2400);
+    assert.equal(await shell.getAttribute('data-cinema-controls-hidden'), null, 'native control hover must not hide chrome');
+    await host.mouse.move(640, 710); await host.mouse.down(); await sleep(2400);
+    assert.equal(await shell.getAttribute('data-cinema-controls-hidden'), null, 'held pointer must not hide chrome');
+    await host.mouse.up(); await wait(async () => await shell.getAttribute('data-cinema-controls-hidden') === 'true', 'released pointer must resume inactivity timer');
+    await host.mouse.move(642, 350);
+    await host.evaluate(() => window.dispatchEvent(new TouchEvent('touchstart', { touches: [new Touch({ identifier: 1, target: document.body, clientX: 640, clientY: 350 })] })));
+    await sleep(2400); assert.equal(await shell.getAttribute('data-cinema-controls-hidden'), null, 'held touch must not hide chrome');
+    await host.evaluate(() => window.dispatchEvent(new TouchEvent('touchend', { touches: [] })));
+    await wait(async () => await shell.getAttribute('data-cinema-controls-hidden') === 'true', 'released touch must resume inactivity timer');
+    await host.mouse.move(643, 350); await host.getByRole('button', { name: 'Room settings', exact: true }).focus(); await sleep(2400);
+    assert.equal(await shell.getAttribute('data-cinema-controls-hidden'), null, 'keyboard focus must keep controls accessible');
+    await host.getByRole('button', { name: 'Room settings', exact: true }).click(); await host.evaluate(() => document.activeElement?.blur()); await host.mouse.move(644, 350); await sleep(2400);
+    assert.equal(await shell.getAttribute('data-cinema-controls-hidden'), null, 'open settings must stay visible');
+    await host.getByRole('button', { name: 'Room settings', exact: true }).click(); await host.evaluate(() => document.activeElement?.blur());
+    await video(host).evaluate(element => element.pause()); await wait(async () => !(await snapshot()).videoState.isPlaying, 'room pause failed');
+    await sleep(2400); assert.equal(await shell.getAttribute('data-cinema-controls-hidden'), null, 'paused room must keep essential controls visible');
+    await video(host).evaluate(element => element.play()); await wait(async () => (await snapshot()).videoState.isPlaying, 'resume failed');
+    await viewer.mouse.move(640, 350); await wait(async () => await viewer.locator('.room-shell').getAttribute('data-cinema-controls-hidden') === 'true', 'Viewer local bar did not auto-hide');
+    await video(viewer).evaluate(element => element.pause());
+    await wait(async () => !(await values(viewer)).paused, 'Luxe Viewer pause failed to recover');
+    assert.equal(await viewer.locator('.room-shell').getAttribute('data-cinema-controls-hidden'), null, 'Viewer correction must reveal controls');
+    await viewer.mouse.move(641, 350);
+    const localBar = await viewer.locator('.viewer-player-controls').boundingBox();
+    await viewer.mouse.move(localBar.x + 12, localBar.y + 12); await sleep(2400);
+    assert.equal(await viewer.locator('.room-shell').getAttribute('data-cinema-controls-hidden'), null, 'local control hover must keep Viewer controls visible');
+    console.log('PASS Cinema Luxe inactivity/reveal, native hover, held mouse/touch, focus, menus, paused room and Viewer sync visibility');
+};

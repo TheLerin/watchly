@@ -220,7 +220,7 @@ const ready = async url => {
  await viewer.getByRole('button', { name: 'Now watching' }).click();
  await host.getByText('2/2 ready',{exact:true}).waitFor();
  await wait(async () => await video(viewer).count() && !(await values(viewer)).paused, 'viewer did not join Start anyway playback');
- await host.getByRole('textbox', { name: /Watch from Link/ }).blur();
+ await host.evaluate(() => document.activeElement?.blur());
  await host.keyboard.press('Space');
  await wait(async()=> (await values(host)).paused&&(await values(viewer)).paused,'Start anyway playback did not pause');
  console.log('PASS Start anyway and late file readiness');
@@ -234,6 +234,7 @@ const ready = async url => {
  await video(host).evaluate(v => { v.volume = 0.35; });
  assert.equal(await video(host).evaluate(v => v.volume), 0.35);
  await video(host).evaluate((v, volume) => { v.volume = volume; }, originalVolume);
+ await host.evaluate(() => document.activeElement?.blur());
  await host.keyboard.press('Space');
  await wait(async()=>!(await values(host)).paused&&!(await values(viewer)).paused,'local scheduled play failed');
  await wait(async () => await host.locator('.room-shell').getAttribute('data-cinema-ambient') === 'sampled', 'local movie did not provide ambient lighting');
@@ -315,16 +316,17 @@ const ready = async url => {
  await viewer.getByRole('button', { name: 'Take playback control' }).click();
  await viewer.getByRole('button', { name: 'Watch controls' }).click();
  await viewer.getByRole('button', { name: 'Play Now', exact: true }).waitFor();
- assert.equal(await host.getByRole('button', { name: 'Play Now', exact: true }).count(), 0);
+ assert.equal(await host.getByRole('button', { name: 'Play Now', exact: true }).count(), 1, 'Host retains playback rights when Moderator coordinates');
  await viewer.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await viewer.getByRole('button', { name: 'Queue', exact: true }).click();
  await viewer.getByRole('button', { name: 'Play Next', exact: true }).waitFor();
  await host.getByRole('button', { name: 'Members and queue' }).click();
- assert.equal(await host.getByRole('button', { name: 'Play Next', exact: true }).count(), 0);
+ assert.equal(await host.getByRole('button', { name: 'Play Next', exact: true }).count(), 1, 'Host retains queue rights when Moderator coordinates');
  await host.evaluate(async ({ roomId, targetId }) => {
   (await import('/src/socket.js')).socket.emit('demote_to_viewer', { roomId, targetId });
  }, { roomId, targetId: viewerSocketId });
- await host.getByRole('button', { name: 'Watch controls' }).click();
+ // The Host's existing watch drawer remains open while a Moderator controls.
+ if (!await host.getByRole('button', { name: 'Play Now', exact: true }).count()) await host.getByRole('button', { name: 'Watch controls' }).click();
  await host.getByRole('button', { name: 'Play Now', exact: true }).waitFor();
  await host.getByRole('button', { name: 'Play Next', exact: true }).waitFor();
  assert.equal(await viewer.getByRole('button', { name: 'Play Next', exact: true }).count(), 0);

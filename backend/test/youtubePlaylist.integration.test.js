@@ -34,7 +34,7 @@ test('index normalization honors selected video, duplicate index, invalid index 
     ]) { const value = playlistSource(url); assert.equal(resolvePlaylist(value, items), true); assert.equal(value.playlistIndex, index); assert.equal(value.currentVideoId, items[index]); assert.deepEqual(value.playlistItems, items); }
 });
 
-test('controller-only discovery/navigation, real readiness and malformed payload validation', async () => {
+test('coordinator discovery, role-authorized navigation, real readiness and malformed payload validation', async () => {
     const { host, viewer, roomId } = await create(); let value = await change(host, roomId);
     assert.equal(value.sourceType, 'youtube-playlist'); assert.equal(value.isPlaying, false);
     assert.equal((await update(viewer, roomId, value, 'RESOLVE', { items: videos })).error.code, 'NOT_CONTROLLER');
@@ -42,7 +42,7 @@ test('controller-only discovery/navigation, real readiness and malformed payload
     assert.equal((await update(host, roomId, { ...value, sourceRevision: '0' }, 'RESOLVE', { items: videos })).error.code, 'STALE_PLAYLIST');
     value = (await update(host, roomId, value, 'RESOLVE', { items: videos })).videoState;
     assert.equal((await control(host, roomId, value, 'play_video')).isPlaying, false, 'receiving the source does not prove player readiness');
-    assert.equal((await update(viewer, roomId, value, 'NEXT')).error.code, 'NOT_CONTROLLER');
+    assert.equal((await update(viewer, roomId, value, 'NEXT')).error.code, 'FORBIDDEN');
     await update(host, roomId, value, 'READY', { title: 'Actual iframe title' });
     await update(viewer, roomId, value, 'READY', { title: 'Cannot overwrite host title' });
     assert.equal((await state(host)).playlistTitles[videos[0]], 'Actual iframe title');
@@ -71,6 +71,32 @@ test('Next/Previous preserve intent, old seek/end/echo cannot double-skip, full 
     await control(host, roomId, ended, 'video_ended'); assert.equal((await state(host)).playlistIndex, 2);
     value = await control(host, roomId, value, 'video_ended'); assert.equal(value.playlistStatus, 'finished'); assert.equal(value.isPlaying, false); assert.equal(value.playlistIndex, 2);
     await control(host, roomId, value, 'video_ended'); assert.equal((await state(host)).playlistStatus, 'finished');
+});
+
+test('Host and Moderator can navigate without takeover; stale coordinators and forged Viewer permissions cannot publish', async () => {
+    const { host, viewer, roomId } = await create();
+    const moderator = await connect();
+    const joined = await emit(moderator, 'room:join', { roomId, nickname: 'Playlist moderator', protocolVersion: 2 });
+    const promoted = receive(moderator, 'role_updated');
+    host.emit('promote_to_moderator', { roomId, targetId: moderator.id });
+    assert.equal((await promoted).member.permissions.canChangeSource, true);
+    let value = await change(moderator, roomId);
+    value = (await update(moderator, roomId, value, 'RESOLVE', { items: videos.slice(0, 3) })).videoState;
+    assert.equal((await update(host, roomId, value, 'RESOLVE', { items: videos })).error.code, 'NOT_CONTROLLER');
+    const forged = await update(viewer, roomId, value, 'NEXT', { role: 'Host', permissions: { canChangeSource: true } });
+    assert.equal(forged.error.code, 'FORBIDDEN');
+    value = (await update(host, roomId, value, 'NEXT')).videoState;
+    assert.equal(value.playlistIndex, 1);
+    assert.equal((await emit(host, 'room:snapshot', {})).snapshot.controllerMemberId, (await emit(host, 'room:snapshot', {})).snapshot.memberId);
+    value = (await update(moderator, roomId, value, 'PREVIOUS')).videoState;
+    assert.equal(value.playlistIndex, 0);
+    assert.equal((await emit(host, 'room:snapshot', {})).snapshot.controllerMemberId, joined.memberId);
+    await control(host, roomId, value, 'sync_progress', { playedSeconds: 70 });
+    assert.equal((await state(host)).playedSeconds, 0, 'old coordinator telemetry cannot overwrite the new coordinator');
+    const demoted = receive(moderator, 'role_updated');
+    host.emit('demote_to_viewer', { roomId, targetId: moderator.id });
+    assert.equal((await demoted).member.permissions.canChangeSource, false);
+    assert.equal((await update(moderator, roomId, value, 'NEXT')).error.code, 'FORBIDDEN');
 });
 
 test('late join and resume retain playlist identity and synchronized item time', async () => {

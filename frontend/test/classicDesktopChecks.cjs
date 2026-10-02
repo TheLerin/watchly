@@ -140,7 +140,7 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
  await host.locator('#room-link-input').fill(baseUrl + '/bg-video.mp4');
  await host.getByRole('button', { name: 'Queue', exact: true }).click();
  await tab(host, 'Room');
- const removeQueued = host.locator('.room-members-queue .group\\/queue button');
+ const removeQueued = host.getByRole('button', { name: 'Remove queue item 1', exact: true });
  await removeQueued.waitFor();
  assert.ok(await host.locator('.room-members-queue').getByText('Browser viewer', { exact: true }).count());
  await removeQueued.click();
@@ -181,7 +181,7 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
  assert.deepEqual(await host.evaluate(() => window.classicAudioTracks.map(track => track.enabled)), [false, true], 'Classic tabs reset audio');
  await wait(async () => video(host).evaluate(el => [...el.textTracks].some(track => track.mode === 'showing')), 'Classic tabs reset subtitles');
  await viewer.setViewportSize({ width: 1366, height: 768 });
- await viewer.getByTitle('Toggle Fullscreen').click();
+ await viewer.getByRole('button', { name: 'Fullscreen video locally', exact: true }).click();
  await wait(async () => viewer.evaluate(() => Boolean(document.fullscreenElement)), 'Classic fullscreen did not start');
  const full = await viewer.locator('.room-player-surface').boundingBox();
  assert.ok(full.width >= 1365 && full.height >= 767);

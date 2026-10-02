@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
     ArrowRight,
+    ArrowUp,
+    ArrowDown,
     CheckCircle2,
     CircleDashed,
     Crown,
@@ -16,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useRoom } from '../context/RoomContext';
 import { AnimatePresence, motion } from 'framer-motion';
+import { canManageMember } from '../utils/roomPermissions';
 
 const MotionDiv = motion.div;
 
@@ -27,7 +30,7 @@ const roleMeta = {
     },
     Moderator: {
         icon: <Shield size={11} />,
-        label: 'Mod',
+        label: 'Moderator',
         className: 'border-white/10 bg-white/[0.08] text-zinc-200',
     },
     Viewer: {
@@ -57,14 +60,16 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
         kickUser,
         queue,
         removeFromQueue,
+        reorderQueue,
         playNext,
         videoState,
-        controllerMemberId,
+        permissions,
+        roomActionsEnabled,
         requestControl,
     } = useRoom();
     const [openMenuId, setOpenMenuId] = useState(null);
-    const isPrivileged = currentUser?.userId === controllerMemberId;
-    const canRequestControl = !isPrivileged && ['Host', 'Moderator'].includes(currentUser?.role);
+    const canManageQueue = permissions.canManageQueue;
+    const canRequestControl = !permissions.isPlaybackCoordinator && permissions.canRequestControl;
 
     useEffect(() => {
         const close = () => setOpenMenuId(null);
@@ -89,10 +94,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                     {canRequestControl && <button type="button" onClick={requestControl} className="mb-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-zinc-300">Take playback control</button>}
                     {users.map(user => {
                         const isMe = currentUser?.id === user.id;
-                        const canManage = currentUser && !isMe && (
-                            currentUser.role === 'Host' ||
-                            (currentUser.role === 'Moderator' && user.role === 'Viewer')
-                        );
+                        const canManage = !isMe && canManageMember(currentUser, user);
                         const role = roleMeta[user.role] || roleMeta.Viewer;
 
                         return (
@@ -139,13 +141,13 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                             transition={{ duration: 0.14 }}
                                             className="absolute right-8 top-9 z-50 w-48 rounded-2xl border border-white/10 bg-black p-1.5 shadow-2xl shadow-black/70"
                                         >
-                                            {currentUser.role === 'Host' && user.role === 'Viewer' && (
+                                            {permissions.canAssignRoles && user.role === 'Viewer' && (
                                                 <ActionItem icon={<UserPlus size={14} />} label="Promote to mod" onClick={() => { promoteUser(user.id); setOpenMenuId(null); }} />
                                             )}
-                                            {currentUser.role === 'Host' && user.role === 'Moderator' && (
+                                            {permissions.canAssignRoles && user.role === 'Moderator' && (
                                                 <ActionItem icon={<UserMinus size={14} />} label="Demote to viewer" onClick={() => { demoteUser(user.id); setOpenMenuId(null); }} />
                                             )}
-                                            {currentUser.role === 'Host' && (
+                                            {permissions.canTransferOwnership && (
                                                 <ActionItem icon={<ArrowRight size={14} />} label="Transfer host" onClick={() => { transferHost(user.id); setOpenMenuId(null); }} />
                                             )}
                                             <div className="my-1 h-px bg-white/10" />
@@ -172,8 +174,8 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                             </span>
                         )}
                     </div>
-                    {isPrivileged && queue.length > 0 && (
-                        <button onClick={playNext} className="flex items-center gap-1 text-xs font-bold text-white transition hover:text-zinc-300">
+                    {canManageQueue && queue.length > 0 && (
+                        <button disabled={!roomActionsEnabled} onClick={playNext} className="flex items-center gap-1 text-xs font-bold text-white transition hover:text-zinc-300 disabled:opacity-40">
                             <SkipForward size={12} />
                             Play Next
                         </button>
@@ -192,7 +194,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                     <AnimatePresence>
                         {queue.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-white/10 p-4 text-xs leading-5 text-zinc-600">
-                                {isPrivileged ? 'Add a video URL from the player controls to build the room queue.' : 'The queue is empty.'}
+                                {canManageQueue ? 'Add a video URL from the player controls to build the room queue.' : 'The queue is empty.'}
                             </div>
                         ) : queue.map((item, idx) => (
                             <MotionDiv
@@ -206,13 +208,18 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                 <span className="w-5 shrink-0 font-mono text-xs text-zinc-600">{idx + 1}</span>
                                 <PlayCircle size={14} className="shrink-0 text-zinc-500" />
                                 <span className="flex-1 truncate text-xs font-medium text-zinc-400" title={item.label}>{item.label}</span>
-                                {isPrivileged && (
+                                {canManageQueue && (
+                                    <div className="flex shrink-0 items-center gap-1">
+                                        <button type="button" aria-label={`Move queue item ${idx + 1} up`} disabled={!roomActionsEnabled || idx === 0} onClick={() => reorderQueue(item.id, 'up')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><ArrowUp size={12} /></button>
+                                        <button type="button" aria-label={`Move queue item ${idx + 1} down`} disabled={!roomActionsEnabled || idx === queue.length - 1} onClick={() => reorderQueue(item.id, 'down')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><ArrowDown size={12} /></button>
                                     <button
+                                        type="button" aria-label={`Remove queue item ${idx + 1}`} disabled={!roomActionsEnabled}
                                         onClick={() => removeFromQueue(item.id)}
-                                        className="rounded-lg p-1 text-zinc-600 opacity-0 transition hover:bg-red-500/10 hover:text-red-300 group-hover/queue:opacity-100"
+                                        className="rounded-lg p-1 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-300 disabled:opacity-30"
                                     >
                                         <Trash2 size={12} />
                                     </button>
+                                    </div>
                                 )}
                             </MotionDiv>
                         ))}

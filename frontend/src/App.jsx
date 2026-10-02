@@ -91,8 +91,10 @@ function App() {
             {/* ISSUE-26: Toaster must be inside the tree so toasts render */}
             <Toaster
               position="bottom-center"
+              containerClassName="watchly-toaster"
               toastOptions={{
                 style: {
+                  pointerEvents: 'none',
                   background: 'var(--glass-bg)',
                   color: 'var(--text)',
                   border: '1px solid var(--glass-border)',

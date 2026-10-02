@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Current toasts are informational: both the bar and its positioning wrapper
+   must let pointer/touch input reach player and queue controls underneath. */
+[data-rht-toaster].watchly-toaster > div { pointer-events: none; }
+
 :root {
   --bg-base: #000000;
   --glass-bg: rgba(255,255,255,0.05);

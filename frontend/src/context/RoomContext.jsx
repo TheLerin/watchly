@@ -18,6 +18,7 @@ import { createRoomRequester } from '../utils/roomRequest';
 import { createRoomRecovery, readRoomSession, terminalRoomError } from '../utils/roomRecovery';
 import { acceptsVideoState, mergeChatHistory } from '../utils/roomState';
 import { useLocation } from 'react-router-dom';
+import { actionPermission, getRoomPermissions } from '../utils/roomPermissions';
 
 const RoomContext = createContext();
 export const useRoom = () => useContext(RoomContext);
@@ -74,6 +75,8 @@ export const RoomProvider = ({ children }) => {
     const serverClockOffsetRef = useRef(0);
     const activeMediaIdRef = useRef(null);
     const videoStateRef = useRef(videoState);
+    const currentUserRef = useRef(currentUser);
+    currentUserRef.current = currentUser;
     const pendingPlayRef = useRef(new Map());
     const sessionRef = useRef(null);
     const recoveryRef = useRef(null);
@@ -87,6 +90,7 @@ export const RoomProvider = ({ children }) => {
         setIsRestoringSession(false);
         setRoomId(null);
         setCurrentUser(null);
+        currentUserRef.current = null;
         setUsers([]);
         setMessages([]);
         setQueue([]);
@@ -218,6 +222,7 @@ export const RoomProvider = ({ children }) => {
                 setRoomId(joinedRoomId);
             }
             setCurrentUser(user);
+            currentUserRef.current = user;
         };
         const applySnapshot = (snapshot, id) => {
             if (!snapshot) return;
@@ -226,7 +231,8 @@ export const RoomProvider = ({ children }) => {
             knownMembers.clear();
             for (const member of snapshot.members || []) knownMembers.set(member.userId || member.id, member);
             setUsers(snapshot.members || []);
-            setCurrentUser(snapshot.members?.find(member => member.userId === sessionRef.current?.memberId) || null);
+            currentUserRef.current = snapshot.members?.find(member => member.userId === sessionRef.current?.memberId) || null;
+            setCurrentUser(currentUserRef.current);
             setQueue(snapshot.queue || []);
             setMessages(previous => mergeChatHistory(previous, snapshot.chatHistory));
             setControllerMemberId(snapshot.controllerMemberId);
@@ -272,13 +278,14 @@ export const RoomProvider = ({ children }) => {
                     : [...previous, message].slice(-200)
             ));
         };
-        const onRoleUpdated = ({ userId, newRole }) => {
+        const onRoleUpdated = ({ userId, newRole, member }) => {
             setUsers(previous => previous.map(user => (
-                user.id === userId ? { ...user, role: newRole } : user
+                user.id === userId ? { ...user, ...member, role: newRole } : user
             )));
-            setCurrentUser(previous => (
-                previous?.id === userId ? { ...previous, role: newRole } : previous
-            ));
+            if (currentUserRef.current?.id === userId) {
+                currentUserRef.current = { ...currentUserRef.current, ...member, role: newRole };
+                setCurrentUser(currentUserRef.current);
+            }
         };
         const onUserKicked = () => {
             isKicked.current = true;
@@ -329,7 +336,16 @@ export const RoomProvider = ({ children }) => {
             toast.error(`${readiness.readyCount}/${readiness.totalCount} users are ready.`, { duration: 3000 });
         };
         const onErrorMessage = ({ message }) => toast.error(message || 'Server error', { duration: 4000 });
-        const onControlChanged = payload => setControllerMemberId(payload.controllerMemberId);
+        const onControlChanged = payload => {
+            setControllerMemberId(payload.controllerMemberId);
+            if (payload.members) {
+                setUsers(payload.members);
+                knownMembers.clear();
+                for (const member of payload.members) knownMembers.set(member.userId, member);
+                const member = payload.members.find(item => item.userId === sessionRef.current?.memberId);
+                if (member) { currentUserRef.current = member; setCurrentUser(member); }
+            }
+        };
         const onMediaDeclared = ({ media, playback: nextPlayback, sourceEpoch = nextPlayback?.sourceEpoch }) => {
             if (Number.isInteger(sourceEpoch) && sourceEpoch < (videoStateRef.current.sourceEpoch || 0)) return;
             activeMediaIdRef.current = media.mediaId;
@@ -493,11 +509,13 @@ export const RoomProvider = ({ children }) => {
     }, []);
     const retryConnection = useCallback(() => recoveryRef.current?.wake(true), []);
     const canSendRoomAction = useCallback(() => socket.connected && connectionPhaseRef.current === 'connected', []);
+    const canPerformRoomAction = useCallback(permission => canSendRoomAction() && getRoomPermissions(currentUserRef.current)[permission], [canSendRoomAction]);
     const emitRoomAction = useCallback((event, payload) => {
         if (!canSendRoomAction()) { toast('Room actions are unavailable while reconnecting or resyncing.', { id: 'watchly-offline-action' }); return false; }
+        if (actionPermission[event] && !canPerformRoomAction(actionPermission[event])) { toast('Only the Host and Moderators can perform this room action.', { id: 'watchly-permission' }); return false; }
         socket.emit(event, payload);
         return true;
-    }, [canSendRoomAction]);
+    }, [canSendRoomAction, canPerformRoomAction]);
 
     const sendMessage = useCallback(text => {
         if (!text.trim() || !currentUser || !roomId) return;
@@ -511,6 +529,7 @@ export const RoomProvider = ({ children }) => {
 
     const emitControl = useCallback((eventName, payload = {}) => {
         if (!canSendRoomAction()) return false;
+        if (actionPermission[eventName] && !canPerformRoomAction(actionPermission[eventName])) return false;
         const state = videoStateRef.current;
         socket.emit(eventName, {
             roomId,
@@ -525,7 +544,7 @@ export const RoomProvider = ({ children }) => {
             ...payload,
         });
         return true;
-    }, [roomId, canSendRoomAction]);
+    }, [roomId, canSendRoomAction, canPerformRoomAction]);
 
     const loadVideo = useCallback((url, magnetURI = '') => {
         if (!url && !magnetURI) return;
@@ -534,6 +553,7 @@ export const RoomProvider = ({ children }) => {
 
     const selectLocalMedia = useCallback(localMedia => new Promise((resolve, reject) => {
         if (!canSendRoomAction()) return reject(new Error('Wait for the room to reconnect before selecting a new source.'));
+        if (!canPerformRoomAction('canChangeSource')) return reject(new Error('Only the Host and Moderators can choose the shared source.'));
         const mediaId = `sampled-sha256-v1:${localMedia.size}:${localMedia.fingerprint}`;
         const descriptor = {
             sourceType: 'local-file', mediaId, fingerprintVersion: 'sampled-sha256-v1',
@@ -547,7 +567,7 @@ export const RoomProvider = ({ children }) => {
             }
             resolve(response.snapshot);
         });
-    }), [canSendRoomAction]);
+    }), [canSendRoomAction, canPerformRoomAction]);
 
     const markLocalMediaReady = useCallback(({ mediaSessionId, fingerprint, size, duration }) => {
         if (!recoveryRef.current?.acceptsEvents()) return;
@@ -572,6 +592,7 @@ export const RoomProvider = ({ children }) => {
 
     const sendPlaybackCommand = useCallback((action, options = {}) => {
         if (!canSendRoomAction()) return Promise.resolve(false);
+        if (!canPerformRoomAction(action === 'SEEK' ? 'canSeek' : action === 'ENDED' ? 'isPlaybackCoordinator' : 'canControlPlayback')) return Promise.resolve(false);
         const { event, payload } = playbackCommand(videoStateRef.current, action, options);
         if (event !== 'playback:command') {
             emitControl(event, payload);
@@ -592,7 +613,7 @@ export const RoomProvider = ({ children }) => {
             });
         }
         return request;
-    }, [emitControl, canSendRoomAction]);
+    }, [emitControl, canSendRoomAction, canPerformRoomAction]);
     const playVideo = useCallback((options = {}) => sendPlaybackCommand('PLAY', options), [sendPlaybackCommand]);
     const pauseVideo = useCallback(positionSec => sendPlaybackCommand('PAUSE', { positionSec }), [sendPlaybackCommand]);
 
@@ -607,11 +628,11 @@ export const RoomProvider = ({ children }) => {
     }, [sendPlaybackCommand]);
     const endVideo = useCallback(positionSec => sendPlaybackCommand('ENDED', { positionSec }), [sendPlaybackCommand]);
     const requestControl = useCallback(() => {
-        if (!canSendRoomAction()) return;
+        if (!canPerformRoomAction('canRequestControl')) return;
         socket.emit('control:request', {}, response => {
         if (!response?.ok) toast.error(protocolErrorMessage(response));
         });
-    }, [canSendRoomAction]);
+    }, [canPerformRoomAction]);
     const sendPlaybackTelemetry = useCallback(telemetry => {
         if (!mediaDescriptor?.mediaId) return;
         if (!canSendRoomAction()) return;
@@ -626,6 +647,7 @@ export const RoomProvider = ({ children }) => {
         if (url || magnetURI) return emitRoomAction('add_to_queue', { roomId, url, magnetURI, label: label || url });
     }, [roomId, emitRoomAction]);
     const removeFromQueue = useCallback(itemId => emitRoomAction('remove_from_queue', { roomId, itemId }), [roomId, emitRoomAction]);
+    const reorderQueue = useCallback((itemId, direction) => emitRoomAction('reorder_queue', { roomId, itemId, direction }), [roomId, emitRoomAction]);
     const playNext = useCallback(() => emitRoomAction('play_next', { roomId }), [roomId, emitRoomAction]);
 
     const updatePlaylist = useCallback((action, options = {}, expectedState) => new Promise(resolve => {
@@ -633,6 +655,8 @@ export const RoomProvider = ({ children }) => {
         if (!socket.connected || state.sourceType !== 'youtube-playlist') return resolve(false);
         if (!canSendRoomAction() && !['READY', 'RESOLVE', 'ERROR'].includes(action)) return resolve(false);
         if (!recoveryRef.current?.acceptsEvents()) return resolve(false);
+        const permissions = getRoomPermissions(currentUserRef.current);
+        if (['RESOLVE', 'ERROR'].includes(action) ? !permissions.isPlaybackCoordinator : action !== 'READY' && !permissions.canChangeSource) return resolve(false);
         socket.timeout(10000).emit('playlist_update', {
             roomId, sourceId: state.sourceId, sourceRevision: state.sourceRevision,
             playlistId: state.playlistId, playlistIndex: state.playlistIndex,
@@ -654,6 +678,8 @@ export const RoomProvider = ({ children }) => {
             completeResync,
             retryConnection,
             canSendRoomAction,
+            canPerformRoomAction,
+            permissions: getRoomPermissions(currentUser),
             roomActionsEnabled: isConnected && connectionPhase === 'connected',
             networkPingMs,
             networkQuality,
@@ -691,6 +717,7 @@ export const RoomProvider = ({ children }) => {
             sendPlaybackTelemetry,
             addToQueue,
             removeFromQueue,
+            reorderQueue,
             playNext,
             syncProgress,
             measurePing,
