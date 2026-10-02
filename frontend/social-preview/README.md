@@ -35,11 +35,11 @@ Favicon/apple icon remain `public/logo.png`; no app head library or framework mi
 | Homepage | Watchly — Watch Together | Watch videos together in perfect sync. |
 | Room | Join my Watchly room | Watch together in perfect sync. |
 
-`index.html` holds the homepage tags. A narrow Vercel rewrite sends `/room/:roomCode`
-to `api/room-preview.js`, ahead of the existing SPA fallback. The function reads
-the same deployment's built `dist/index.html`, explicitly bundled using
-`functions.includeFiles`, and replaces only title, descriptions, canonical and
-OG/X URL tags through `metadata.js`. Vite's app root, hashed JS/CSS and PWA tags are
+`index.html` holds the homepage tags. Vercel's `middleware.js` matches only
+`/room/:roomCode`. It fetches the same deployment's static `/index.html` (outside
+the matcher), then replaces only title, descriptions, canonical and OG/X URL tags
+through `metadata.js`. No function filesystem/bundling dependency. Vite's app root,
+hashed JS/CSS and PWA tags are
 preserved; room deep links still boot the existing application. Browsers and crawlers
 receive the same shell. No socket backend or room-state lookup. GET and HEAD work.
 Room codes are URL-encoded; no host, participant count, movie, password or activity
@@ -47,12 +47,14 @@ is exposed. Canonical URLs use the production origin and shared room path, witho
 query parameters.
 
 Vercel project root remains `frontend`, build command `npm run build`, output `dist`.
-The [Vercel file bundling guide](https://vercel.com/kb/guide/how-can-i-use-files-in-serverless-functions)
-documents `process.cwd()` and `includeFiles`. The
+The [Vercel Routing Middleware API](https://vercel.com/docs/routing-middleware/api)
+documents framework-independent middleware and `next()` from `@vercel/functions`.
+If the static-shell fetch fails, middleware continues to the original SPA rewrite,
+preserving app loading with the homepage tags. The
 [Vite SPA guide](https://vercel.com/docs/frameworks/frontend/vite#using-vite-to-make-spas)
 documents the retained fallback.
 
-The frontend remains an SPA. The Vercel function supplies the head on direct room
+The frontend remains an SPA. Vercel middleware supplies the head on direct room
 requests; `vite dev` / `vite preview` and other static-only hosts do not execute it.
 Client navigation does not fetch a new document head. Crawlers fetch shared links
 directly, so their metadata does not depend on JavaScript. This is metadata-only
@@ -68,10 +70,10 @@ node --test test/socialMetadata.test.js
 node test/socialPreview.cjs
 ```
 
-The smoke test uses the production handler and built shell, verifies requested tags
+The smoke test uses the production middleware and built shell, verifies requested tags
 at `/`, `/room/test123` and `/room/LAT3BIQ`, compares the unchanged SPA body, fetches
 hashed assets, checks HEAD, opens the room join screen in Chromium and exports a
-central square crop. It emulates the Vercel rewrite locally; live HTTPS is the final check.
+central square crop. It emulates Vercel middleware locally; live HTTPS is the final check.
 
 After deployment:
 

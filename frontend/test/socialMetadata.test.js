@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { roomPreviewHtml } from '../social-preview/metadata.js';
+import middleware from '../middleware.js';
 
 const homepage = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const imageUrl = 'https://wchly.vercel.app/og/watchly-room-v2.png';
@@ -44,4 +45,30 @@ test('untrusted room identifiers cannot inject HTML into the response', () => {
   const room = roomPreviewHtml(homepage, code);
   check(room, 'Join my Watchly room', 'Watch together in perfect sync.', `https://wchly.vercel.app/room/${encodeURIComponent(code)}`);
   assert.ok(!room.includes(code));
+});
+
+test('room middleware fetches its deployment shell outside the matcher and strips private query data', async t => {
+  const fetchShell = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url.href, 'https://preview.example/index.html');
+    assert.equal(options.headers.get('cookie'), 'deployment-access=allowed');
+    return new Response(homepage, { headers: { 'Content-Type': 'text/html' } });
+  });
+  const response = await middleware(new Request('https://preview.example/room/test123?password=private', { headers: { cookie: 'deployment-access=allowed' } }));
+  check(await response.text(), 'Join my Watchly room', 'Watch together in perfect sync.', 'https://wchly.vercel.app/room/test123');
+  assert.equal(fetchShell.mock.calls.length, 1);
+  const head = await middleware(new Request('https://preview.example/room/test123', { method: 'HEAD', headers: { cookie: 'deployment-access=allowed' } }));
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), '');
+});
+
+test('static fetch errors continue the original SPA routing instead of breaking room access', async t => {
+  for (const outcome of ['network', 'status', 'type']) {
+    const fetchShell = t.mock.method(globalThis, 'fetch', async () => {
+      if (outcome === 'network') throw new Error('Unavailable');
+      return new Response('Not the app shell', { status: outcome === 'status' ? 503 : 200, headers: { 'Content-Type': 'text/plain' } });
+    });
+    const response = await middleware(new Request('https://preview.example/room/test123'));
+    assert.equal(response.headers.get('x-middleware-next'), '1');
+    fetchShell.mock.restore();
+  }
 });

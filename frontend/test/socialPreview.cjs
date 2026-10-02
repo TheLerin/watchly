@@ -1,4 +1,4 @@
-// Production-shell smoke test. Vite preview alone doesn't run Vercel functions.
+// Production-shell smoke test. Vite preview alone doesn't run Vercel middleware.
 const assert = require('node:assert/strict');
 const { createServer } = require('node:http');
 const { readFile, stat } = require('node:fs/promises');
@@ -44,21 +44,23 @@ function checkHtml(html, route) {
     console.log(`HTTPS crawler HTML and 1200 × 630 public PNG passed: ${process.env.PUBLIC_BASE_URL}`);
     return;
   }
-  const { default: handler } = await import('../api/room-preview.js');
+  const { default: middleware, config: matcher } = await import('../middleware.js');
   const dist = path.resolve(__dirname, '../dist');
   const shell = await readFile(path.join(dist, 'index.html'), 'utf8');
   const config = JSON.parse(await readFile(path.join(__dirname, '../vercel.json'), 'utf8'));
-  assert.equal(config.functions['api/room-preview.js'].includeFiles, 'dist/index.html');
-  assert.deepEqual(config.rewrites[0], { source: '/room/:roomCode', destination: '/api/room-preview?roomCode=:roomCode' });
+  assert.equal(matcher.matcher, '/room/:roomCode');
+  assert.equal(config.rewrites.length, 1);
   assert.equal(config.rewrites.at(-1).destination, '/index.html');
-  const mime = { '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+  const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, 'http://localhost');
       const room = url.pathname.match(/^\/room\/([^/]+)\/?$/);
       if (room) {
-        request.query = { roomCode: decodeURIComponent(room[1]) };
-        await handler(request, response);
+        const result = await middleware(new Request(`http://${request.headers.host}${request.url}`, { method: request.method, headers: request.headers }));
+        for (const [name, value] of result.headers) response.setHeader(name, value);
+        response.statusCode = result.status;
+        response.end(result.headers.has('x-middleware-next') ? shell : Buffer.from(await result.arrayBuffer()));
         return;
       }
       const file = path.join(dist, url.pathname);

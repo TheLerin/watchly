@@ -1,14 +1,5 @@
 {
-    "functions": {
-        "api/room-preview.js": {
-            "includeFiles": "dist/index.html"
-        }
-    },
     "rewrites": [
-        {
-            "source": "/room/:roomCode",
-            "destination": "/api/room-preview?roomCode=:roomCode"
-        },
         {
             "source": "/(.*)",
             "destination": "/index.html"
