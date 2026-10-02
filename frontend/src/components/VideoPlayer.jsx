@@ -8,8 +8,10 @@ import { fingerprintLocalFile, formatFileSize, readLocalVideoDuration } from '..
 import useSynchronizedMedia from '../hooks/useSynchronizedMedia';
 import useVideoAmbientLight from '../hooks/useVideoAmbientLight';
 import useCinemaLuxeEffects from '../hooks/useCinemaLuxeEffects';
+import useYouTubePlaylist from '../hooks/useYouTubePlaylist';
 import MediaTrackControls from './player/MediaTrackControls';
 import MediaInfoPanel from './player/MediaInfoPanel';
+import PlaylistControls from './player/PlaylistControls';
 import TheaterIconButton from './TheaterIconButton';
 import { inspectLocalMedia } from '../utils/mediaInspector';
 import { parseSubtitleFileOffThread } from '../utils/subtitleWorker';
@@ -120,7 +122,7 @@ async function resolveArchiveUrl(url) {
 const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '', controlsTabLabel }) => {
     const {
         videoState, currentUser, localReadiness, controllerMemberId, playback, clock, isConnected,
-        loadVideo, addToQueue,
+        loadVideo, addToQueue, updatePlaylist,
         selectLocalMedia, markLocalMediaReady, markLocalMediaNotReady, markLocalMediaStatus,
         playVideo, pauseVideo, syncProgress, seekVideo, endVideo, getExpectedPosition, sendPlaybackTelemetry
     } = useRoom();
@@ -236,19 +238,22 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const isNativePlayer = isLocal || source.kind === 'drive' || source.kind === 'direct' ||
         (source.kind === 'unknown' && !isSupportedEmbed);
     const hasContent    = isLocal || !!(videoState.url || videoState.magnetURI);
-    const isYouTube     = source.kind === 'youtube';
+    const isPlaylist    = videoState.sourceType === 'youtube-playlist';
+    const isYouTube     = source.kind === 'youtube' || source.kind === 'youtube-playlist';
+    const playlist = useYouTubePlaylist({ state: videoState, playerRef, isController: isPrivileged,
+        getPosition: getExpectedPosition, send: updatePlaylist, onError: setPlayerError });
     const isArchive     = !!(playerUrl && playerUrl.includes('archive.org'));
     const isLocalReady  = isLocal && !!localFileUrl && localSessionRef.current === videoState.localMedia?.sessionId;
     useEffect(() => {
-        if (!hasContent || isPlayerReady || playerError || (isLocal && !isLocalReady)) return undefined;
+        if (!hasContent || isPlayerReady || playerError || isPlaylist || (isLocal && !isLocalReady)) return undefined;
         const timeout = window.setTimeout(() => {
             setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.');
         }, 20000);
         return () => window.clearTimeout(timeout);
-    }, [hasContent, isLocal, isLocalReady, isPlayerReady, playerError, playerUrl]);
+    }, [hasContent, isLocal, isLocalReady, isPlayerReady, playerError, playerUrl, isPlaylist]);
     const nowWatchingLabel = isLocal
         ? videoState.localMedia?.displayName
-        : rawUrl
+        : isPlaylist ? videoState.playlistTitles?.[videoState.currentVideoId] || 'YouTube Playlist' : rawUrl
             ? (() => {
                 try { return new URL(rawUrl).hostname.replace(/^www\./, ''); }
                 catch { return 'Shared movie'; }
@@ -636,7 +641,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         prevSeekVersionReactPlayerRef.current = videoState.seekVersion ?? 0;
         prevSeekVersionGDriveRef.current      = videoState.seekVersion ?? 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [videoState.sourceId, videoState.url, videoState.magnetURI, videoState.localMedia?.sessionId]);
+    }, [videoState.sourceId, videoState.sourceRevision, videoState.url, videoState.magnetURI, videoState.localMedia?.sessionId]);
 
     useEffect(() => {
         const activeSession = videoState.localMedia?.sessionId || null;
@@ -658,6 +663,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         clearTimeout(pauseDebounceRef.current);
         clearTimeout(seekEndTimerRef.current);
         clearTimeout(retryTimerRef.current);
+        clearTimeout(playDebounceRef.current);
+        clearTimeout(pauseDebounceRef.current);
         if (localFileUrlRef.current) {
             URL.revokeObjectURL(localFileUrlRef.current);
             localFileUrlRef.current = '';
@@ -682,7 +689,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     // to the host's ever-advancing time restarts the buffer from a further
     // position → infinite buffer death-loop. We skip correction until playback resumes.
     useEffect(() => {
-        if (isPrivileged || !isPlayerReady || !playerRef.current || isNativePlayer) return;
+        if (isPrivileged || !isPlayerReady || !playerRef.current || isNativePlayer || (isPlaylist && !playlist.ready)) return;
         if (isBufferingRef.current) return; // BUG-I: skip during buffer stall
 
         const stateTime    = getExpectedPosition(videoState);
@@ -703,7 +710,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                     : 1;
             }
         }
-    }, [videoState, isPlayerReady, isPrivileged, isNativePlayer, getExpectedPosition]);
+    }, [videoState, isPlayerReady, isPrivileged, isNativePlayer, getExpectedPosition, isPlaylist, playlist.ready]);
 
     // ── 3. Drift correction – GDrive native video viewers ────────────────────
     // Guard with isPlayerReady so we don't seek before video is loaded
@@ -776,6 +783,10 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
     // ── 5. ReactPlayer onReady ────────────────────────────────────────────────
     const handleReady = useCallback(() => {
+        if (videoStateRef.current.sourceType === 'youtube-playlist') {
+            playlist.session.tick();
+            return;
+        }
         setIsPlayerReady(true);
         setPlayerError(null);
         const stateTime = getExpectedPosition(videoStateRef.current);
@@ -784,7 +795,17 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         }
         const internal = playerRef.current?.getInternalPlayer?.();
         setActiveMediaElement(internal instanceof HTMLMediaElement ? internal : null);
-    }, [getExpectedPosition]);
+    }, [getExpectedPosition, playlist.session]);
+
+    useEffect(() => {
+        if (!isPlaylist) return;
+        const timer = setTimeout(() => {
+            setIsPlayerReady(playlist.ready || videoState.playlistStatus === 'finished');
+            if (playlist.ready) setPlayerError(null);
+            if (videoState.playlistStatus === 'error') setPlayerError('YouTube could not play the remaining playlist items. Try another public playlist.');
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [isPlaylist, playlist.ready, videoState.sourceRevision, videoState.playlistStatus]);
 
     // ── 6. Host progress sync interval (ReactPlayer + GDrive host) ───────────
     // BUG-G FIX: syncProgress is ONLY called here (every 2s), not in onProgress.
@@ -794,6 +815,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         if (!isPrivileged || isLocal) return;
         syncIntervalRef.current = setInterval(() => {
             if (isSeekingRef.current) return;
+            if (videoStateRef.current.sourceType === 'youtube-playlist' && !playlist.session.canEmit()) return;
             if (isNativePlayer) {
                 const t = nativeVideoRef.current?.currentTime || 0;
                 if (t > 0) syncProgress(t);
@@ -804,7 +826,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             }
         }, SYNC_INTERVAL_MS);
         return () => clearInterval(syncIntervalRef.current);
-    }, [isPrivileged, isLocal, syncProgress, isNativePlayer]);
+    }, [isPrivileged, isLocal, syncProgress, isNativePlayer, playlist.session]);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     // P5 FIX: Wrap all helper functions in useCallback so they are stable across renders.
@@ -814,17 +836,17 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         clearTimeout(pauseDebounceRef.current);
         clearTimeout(playDebounceRef.current);
         playDebounceRef.current = setTimeout(() => {
-            if (!isSeekingRef.current) playVideo();
+            if (!isSeekingRef.current && (videoStateRef.current.sourceType !== 'youtube-playlist' || playlist.session.canEmit())) playVideo();
         }, 200);
-    }, [playVideo]);
+    }, [playVideo, playlist.session]);
 
     const debouncePause = useCallback((getTime) => {
         clearTimeout(playDebounceRef.current);
         clearTimeout(pauseDebounceRef.current);
         pauseDebounceRef.current = setTimeout(() => {
-            if (!isSeekingRef.current) pauseVideo(getTime());
+            if (!isSeekingRef.current && (videoStateRef.current.sourceType !== 'youtube-playlist' || playlist.session.canEmit())) pauseVideo(getTime());
         }, 200);
-    }, [pauseVideo]);
+    }, [pauseVideo, playlist.session]);
 
     const startSeekGuard = useCallback(() => {
         clearTimeout(playDebounceRef.current);
@@ -1278,7 +1300,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                         if (isYouTube) return (
                             <div className="flex items-center gap-1.5 px-3 py-2 border border-white/10 bg-white/[0.03] rounded-xl text-xs text-zinc-300 shrink-0" title="Playing YouTube video">
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPlayerReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-                                <span className="font-medium">{isPlayerReady ? 'YouTube · Live' : 'YouTube · Loading'}</span>
+                                <span className="font-medium">{isPlaylist ? 'YouTube Playlist' : isPlayerReady ? 'YouTube · Live' : 'YouTube · Loading'}</span>
                             </div>
                         );
                         if (hasContent) return (
@@ -1296,6 +1318,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                     })()}
                 </div>
             )}
+
+            <PlaylistControls ready={playlist.ready} />
 
             <input
                 ref={localFileInputRef}
@@ -1728,25 +1752,30 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         ref={playerRef}
                                         key={videoState.sourceId || playerUrl}
                                         url={playerUrl}
-                                        playing={videoState.isPlaying}
+                                        playing={videoState.isPlaying && (!isPlaylist || playlist.ready)}
                                         controls={isPrivileged || isYouTube || isArchive}
                                         width="100%"
                                         height="100%"
                                         onReady={handleReady}
-                                        onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged || videoStateRef.current.isPlaying) return; debouncePlay(); }}
-                                        onPause={() => { if (!isPrivileged || !videoStateRef.current.isPlaying) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
+                                        onPlay={() => { setAutoplayBlocked(false); if (!isPrivileged || videoStateRef.current.isPlaying || (isPlaylist && !playlist.session.canEmit())) return; debouncePlay(); }}
+                                        onPause={() => { if (!isPrivileged || !videoStateRef.current.isPlaying || (isPlaylist && !playlist.session.canEmit())) return; debouncePause(() => playerRef.current?.getCurrentTime() || 0); }}
                                         onSeek={() => {
-                                            if (!isPrivileged) return;
+                                            if (!isPrivileged || (isPlaylist && !playlist.session.canEmit())) return;
                                             endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
                                         }}
-                                        onError={() => setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.')}
-                                        onEnded={() => { if (isPrivileged) endVideo(playerRef.current?.getCurrentTime?.()); }}
+                                        onError={() => isPlaylist ? playlist.session.fail('This playlist item is unavailable. Waiting for the host to select the next playable item.') : setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.')}
+                                        onEnded={() => { if (isPrivileged && (!isPlaylist || playlist.session.ready())) endVideo(playerRef.current?.getCurrentTime?.()); }}
                                         onProgress={(p) => { lastSyncedPosRef.current = p.playedSeconds; }}
                                         progressInterval={1000}
                                         onBuffer={() => { isBufferingRef.current = true; }}
                                         onBufferEnd={() => { isBufferingRef.current = false; }}
                                         config={{
-                                            youtube: { playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 } },
+                                            youtube: {
+                                                playerVars: { disablekb: isPrivileged ? 0 : 1, modestbranding: 1 },
+                                                // ReactPlayer 2 passes null for playlist URLs. The current
+                                                // IFrame API requires a string, including an empty ID for lists.
+                                                embedOptions: isPlaylist ? { videoId: source.videoId || '' } : {},
+                                            },
                                              file: {
                                                  attributes: isArchive
                                                      ? { preload: 'auto' }

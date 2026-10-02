@@ -149,6 +149,8 @@ export const RoomProvider = ({ children }) => {
         const knownMembers = new Map();
         const applyReadiness = payload => {
             if (!payload) return;
+            const playlist = videoStateRef.current;
+            if (playlist.sourceType === 'youtube-playlist' && (payload.mediaSessionId !== playlist.sourceId || payload.sourceRevision !== playlist.sourceRevision)) return;
             const activeSession = activeMediaIdRef.current || videoStateRef.current.localMedia?.sessionId;
             if (payload.mediaSessionId && activeSession && payload.mediaSessionId !== activeSession) return;
             const readinessSession = payload.mediaSessionId || activeSession || null;
@@ -180,6 +182,8 @@ export const RoomProvider = ({ children }) => {
         const applyVideoState = nextState => {
             if (!nextState || typeof nextState !== 'object') return;
             updateClockOffset(nextState.serverTime);
+            if (nextState.sourceId && nextState.sourceId === videoStateRef.current.sourceId && Number.isInteger(nextState.stateVersion) && nextState.stateVersion < videoStateRef.current.stateVersion) return;
+            videoStateRef.current = { ...emptyVideoState(), ...videoStateRef.current, ...nextState, localMedia: nextState.localMedia || null };
             setVideoState(previous => ({
                 ...emptyVideoState(),
                 ...previous,
@@ -316,6 +320,7 @@ export const RoomProvider = ({ children }) => {
         const onVideoProgress = state => applyVideoState(state);
         const onVideoSeeked = state => applyVideoState(state);
         const onQueueUpdated = nextQueue => setQueue(nextQueue || []);
+        const onPlaylistNotice = payload => toast(payload.message, { duration: 2500 });
         const onVoiceUpdated = ({ userId, isVoiceActive, isMuted }) => {
             setUsers(previous => previous.map(user => (
                 user.id === userId ? { ...user, isVoiceActive, isMuted } : user
@@ -382,6 +387,7 @@ export const RoomProvider = ({ children }) => {
         socket.on('video_progress', onVideoProgress);
         socket.on('video_seeked', onVideoSeeked);
         socket.on('queue_updated', onQueueUpdated);
+        socket.on('playlist_notice', onPlaylistNotice);
         socket.on('voice_updated', onVoiceUpdated);
         socket.on('error_message', onErrorMessage);
         socket.on('control:changed', onControlChanged);
@@ -407,6 +413,7 @@ export const RoomProvider = ({ children }) => {
             socket.off('video_progress', onVideoProgress);
             socket.off('video_seeked', onVideoSeeked);
             socket.off('queue_updated', onQueueUpdated);
+            socket.off('playlist_notice', onPlaylistNotice);
             socket.off('voice_updated', onVoiceUpdated);
             socket.off('error_message', onErrorMessage);
             socket.off('control:changed', onControlChanged);
@@ -508,6 +515,11 @@ export const RoomProvider = ({ children }) => {
             roomId,
             mediaSessionId: state.localMedia?.sessionId || null,
             stateVersion: state.stateVersion || 0,
+            ...(state.sourceType === 'youtube-playlist' ? {
+                sourceId: state.sourceId, sourceRevision: state.sourceRevision,
+                playlistId: state.playlistId, playlistIndex: state.playlistIndex,
+                currentVideoId: state.currentVideoId,
+            } : {}),
             ...payload,
         });
     }, [roomId]);
@@ -605,6 +617,19 @@ export const RoomProvider = ({ children }) => {
     const removeFromQueue = useCallback(itemId => socket.emit('remove_from_queue', { roomId, itemId }), [roomId]);
     const playNext = useCallback(() => socket.emit('play_next', { roomId }), [roomId]);
 
+    const updatePlaylist = useCallback((action, options = {}, expectedState) => new Promise(resolve => {
+        const state = expectedState || videoStateRef.current;
+        if (!socket.connected || state.sourceType !== 'youtube-playlist') return resolve(false);
+        socket.timeout(10000).emit('playlist_update', {
+            roomId, sourceId: state.sourceId, sourceRevision: state.sourceRevision,
+            playlistId: state.playlistId, playlistIndex: state.playlistIndex,
+            currentVideoId: state.currentVideoId, action, ...options,
+        }, (error, response) => {
+            if (error || !response?.ok) return resolve(false);
+            resolve(true);
+        });
+    }), [roomId]);
+
     return (
         <RoomContext.Provider value={{
             isRestoringSession,
@@ -633,6 +658,7 @@ export const RoomProvider = ({ children }) => {
             transferHost,
             kickUser,
             loadVideo,
+            updatePlaylist,
             selectLocalMedia,
             markLocalMediaReady,
             markLocalMediaNotReady,

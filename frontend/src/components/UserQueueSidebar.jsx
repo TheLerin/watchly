@@ -181,6 +181,14 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                 </div>
 
                 <div className={`space-y-1 overflow-y-auto p-2 ${compact ? 'max-h-40' : 'flex-1'}`}>
+                    {videoState.sourceType === 'youtube-playlist' && <div className="playlist-up-next space-y-1 border-b border-white/10 pb-3 text-xs">
+                        <p className="px-2 py-1 font-bold text-zinc-500">PLAYLIST · NOW PLAYING</p>
+                        <p className="truncate rounded-xl bg-white/5 p-2 text-zinc-200">{(videoState.playlistIndex || 0) + 1}. {videoState.playlistTitles?.[videoState.currentVideoId] || 'YouTube Playlist'}</p>
+                        <p className="px-2 pt-2 text-[10px] font-bold text-zinc-600">PLAYLIST UP NEXT</p>
+                        {(videoState.playlistItems || []).slice(videoState.playlistIndex + 1, videoState.playlistIndex + 21).map((id, offset) => <p key={`${offset}-${id}`} className="truncate px-2 py-1.5 text-zinc-500">{videoState.playlistIndex + offset + 2}. {videoState.playlistTitles?.[id] || `Video ${videoState.playlistIndex + offset + 2}`}{videoState.unavailableIndexes?.includes(videoState.playlistIndex + offset + 1) ? ' · unavailable' : ''}</p>)}
+                        {videoState.playlistStatus === 'finished' && <p className="p-2 text-zinc-500">Playlist finished</p>}
+                        <p className="px-2 pt-3 font-bold text-zinc-500">WATCHLY ROOM QUEUE</p>
+                    </div>}
                     <AnimatePresence>
                         {queue.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-white/10 p-4 text-xs leading-5 text-zinc-600">

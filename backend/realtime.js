@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { playlistSource, currentPlaylistItem, resolvePlaylist, movePlaylist } = require('./youtubePlaylist');
 const { canonicalPosition, createPlayback, reduceCommand } = require('./playback/canonicalState');
 const { PROTOCOL_VERSION, normalizedText, validRoomCode, validMediaId, validCommandId, finiteNonNegative } = require('./validators');
 const MAX_ROOM_USERS = 50;
@@ -37,10 +38,26 @@ const advancePlayback = (room, now = Date.now()) => {
     return state;
 };
 
-const snapshot = (room) => {
-    advancePlayback(room);
+const remoteVideoState = (previous, url, magnetURI = '', playing = true) => {
+    const playlist = playlistSource(url);
     return {
-        ...room.videoState,
+        ...createVideoState(), sourceId: crypto.randomUUID(), url, magnetURI,
+        isPlaying: playlist ? false : playing, stateVersion: previous.stateVersion + 1,
+        ...(playlist || {}),
+        // Queued playlists continue the queue's playback intent after discovery.
+        ...(playlist ? { resumeAfterResolve: playing } : {}),
+    };
+};
+
+const snapshot = (room, includePlaylist = true) => {
+    advancePlayback(room);
+    const state = { ...room.videoState };
+    if (!includePlaylist) {
+        delete state.playlistItems;
+        delete state.playlistTitles;
+    }
+    return {
+        ...state,
         localMedia: room.videoState.localMedia
             ? { ...room.videoState.localMedia }
             : null,
@@ -191,7 +208,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.mediaStatuses.get(user.userId) || { status: 'SELECT_FILE', reason: null }
         ]));
         return {
-            mediaSessionId: room.media?.mediaId || room.videoState.localMedia?.sessionId || null,
+            mediaSessionId: room.media?.mediaId || room.videoState.localMedia?.sessionId || (room.videoState.sourceType === 'youtube-playlist' ? room.videoState.sourceId : null),
+            sourceRevision: room.videoState.sourceRevision,
             readyUserIds,
             readyCount: readyUserIds.length,
             totalCount: connected.length,
@@ -206,6 +224,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         controllerMemberId: room.controllerMemberId,
         controllerLeaseUntil: room.controllerLeaseUntil,
         media: room.media,
+        videoState: snapshot(room),
         readiness: readinessPayload(room),
         playback: room.playback,
         queue: room.queue,
@@ -228,18 +247,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         room.playback = createPlayback();
         room.recentCommandIds.clear();
         room.localReadyUserIds.clear();
-        room.videoState = {
-            sourceType: 'remote',
-            sourceId: crypto.randomUUID(),
-            url: next.url,
-            magnetURI: next.magnetURI,
-            localMedia: null,
-            isPlaying: true,
-            playedSeconds: 0,
-            updatedAt: Date.now(),
-            seekVersion: 0,
-            stateVersion: room.videoState.stateVersion + 1
-        };
+        room.videoState = remoteVideoState(room.videoState, next.url, next.magnetURI, true);
         io.to(roomId).emit('video_changed', snapshot(room));
         io.to(roomId).emit('queue_updated', room.queue);
         emitReadiness(roomId, room);
@@ -741,6 +749,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         const mediaEventIsCurrent = (room, payload = {}) => {
             // Never let delayed URL-player events overwrite a local-file session.
             if (room.media) return false;
+            if (room.videoState.sourceType === 'youtube-playlist') return currentPlaylistItem(room.videoState, payload);
             if (room.videoState.sourceType === 'local') {
                 if (payload.mediaSessionId !== room.videoState.localMedia?.sessionId) return false;
             }
@@ -751,10 +760,70 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             return true;
         };
 
+        const publishPlaylist = (roomId, room) => {
+            room.localReadyUserIds.clear();
+            room.mediaStatuses.clear();
+            io.to(roomId).emit('video_progress', snapshot(room));
+            emitReadiness(roomId, room);
+        };
+        const finishPlaylist = (roomId, room, failed = false) => {
+            if (startNextQueuedVideo(roomId, room)) return;
+            room.videoState.isPlaying = false;
+            room.videoState.playlistStatus = failed ? 'error' : 'finished';
+            room.videoState.sourceRevision++;
+            room.videoState.stateVersion++;
+            room.videoState.updatedAt = Date.now();
+            publishPlaylist(roomId, room);
+        };
+
+        socket.on('playlist_update', (payload = {}, callback) => {
+            const room = getBoundRoom(socket, payload.roomId);
+            const user = getUserBySocket(room, socket.id);
+            if (!room || !user || !currentPlaylistItem(room.videoState, payload)) return callback?.(protocolError('STALE_PLAYLIST', 'The playlist item has changed.'));
+            const state = room.videoState;
+            if (payload.action === 'READY') {
+                if (state.playlistStatus !== 'ready') return callback?.(protocolError('NOT_READY', 'The playlist is loading.'));
+                room.localReadyUserIds.add(user.userId);
+                room.mediaStatuses.set(user.userId, { status: 'READY', reason: null });
+                if (room.controllerMemberId === user.userId && typeof payload.title === 'string') {
+                    state.playlistTitles[state.currentVideoId] = cleanText(payload.title, 200);
+                    const titles = Object.keys(state.playlistTitles);
+                    if (titles.length > 200) delete state.playlistTitles[titles[0]];
+                    state.stateVersion++;
+                    io.to(payload.roomId).emit('video_progress', snapshot(room));
+                }
+                emitReadiness(payload.roomId, room);
+                return callback?.({ ok: true });
+            }
+            if (room.controllerMemberId !== user.userId) return callback?.(protocolError('NOT_CONTROLLER', 'Only the current controller can change the playlist.'));
+            if (payload.action === 'RESOLVE') {
+                if (!resolvePlaylist(state, payload.items)) return callback?.(protocolError('INVALID_PLAYLIST', 'The playlist could not be loaded.'));
+                state.stateVersion++;
+                state.isPlaying = state.resumeAfterResolve === true;
+                state.updatedAt = Date.now();
+                publishPlaylist(payload.roomId, room);
+            } else if (['NEXT', 'PREVIOUS', 'SELECT', 'ERROR'].includes(payload.action)) {
+                if (payload.action === 'ERROR' && !state.playlistItems.length) {
+                    finishPlaylist(payload.roomId, room, true);
+                } else {
+                    if (state.playlistStatus !== 'ready' && !(payload.action === 'PREVIOUS' && state.playlistStatus === 'finished')) return callback?.(protocolError('NOT_READY', 'The playlist is not ready.'));
+                    advancePlayback(room);
+                    if (payload.action === 'ERROR') {
+                        if (!state.unavailableIndexes.includes(state.playlistIndex)) state.unavailableIndexes.push(state.playlistIndex);
+                        io.to(payload.roomId).emit('playlist_notice', { message: 'Skipped unavailable playlist item.' });
+                    }
+                    if (movePlaylist(state, payload.action, payload.index)) publishPlaylist(payload.roomId, room);
+                    else if (payload.action === 'ERROR') finishPlaylist(payload.roomId, room, state.unavailableIndexes.length === state.playlistItems.length);
+                    else return callback?.(protocolError('PLAYLIST_BOUNDARY', 'No playlist item in that direction.'));
+                }
+            } else return callback?.(protocolError('INVALID_COMMAND', 'Invalid playlist action.'));
+            callback?.({ ok: true, videoState: snapshot(room) });
+        });
+
         socket.on('change_video', ({ roomId, url, magnetURI = '' } = {}) => {
             const access = controller(roomId);
             if (!access) return;
-            if ((!url && !magnetURI) || (url && !isHttpUrl(url)) || !validMagnet(magnetURI)) {
+            if ((!url && !magnetURI) || (url && !isHttpUrl(url)) || !validMagnet(magnetURI) || playlistSource(url)?.invalid) {
                 socket.emit('error_message', { message: 'Only valid HTTP(S) video URLs are supported.' });
                 return;
             }
@@ -765,18 +834,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.playback = createPlayback();
             room.recentCommandIds.clear();
             room.localReadyUserIds.clear();
-            room.videoState = {
-                sourceType: 'remote',
-                sourceId: crypto.randomUUID(),
-                url: url || '',
-                magnetURI: magnetURI || '',
-                localMedia: null,
-                isPlaying: true,
-                playedSeconds: 0,
-                updatedAt: Date.now(),
-                seekVersion: 0,
-                stateVersion: room.videoState.stateVersion + 1
-            };
+            room.videoState = remoteVideoState(room.videoState, url || '', magnetURI || '', !playlistSource(url));
             io.to(roomId).emit('video_changed', snapshot(room));
             emitReadiness(roomId, room);
         });
@@ -853,13 +911,14 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             room.videoState.playedSeconds = clampSeconds(payload.playedSeconds);
             room.videoState.updatedAt = Date.now();
             room.videoState.stateVersion += 1;
-            io.to(payload.roomId).emit('video_progress', snapshot(room));
+            io.to(payload.roomId).emit('video_progress', snapshot(room, false));
         });
 
         socket.on('play_video', (payload = {}) => {
             const access = controller(payload.roomId);
             if (!access || !mediaEventIsCurrent(access.room, payload)) return;
             const { room } = access;
+            if (room.videoState.sourceType === 'youtube-playlist' && (room.videoState.playlistStatus !== 'ready' || !room.localReadyUserIds.has(access.user.userId))) return;
             if (room.videoState.isPlaying) return;
             if (room.videoState.sourceType === 'local') {
                 const readiness = readinessPayload(room);
@@ -908,7 +967,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
 
         socket.on('add_to_queue', ({ roomId, url, magnetURI = '', label } = {}) => {
             const access = controller(roomId);
-            if (!access || (!url && !magnetURI) || (url && !isHttpUrl(url)) || !validMagnet(magnetURI)) return;
+            if (!access || (!url && !magnetURI) || (url && !isHttpUrl(url)) || !validMagnet(magnetURI) || playlistSource(url)?.invalid) return;
             const item = {
                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 url: url || '',
@@ -935,6 +994,13 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             const access = controller(payload.roomId);
             if (!access || access.room.media) return;
             const { room } = access;
+            if (room.videoState.sourceType === 'youtube-playlist') {
+                if (!currentPlaylistItem(room.videoState, payload) || room.videoState.playlistStatus !== 'ready' || !room.videoState.isPlaying) return;
+                if (isFiniteNumber(payload.playedSeconds)) room.videoState.playedSeconds = clampSeconds(payload.playedSeconds);
+                if (movePlaylist(room.videoState, 'NEXT')) publishPlaylist(payload.roomId, room);
+                else finishPlaylist(payload.roomId, room);
+                return;
+            }
             if (!room.videoState.sourceId || payload.sourceId !== room.videoState.sourceId ||
                 room.lastEndedSourceId === payload.sourceId) return;
             room.lastEndedSourceId = payload.sourceId;
