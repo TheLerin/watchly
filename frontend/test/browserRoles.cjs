@@ -120,12 +120,16 @@ const wait = async (predicate, message, timeout = 30000) => { const end = Date.n
         await setSource(moderator, 'https://youtu.be/GvgqDSnpRQM');
         const yt = page => page.evaluate(() => { const p = window.__ytPlayers?.at(-1); return p ? { id: p.getVideoData?.()?.video_id, state: p.getPlayerState?.(), time: p.getCurrentTime?.() } : null; });
         await wait(async () => (await Promise.all(pages.map(yt))).every(value => value?.id === 'GvgqDSnpRQM' && value.state === 1), 'real Moderator YouTube source did not play', 45000);
+        const playersBeforeTablet = await viewer.evaluate(() => window.__ytPlayers.length);
         await viewer.setViewportSize({ width: 768, height: 1024 });
-        await wait(async () => { const value = await yt(viewer); return value?.id === 'GvgqDSnpRQM' && value.state === 1; }, 'tablet YouTube player did not become ready after responsive remount', 45000);
+        await wait(async () => {
+            const value = await yt(viewer);
+            return await viewer.evaluate(count => window.__ytPlayers.length > count && typeof window.__ytPlayers.at(-1)?.getVolume === 'function', playersBeforeTablet) && value?.id === 'GvgqDSnpRQM' && value.state === 1;
+        }, 'tablet YouTube player did not become ready after responsive remount', 45000);
         await viewer.locator('[aria-label="Local video volume"]').fill('30');
-        await wait(async () => await viewer.evaluate(() => window.__ytPlayers.at(-1).getVolume()) === 30, 'YouTube local volume change was not acknowledged by the iframe');
+        await wait(async () => await viewer.evaluate(() => window.__ytPlayers?.at(-1)?.getVolume?.()) === 30, 'YouTube local volume change was not acknowledged by the iframe');
         if (await viewer.getByRole('button', { name: 'Mute video locally', exact: true }).count()) await viewer.getByRole('button', { name: 'Mute video locally', exact: true }).click();
-        await wait(async () => await viewer.evaluate(() => window.__ytPlayers.at(-1).isMuted()), 'YouTube local mute change was not acknowledged by the iframe');
+        await wait(async () => await viewer.evaluate(() => window.__ytPlayers?.at(-1)?.isMuted?.()), 'YouTube local mute change was not acknowledged by the iframe');
         await viewer.evaluate(() => { window.roleWrites = []; window.__ytPlayers.at(-1).pauseVideo(); }); await synced(viewer);
         await wait(async () => (await yt(viewer)).state === 1, 'YouTube Viewer remained paused');
         await viewer.evaluate(() => window.__ytPlayers.at(-1).seekTo(65, true));

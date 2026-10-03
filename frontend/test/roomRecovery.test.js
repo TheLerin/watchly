@@ -80,6 +80,53 @@ test('a stalled player reports failed sync without losing membership and can ret
     assert.equal(f.phases.at(-1), 'connected'); f.recovery.dispose();
 });
 
+function foregroundSyncFixture() {
+    const f = fixture(); f.connected(); f.acknowledge(); f.recovery.complete(f.snapshots.at(-1).id);
+    f.recovery.wake(true);
+    return f;
+}
+
+test('source selection waits for both the foreground snapshot and player restoration', async () => {
+    const f = foregroundSyncFixture(); let settled = false;
+    const ready = f.recovery.waitUntilSynced().then(value => { settled = true; return value; });
+    await Promise.resolve(); assert.equal(settled, false);
+    f.acknowledge(); await Promise.resolve(); assert.equal(settled, false);
+    f.recovery.complete(f.snapshots.at(-1).id);
+    assert.equal(await ready, true); assert.equal(f.phases.at(-1), 'connected');
+    assert.equal(await f.recovery.waitUntilSynced(), true); f.recovery.dispose();
+});
+
+test('a pending selection has a bounded wait and cannot revive after timing out', async () => {
+    const f = foregroundSyncFixture(); const ready = f.recovery.waitUntilSynced(1000);
+    f.advance(1000); assert.equal(await ready, false);
+    f.acknowledge(); f.recovery.complete(f.snapshots.at(-1).id);
+    assert.equal(await ready, false); f.recovery.dispose();
+});
+
+test('disconnect, leave, disposal and failed synchronization cancel pending selections', async () => {
+    for (const action of ['disconnect', 'stop', 'dispose', 'failResync']) {
+        const f = foregroundSyncFixture(); const ready = f.recovery.waitUntilSynced();
+        if (action === 'disconnect') f.disconnected();
+        else if (action === 'failResync') { f.acknowledge(); f.recovery.failResync(f.snapshots.at(-1).id); }
+        else f.recovery[action]();
+        assert.equal(await ready, false, action);
+        if (action === 'disconnect') { f.connected(); f.acknowledge(); f.recovery.complete(f.snapshots.at(-1).id); }
+        assert.equal(await ready, false, action); f.recovery.dispose();
+    }
+});
+
+test('selection cannot wait through a lost membership or a different room identity', async () => {
+    const f = foregroundSyncFixture(); const ready = f.recovery.waitUntilSynced();
+    f.sent.at(-1).ack(null, { ok: false, error: { code: 'NOT_IN_ROOM' } });
+    assert.equal(await ready, false); assert.equal(await f.recovery.waitUntilSynced(), false);
+    f.recovery.dispose();
+    const other = foregroundSyncFixture(); const changed = other.recovery.waitUntilSynced();
+    other.setSession({ roomId: 'HIJKLMN', memberId: 'other', resumeToken: 'b'.repeat(43) });
+    // Completion cannot approve a file selected for another room/member.
+    other.recovery.acceptJoin({ snapshot: {} }); other.recovery.complete(other.snapshots.at(-1).id);
+    assert.equal(await changed, false); other.recovery.dispose();
+});
+
 test('source epochs reject old sources while new local declarations can reset playback sequences', () => {
     const current = { sourceEpoch: 4, sourceId: 'B', stateVersion: 2 };
     assert.equal(acceptsVideoState(current, { sourceEpoch: 3, sourceId: 'A', stateVersion: 999 }), false);

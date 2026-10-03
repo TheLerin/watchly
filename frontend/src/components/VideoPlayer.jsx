@@ -876,7 +876,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         if (!resyncRequest || !isConnected) return;
         const id = resyncRequest.id;
         if (!hasContent) { completeResync(id); return; }
-        if (isLocal && !isLocalReady) return;
+        // The room snapshot is restored even when this device still needs to
+        // choose its copy. File readiness remains a separate server gate.
+        if (isLocal && !isLocalReady) { completeResync(id); return; }
         const resync = createPlayerResync({
             getPlayer: () => isNativePlayer ? nativeVideoRef.current : isYouTube ? playerRef.current?.getInternalPlayer?.() : playerRef.current,
             youtube: isYouTube,
@@ -1137,12 +1139,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
             if (!canControlPlayback) return;
             const sessionId = `sampled-sha256-v1:${file.size}:${fingerprint}`;
-            const displayTitle = window.prompt('Choose a title for the room (your filename stays private):', 'Movie night')?.trim().slice(0, 100) || 'Local movie';
-            cacheLocalInspection(sessionId, {
-                inspection,
-                error: inspectionOutcome.error,
-            });
-            replaceLocalObjectUrl(file, sessionId);
+            let displayTitle = 'Local movie';
+            try {
+                displayTitle = window.prompt('Choose a title for the room (your filename stays private):', 'Movie night')?.trim().slice(0, 100) || displayTitle;
+            } catch { /* Embedded browsers may not support native prompts; keep the filename private. */ }
+            let installed = false;
             try {
                 await selectLocalMedia({
                     sessionId,
@@ -1152,18 +1153,24 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                     size: file.size,
                     mimeType: file.type || 'application/octet-stream',
                     duration,
+                }, () => {
+                    cacheLocalInspection(sessionId, { inspection, error: inspectionOutcome.error });
+                    replaceLocalObjectUrl(file, sessionId);
+                    installed = true;
                 });
                 setMediaInspection(inspection);
                 setMediaInspectionError(inspectionOutcome.error);
                 toast.success('Local file selected. Waiting for everyone to match it.');
             } catch (error) {
-                localInspectionBySessionRef.current.delete(sessionId);
-                if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
-                localFileUrlRef.current = '';
-                localSessionRef.current = null;
-                localFileRef.current = null;
-                setLocalFileUrl('');
-                setLocalPlaybackUrl('');
+                if (installed && localFileRef.current === file && localSessionRef.current === sessionId) {
+                    localInspectionBySessionRef.current.delete(sessionId);
+                    if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
+                    localFileUrlRef.current = '';
+                    localSessionRef.current = null;
+                    localFileRef.current = null;
+                    setLocalFileUrl('');
+                    setLocalPlaybackUrl('');
+                }
                 throw error;
             }
         } catch (error) {

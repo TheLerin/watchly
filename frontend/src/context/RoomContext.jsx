@@ -160,6 +160,7 @@ export const RoomProvider = ({ children }) => {
         // Membership notifications are socket side effects. Keep them outside
         // state updaters, which React can replay while rendering the provider.
         const knownMembers = new Map();
+        const permissionsDuringSync = new Map();
         const applyReadiness = payload => {
             if (!payload) return;
             if (Number.isInteger(payload.sourceEpoch) && payload.sourceEpoch < (videoStateRef.current.sourceEpoch || 0)) return;
@@ -227,11 +228,17 @@ export const RoomProvider = ({ children }) => {
         const applySnapshot = (snapshot, id) => {
             if (!snapshot) return;
             const initialVideoState = snapshot.videoState;
+            // Role events can arrive after the snapshot was generated but before
+            // its ACK/player restoration. Preserve those newer capabilities.
+            const members = (snapshot.members || []).map(member => ({
+                ...member, ...permissionsDuringSync.get(member.userId || member.id),
+            }));
+            permissionsDuringSync.clear();
             activeMediaIdRef.current = snapshot.media?.mediaId || initialVideoState?.localMedia?.sessionId || null;
             knownMembers.clear();
-            for (const member of snapshot.members || []) knownMembers.set(member.userId || member.id, member);
-            setUsers(snapshot.members || []);
-            currentUserRef.current = snapshot.members?.find(member => member.userId === sessionRef.current?.memberId) || null;
+            for (const member of members) knownMembers.set(member.userId || member.id, member);
+            setUsers(members);
+            currentUserRef.current = members.find(member => member.userId === sessionRef.current?.memberId) || null;
             setCurrentUser(currentUserRef.current);
             setQueue(snapshot.queue || []);
             setMessages(previous => mergeChatHistory(previous, snapshot.chatHistory));
@@ -279,6 +286,9 @@ export const RoomProvider = ({ children }) => {
             ));
         };
         const onRoleUpdated = ({ userId, newRole, member }) => {
+            if (connectionPhaseRef.current === 'resyncing' && member) {
+                permissionsDuringSync.set(member.userId || member.id, { role: newRole, permissions: member.permissions });
+            }
             setUsers(previous => previous.map(user => (
                 user.id === userId ? { ...user, ...member, role: newRole } : user
             )));
@@ -339,6 +349,11 @@ export const RoomProvider = ({ children }) => {
         const onControlChanged = payload => {
             setControllerMemberId(payload.controllerMemberId);
             if (payload.members) {
+                if (connectionPhaseRef.current === 'resyncing') {
+                    for (const member of payload.members) permissionsDuringSync.set(member.userId || member.id, {
+                        role: member.role, permissions: member.permissions,
+                    });
+                }
                 setUsers(payload.members);
                 knownMembers.clear();
                 for (const member of payload.members) knownMembers.set(member.userId, member);
@@ -385,6 +400,7 @@ export const RoomProvider = ({ children }) => {
             socket, getSession: () => sessionRef.current, isEntryPending: roomRequester.isPending,
             onJoin: saveJoin, onSnapshot: applySnapshot,
             onPhase: (phase, connected) => {
+                if (phase === 'resyncing' && connectionPhaseRef.current !== 'resyncing') permissionsDuringSync.clear();
                 connectionPhaseRef.current = phase;
                 setConnectionPhase(phase); setIsConnected(connected);
                 if (!connected) { setNetworkPingMs(null); setNetworkQuality('offline'); setResyncRequest(null); }
@@ -551,23 +567,32 @@ export const RoomProvider = ({ children }) => {
         return emitRoomAction('change_video', { roomId, url: url || '', magnetURI: magnetURI || '' });
     }, [roomId, emitRoomAction]);
 
-    const selectLocalMedia = useCallback(localMedia => new Promise((resolve, reject) => {
-        if (!canSendRoomAction()) return reject(new Error('Wait for the room to reconnect before selecting a new source.'));
-        if (!canPerformRoomAction('canChangeSource')) return reject(new Error('Only the Host and Moderators can choose the shared source.'));
+    const selectLocalMedia = useCallback(async (localMedia, beforeDeclare) => {
+        const session = sessionRef.current;
+        const ready = canSendRoomAction() || await recoveryRef.current?.waitUntilSynced();
+        const currentSession = sessionRef.current;
+        if (!ready || !canSendRoomAction() || !session || currentSession?.roomId !== session.roomId ||
+            currentSession?.memberId !== session.memberId || currentSession?.resumeToken !== session.resumeToken) {
+            throw new Error('Wait for the room to reconnect before selecting a new source.');
+        }
+        if (!canPerformRoomAction('canChangeSource')) throw new Error('Only the Host and Moderators can choose the shared source.');
         const mediaId = `sampled-sha256-v1:${localMedia.size}:${localMedia.fingerprint}`;
         const descriptor = {
             sourceType: 'local-file', mediaId, fingerprintVersion: 'sampled-sha256-v1',
             displayTitle: localMedia.displayName, sizeBytes: localMedia.size,
             durationMs: Math.round(localMedia.duration * 1000)
         };
-        socket.timeout(10000).emit('media:declare', { descriptor }, (error, response) => {
-            if (error || !response?.ok) {
-                reject(new Error(protocolErrorMessage(response) || 'The local file selection timed out.'));
-                return;
-            }
-            resolve(response.snapshot);
+        return new Promise((resolve, reject) => {
+            beforeDeclare?.();
+            socket.timeout(10000).emit('media:declare', { descriptor }, (error, response) => {
+                if (error || !response?.ok) {
+                    reject(new Error(protocolErrorMessage(response) || 'The local file selection timed out.'));
+                    return;
+                }
+                resolve(response.snapshot);
+            });
         });
-    }), [canSendRoomAction, canPerformRoomAction]);
+    }, [canSendRoomAction, canPerformRoomAction]);
 
     const markLocalMediaReady = useCallback(({ mediaSessionId, fingerprint, size, duration }) => {
         if (!recoveryRef.current?.acceptsEvents()) return;

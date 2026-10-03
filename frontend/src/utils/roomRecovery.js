@@ -20,7 +20,23 @@ export function createRoomRecovery({ socket, getSession, isEntryPending = () => 
     schedule = setTimeout, cancel = clearTimeout, now = Date.now }) {
     let enabled = true, generation = 0, pending = null, bound = false, outage = false, stoppedPhase = 'offline';
     let retryTimer, offlineTimer, lastWake = -Infinity, restoring = null, outageAt = 0;
-    const phase = value => onPhase(value, socket.connected);
+    let currentPhase = 'offline';
+    const syncWaiters = new Set();
+    const settleWaiters = synced => {
+        for (const waiter of syncWaiters) {
+            cancel(waiter.timer);
+            const session = getSession();
+            waiter.resolve(synced && session?.roomId === waiter.session.roomId &&
+                session?.memberId === waiter.session.memberId && session?.resumeToken === waiter.session.resumeToken);
+        }
+        syncWaiters.clear();
+    };
+    const phase = value => {
+        currentPhase = value;
+        onPhase(value, socket.connected);
+        if (value === 'connected') settleWaiters(true);
+        else if (value !== 'resyncing' || pending?.join) settleWaiters(false);
+    };
     const clearRetry = () => { cancel(retryTimer); retryTimer = null; };
     const invalidate = () => { generation++; pending = null; restoring = null; clearRetry(); };
     const startOutage = () => {
@@ -32,6 +48,7 @@ export function createRoomRecovery({ socket, getSession, isEntryPending = () => 
     };
     const stop = () => {
         enabled = false; bound = false; outage = false;
+        settleWaiters(false);
         invalidate(); cancel(offlineTimer);
         if (socket.sendBuffer) socket.sendBuffer.length = 0;
     };
@@ -79,6 +96,7 @@ export function createRoomRecovery({ socket, getSession, isEntryPending = () => 
         if (getSession() && !isEntryPending()) recover(true); else phase('connected');
     };
     const disconnected = reason => {
+        settleWaiters(false);
         invalidate(); bound = false;
         if (socket.sendBuffer) socket.sendBuffer.length = 0;
         if (!enabled || !getSession()) { phase(stoppedPhase); return; }
@@ -94,6 +112,19 @@ export function createRoomRecovery({ socket, getSession, isEntryPending = () => 
         acceptJoin, stop, fail,
         isJoining: () => Boolean(pending?.join),
         acceptsEvents: () => enabled && bound && socket.connected && !pending,
+        // Only wait through a foreground snapshot on the current membership.
+        // A disconnect or rejoin cancels the selection; it must never be replayed.
+        waitUntilSynced(timeoutMs = 10000) {
+            const session = getSession();
+            if (!enabled || !bound || !socket.connected || !session || pending?.join) return Promise.resolve(false);
+            if (currentPhase === 'connected') return Promise.resolve(true);
+            if (currentPhase !== 'resyncing') return Promise.resolve(false);
+            return new Promise(resolve => {
+                const waiter = { resolve, session: { ...session } };
+                waiter.timer = schedule(() => { syncWaiters.delete(waiter); resolve(false); }, timeoutMs);
+                syncWaiters.add(waiter);
+            });
+        },
         complete(id) {
             if (!enabled || id !== restoring || !socket.connected || pending) return false;
             restoring = null; cancel(offlineTimer); phase('connected');
@@ -110,6 +141,7 @@ export function createRoomRecovery({ socket, getSession, isEntryPending = () => 
             lastWake = now(); recover(!bound);
         },
         dispose() {
+            settleWaiters(false);
             invalidate(); cancel(offlineTimer);
             socket.off('connect', connected); socket.off('disconnect', disconnected); socket.off('connect_error', connectionError);
             socket.io.off('reconnect_attempt', attempting);
