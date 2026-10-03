@@ -84,8 +84,27 @@ speaker output is suppressed; media and decoded remote audio remain genuine.
 Evidence contains audio measurements and screenshots, never participant tokens
 or signing credentials, in ignored `frontend/test/artifacts/`.
 
-Deployment media-test status: pending the migration deployment and browser run.
-Legacy implementation: retained; not yet eligible for removal.
+Deployment media test: **passed on October 3, 2026** against the public Vercel
+frontend, Render backend and actual LiveKit Cloud transport. Separate Chrome and
+Edge processes rendered/decoded the opposite microphone: A received B at
+878.91 Hz (expected 880 Hz, RMS 0.150), and B received A at 439.45 Hz
+(expected 440 Hz, RMS 0.146). Both remote audio elements were playing with ready
+state 4. No token request, capture or connection occurred before Join Voice.
+There was no camera capture or outbound video. Speaking/muted indicators worked;
+mute silenced remote audio and unmute restored it. Leaving removed the LiveKit
+participant and ended the microphone while both Watchly members, Host/Viewer
+roles and synchronization remained intact. No browser exceptions occurred.
+
+Additional checks passed: 53 backend tests, 93 frontend tests, ESLint,
+production build, account browser suite, role/playback/YouTube/playlist/Cinema
+browser suite, and the legacy recovery/media suite (including a real 60-second
+outage). Preflight accepts LiveKit without coturn and rejects a missing signing
+secret. The retained legacy component was compared against its prior source
+and is unchanged. The LiveKit client is loaded as a separate lazy chunk.
+
+Legacy implementation: **eligible for removal after the passing media test,
+but deliberately retained for rollback**. Cleanup can now remove the old voice
+component and voice-only signaling, while preserving screen-sharing WebRTC.
 
 ## Exact changed files
 
