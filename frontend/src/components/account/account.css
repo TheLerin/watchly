@@ -100,6 +100,9 @@
     background: linear-gradient(90deg,transparent,rgb(255 190 120 / 3%),transparent);
     pointer-events: none;
 }
+/* Glass cards form stacking contexts; keep an open friend menu clickable
+   above the live request/invite cards below it. */
+.my-watchly-page .my-watchly-friends:has(.person-menu[open]) { z-index: 1; }
 .my-watchly-page .account-muted, .my-watchly-page .account-eyebrow,
 .my-watchly-page .account-text-action, .my-watchly-page .person-name span,
 .my-watchly-page .invite-row p span, .my-watchly-page .account-menu > span { color: var(--text-sub); }

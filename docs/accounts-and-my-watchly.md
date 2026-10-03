@@ -101,7 +101,7 @@ My Watchly provides a greeting, Create room/Join room, friends, debounced userna
 
 Friend requests support Add Friend, Accept and Decline; the list supports Remove friend, Block and Unblock. Outgoing and existing-friend states disable inappropriate repeated actions. Invites and requests hide when empty. Recent rooms are device-local and may refer to rooms that have expired; Rejoin uses the existing join flow and displays its existing errors.
 
-Persistent social lists refresh every 30 seconds while visible and on window focus/visibility return. A mutation immediately reloads the actor's list. This does not require enabling Supabase Realtime or adding tables to a publication.
+Persistent social lists now share one account store with filtered Supabase Postgres Changes subscriptions and private deletion/block invalidations. Successful mutations refresh the actor's affected sections immediately. Reconnect and focus/visibility return reconcile missed events; there is no polling interval. Apply `202610040001_watchly_social_realtime.sql` after the accounts migration. See [the realtime social report](social-realtime.md) for publication, RLS, deployment and two-browser verification details.
 
 Presence is different: Render aggregates authenticated sockets across devices and emits `online`, `in_room` or `offline` only to subscribers after a fresh database-authorized friend lookup. Disconnects and room transitions trigger updates. Payloads contain account ID and status, never a room code. If presence cannot be obtained, the UI says it is unavailable rather than pretending the friend is offline. Removing/blocking someone removes their authorized presence visibility.
 

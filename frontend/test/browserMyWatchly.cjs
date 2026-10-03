@@ -67,9 +67,9 @@ const wait = async predicate => { const end = Date.now() + 30000; while (Date.no
         await p.setViewportSize({ width: 1440, height: 900 }); await p.getByRole('button', { name: 'Find friends', exact: true }).click(); await p.getByLabel('Search people by username').fill('@bob');
         await p.locator('#find-people').getByRole('button', { name: 'Friends', exact: true }).waitFor();
         const queries = () => service.requests.filter(r => r.path === '/rest/v1/rpc/search_people').length;
-        const before = queries(), loads = service.requests.filter(r => r.path === '/rest/v1/rpc/get_my_watchly').length;
+        const before = queries(), loads = service.requests.filter(r => r.path === '/rest/v1/rpc/get_social_data').length;
         await p.getByRole('button', { name: 'Find friends', exact: true }).click(); await p.getByRole('button', { name: 'Find friends', exact: true }).click(); await p.setViewportSize({ width: 1366, height: 768 }); await sleep(600);
-        assert.equal(queries(), before); assert.equal(service.requests.filter(r => r.path === '/rest/v1/rpc/get_my_watchly').length, loads);
+        assert.equal(queries(), before); assert.equal(service.requests.filter(r => r.path === '/rest/v1/rpc/get_social_data').length, loads);
         assert.equal(await p.getByLabel('Search people by username').inputValue(), '@bob'); await p.locator('#find-people').getByRole('button', { name: 'Friends', exact: true }).waitFor(); await screenshot('search-results');
         await p.getByRole('button', { name: 'Find friends', exact: true }).click();
         const requests = p.getByRole('region', { name: 'Friend requests', exact: true }), invites = p.getByRole('region', { name: 'Invites', exact: true });

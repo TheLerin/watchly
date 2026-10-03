@@ -5,6 +5,7 @@ import { RoomProvider, useRoom } from './context/RoomContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { loadRoomLayout } from './roomRoute';
 import { AuthProvider } from './context/AuthContext';
+import { SocialProvider } from './context/SocialContext';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const RoomLayout = lazy(loadRoomLayout);
@@ -89,6 +90,7 @@ function App() {
       <ThemeProvider>
         <Router>
           <AuthProvider>
+          <SocialProvider>
           <RoomProvider>
             <KickHandler />
             <ProtocolGuard><Suspense fallback={<div className="min-h-screen bg-black" />}><Routes>
@@ -126,6 +128,7 @@ function App() {
               }}
             />
           </RoomProvider>
+          </SocialProvider>
           </AuthProvider>
         </Router>
       </ThemeProvider>

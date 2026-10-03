@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { PGlite } = require('@electric-sql/pglite');
+const realtimeFixture = require('./socialRealtime.cjs');
 const A = '00000000-0000-4000-8000-000000000001', B = '00000000-0000-4000-8000-000000000002', C = '00000000-0000-4000-8000-000000000003';
 module.exports = async function createHarness() {
     const db = new PGlite(), tokens = new Map(), codes = new Map(), revokedRefresh = new Set(), requests = [];
@@ -13,15 +14,18 @@ module.exports = async function createHarness() {
         create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
         grant usage on schema auth to authenticated; insert into auth.users values('${A}'),('${B}'),('${C}');`);
     await db.exec(readFileSync(path.resolve(__dirname,'../../supabase/migrations/202610030001_watchly_accounts.sql'),'utf8'));
-    const sql = (id, text, args=[]) => db.transaction(async tx => { await tx.exec('set local role authenticated'); await tx.query("select set_config('request.jwt.claim.sub',$1,true)",[id]); return (await tx.query(text,args)).rows; });
-    const privateSql = (text,args) => db.transaction(async tx => { await tx.exec('set local role service_role'); return (await tx.query(text,args)).rows; });
+    await realtimeFixture.install(db);
+    let realtime;
+    const rawSql = (id, text, args=[]) => db.transaction(async tx => { await tx.exec('set local role authenticated'); await tx.query("select set_config('request.jwt.claim.sub',$1,true)",[id]); return (await tx.query(text,args)).rows; });
+    const sql = async (id,text,args=[]) => { const rows=await rawSql(id,text,args); await realtime?.flush(); return rows; };
+    const privateSql = async (text,args) => { const rows=await db.transaction(async tx => { await tx.exec('set local role service_role'); return (await tx.query(text,args)).rows; }); await realtime?.flush(); return rows; };
     const session = id => {
         const exp=Math.floor(Date.now()/1000)+3600;
         const token=`${Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')}.${Buffer.from(JSON.stringify({sub:id,role:'authenticated',aud:'authenticated',exp,nonce:crypto.randomUUID()})).toString('base64url')}.test-signature`;
         tokens.set(token,id); return {access_token:token,refresh_token:`refresh:${id}`,token_type:'bearer',expires_in:3600,expires_at:exp,user:users.get(id)};
     };
     const procedures={
-        get_my_watchly:[],friend_ids:[],touch_profile:[],search_people:[['query_text','text']],request_friend:[['target_id','uuid']],
+        get_my_watchly:[],get_social_data:[['sections','text[]']],friend_ids:[],touch_profile:[],search_people:[['query_text','text']],request_friend:[['target_id','uuid']],
         respond_friend_request:[['request_id','uuid'],['accept','boolean']],remove_friend:[['target_id','uuid']],block_person:[['target_id','uuid']],unblock_person:[['target_id','uuid']],
         send_room_invite:[['verified_sender_id','uuid'],['target_id','uuid'],['invite_room_code','text']],respond_room_invite:[['invite_id','uuid'],['accept','boolean']],
     };
@@ -32,7 +36,7 @@ module.exports = async function createHarness() {
         if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
         const url=new URL(req.url,'http://test'); let text=''; for await(const chunk of req) text+=chunk;
         let body={}; try{body=text?JSON.parse(text):{};}catch{}
-        const json=(value,status=200)=>{requests.push({path:url.pathname,status,code:value?.code});res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value));};
+        const json=(value,status=200)=>{requests.push({path:url.pathname,status,code:value?.code,sections:body.sections});res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value));};
         const id=tokens.get(String(req.headers.authorization||'').replace(/^Bearer /,''));
         try{
             if(url.pathname==='/auth/v1/authorize'){
@@ -75,6 +79,12 @@ module.exports = async function createHarness() {
             return json({message:'Not found'},404);
         }catch(error){return json({code:error.code||'P0001',message:error.message},400);}
     });
+    realtime = realtimeFixture.transport({server,db,tokens,asUser:rawSql});
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-    return {url:`http://127.0.0.1:${server.address().port}`,key:'public-test-only',serviceKey:'service-role-test-only',A,B,C,sql,requests,setGoogleId:id=>{googleId=id;},revokeAccount:id=>{revokedRefresh.add(id);for(const[token,owner]of tokens)if(owner===id)tokens.delete(token);},close:async()=>{await new Promise(resolve=>server.close(resolve));await db.close();}};
+    return {url:`http://127.0.0.1:${server.address().port}`,key:'public-test-only',serviceKey:'service-role-test-only',A,B,C,sql,requests,realtime,
+        adminSql:async(text,args=[])=>{const rows=(await db.query(text,args)).rows;await realtime.flush();return rows;},
+        adminExec:text=>db.exec(text),
+        roleSql:(role,text,args=[])=>db.transaction(async tx=>{await tx.exec(`set local role ${role}`);return(await tx.query(text,args)).rows;}),
+        topicSql:(id,topic,text,args=[])=>db.transaction(async tx=>{await tx.exec('set local role authenticated');await tx.query("select set_config('request.jwt.claim.sub',$1,true),set_config('realtime.topic',$2,true)",[id,topic]);return(await tx.query(text,args)).rows;}),
+        setGoogleId:id=>{googleId=id;},revokeAccount:id=>{revokedRefresh.add(id);for(const[token,owner]of tokens)if(owner===id)tokens.delete(token);},close:async()=>{await realtime.close();await new Promise(resolve=>server.close(resolve));await db.close();}};
 };
