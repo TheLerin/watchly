@@ -123,7 +123,8 @@ async function resolveArchiveUrl(url) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '', controlsTabLabel }) => {
+const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '', controlsTabLabel,
+    activeTheaterTool = null, onTheaterToolChange, closeTheaterTool, dockRef, panelRef, panelEvents }) => {
     const {
         videoState, currentUser, localReadiness, permissions, playback, clock, isConnected,
         connectionPhase, resyncRequest, completeResync, failResync, canSendRoomAction, canPerformRoomAction, retryConnection,
@@ -218,7 +219,6 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const [isFingerprinting, setIsFingerprinting] = useState(false);
     const [localFileError, setLocalFileError] = useState('');
     const [isStartingAnyway, setIsStartingAnyway] = useState(false);
-    const [activeTheaterTool, setActiveTheaterTool] = useState(null);
     useVideoAmbientLight(activeMediaElement, ambientTargetRef, !cinemaLuxe && ambientEnabled && appearance === 'cinematic' && videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError);
     useCinemaLuxeEffects(activeMediaElement, ambientTargetRef, cinemaLuxe,
         videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError && !viewerDiverged);
@@ -241,8 +241,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     // ── Derived values ────────────────────────────────────────────────────────
     const { canControlPlayback, isPlaybackCoordinator } = permissions;
     useEffect(() => {
-        if (!canControlPlayback && activeTheaterTool === 'watch') setActiveTheaterTool(null);
-    }, [canControlPlayback, activeTheaterTool]);
+        if (appearance === 'cinematic' && !canControlPlayback && activeTheaterTool === 'watch') closeTheaterTool?.();
+    }, [appearance, canControlPlayback, activeTheaterTool, closeTheaterTool]);
     const rawUrl        = videoState.url || null;
     const source        = useMemo(() => detectVideoSource(rawUrl), [rawUrl]);
     const playerUrl     = rewriteGDriveUrl(source.url);
@@ -1322,7 +1322,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div className={`room-video-player flex h-full w-full flex-col gap-3 ${className}`} data-room-appearance={appearance} data-open-tool={activeTheaterTool || ''}>
-            <nav className="theater-left-dock" aria-label="Movie tools">
+            <nav ref={dockRef} className="theater-left-dock" aria-label="Movie tools">
                 {[
                     ...(canControlPlayback ? [{ id: 'watch', label: 'Watch controls', icon: <Clapperboard size={21} /> }] : []),
                     { id: 'info', label: 'Now watching', icon: <Info size={21} /> },
@@ -1334,11 +1334,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                         label={tool.label}
                         active={activeTheaterTool === tool.id}
                         controls="watchly-left-panel"
-                        onClick={() => setActiveTheaterTool(activeTheaterTool === tool.id ? null : tool.id)}
+                        onClick={() => onTheaterToolChange?.(tool.id)}
                     />
                 ))}
             </nav>
-            <div id="watchly-left-panel" className="video-player-controls flex min-h-0 flex-col gap-3"
+            <div ref={panelRef} {...panelEvents} id="watchly-left-panel" className="video-player-controls flex min-h-0 flex-col gap-3"
                 role={controlsTabLabel ? 'tabpanel' : undefined} aria-labelledby={controlsTabLabel}>
                 <div className="cinematic-now-watching" aria-live="polite">
                     <span>Now Watching</span>

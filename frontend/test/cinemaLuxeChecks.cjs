@@ -68,7 +68,8 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
  assert.ok(geometry.scrollHeight <= geometry.height + 1, 'theater must fit in the viewport');
  assert.equal(await host.locator('.luxe-aisle i').count(), 8);
  assert.equal(await host.locator('.luxe-ceiling i').count(), 2);
- await host.getByRole('button', { name: 'Watch controls', exact: true }).click();
+ const watchButton = host.getByRole('button', { name: 'Watch controls', exact: true });
+ if (await watchButton.getAttribute('aria-expanded') === 'true') await watchButton.click();
  await host.evaluate(() => document.activeElement.blur());
  await host.mouse.move(640, 350);
  await wait(async () => await shell(host).getAttribute('data-cinema-controls-hidden') === 'true', 'inactive chrome did not hide');
@@ -182,7 +183,7 @@ module.exports = async ({ host, viewer, browser, baseUrl, video, values, wait })
  }
  await host.setViewportSize({ width: 1280, height: 720 });
  await wait(async () => await shell(host).getAttribute('data-room-appearance') === 'cinematic', 'desktop should restore the selected cinematic style');
- await host.getByRole('button', { name: 'Watch controls', exact: true }).click();
+ if (await watchButton.getAttribute('aria-expanded') !== 'true') await watchButton.click();
  const idle = await browser.newPage({ viewport: { width: 1440, height: 900 } });
  await idle.addInitScript(() => localStorage.setItem('watchly-theme', 'cinema-luxe'));
  await idle.goto(baseUrl);

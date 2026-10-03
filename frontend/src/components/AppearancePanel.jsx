@@ -36,13 +36,13 @@ function ToggleRow({ label, setting, description }) {
     );
 }
 
-export default function AppearancePanel({ supportsTheater }) {
+export default function AppearancePanel({ supportsTheater, panelRef, panelEvents }) {
     const { appearanceSettings: settings, setTheme, setRoomAppearance, setCinemaPreset, updateAppearance, resetAppearance } = useTheme();
     const systemReduceMotion = useReducedMotion();
     const cinematic = settings.roomStyle === 'cinematic';
     const reduceMotion = systemReduceMotion || (cinematic && settings.reduceMotion);
     return (
-        <MotionDiv id="watchly-appearance" role="dialog" aria-labelledby="watchly-appearance-title"
+        <MotionDiv ref={panelRef} {...panelEvents} id="watchly-appearance" role="dialog" aria-labelledby="watchly-appearance-title"
             initial={reduceMotion ? false : { opacity: 0, scale: 0.98, y: -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.98, y: -6 }}

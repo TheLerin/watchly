@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -26,6 +26,7 @@ import ReadinessPanel from './player/ReadinessPanel';
 import ScreenShareAdapter from './player/ScreenShareAdapter';
 import { useRoom } from '../context/RoomContext';
 import { useAuth } from '../context/AuthContext';
+import useRoomPanelDismiss from '../hooks/useRoomPanelDismiss';
 import { useTheme } from '../context/ThemeContext';
 import { architecturalLight } from '../utils/appearanceSettings';
 import AppearancePanel from './AppearancePanel';
@@ -37,6 +38,7 @@ import CinemaLuxeScene from './CinemaLuxeScene';
 import './cinema-luxe.css';
 import './appearance-panel.css';
 import './classic-desktop.css';
+import './room-panels.css';
 
 const MotionDiv = motion.div;
 const MotionSpan = motion.span;
@@ -79,31 +81,26 @@ function useSupportsTheater() {
 
 const panelClass = 'rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl';
 
-const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, isConnected, connectionPhase, retryConnection, networkPingMs, networkQuality, measurePing, currentUser, users }) => {
-    const [showSettings, setShowSettings] = useState(false);
+const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, isConnected, connectionPhase, retryConnection, networkPingMs, networkQuality, measurePing, currentUser, users, activePanel, togglePanel, panelRef, panelEvents, settingsTriggerRef }) => {
+    const showSettings = activePanel === 'settings';
     const [showRoomInfo, setShowRoomInfo] = useState(false);
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
     const [copied, setCopied] = useState(false);
-    const ref = useRef(null);
     const roomInfoRef = useRef(null);
     const leaveRef = useRef(null);
 
     useEffect(() => {
         const close = (e) => {
-            if (ref.current && !ref.current.contains(e.target)) setShowSettings(false);
             if (roomInfoRef.current && !roomInfoRef.current.contains(e.target)) setShowRoomInfo(false);
             if (leaveRef.current && !leaveRef.current.contains(e.target)) setShowLeaveConfirm(false);
         };
-        document.addEventListener('mousedown', close);
+        document.addEventListener('pointerdown', close);
         const escape = event => {
-            if (event.key === 'Escape' && ref.current?.querySelector('.room-settings-popover')) {
-                setShowSettings(false);
-                ref.current.querySelector('.room-settings-button')?.focus();
-            }
+            if (event.key === 'Escape') { setShowRoomInfo(false); setShowLeaveConfirm(false); }
         };
         document.addEventListener('keydown', escape);
         return () => {
-            document.removeEventListener('mousedown', close);
+            document.removeEventListener('pointerdown', close);
             document.removeEventListener('keydown', escape);
         };
     }, []);
@@ -200,9 +197,10 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
                         <span role="status" aria-live="polite">{connectionLabel}</span>
                     </button>
 
-                    <div className="relative" ref={ref}>
+                    <div className="room-settings-anchor relative" data-open={showSettings}>
                         <button
-                            onClick={() => setShowSettings(s => !s)}
+                            ref={settingsTriggerRef}
+                            onClick={() => togglePanel('settings')}
                             className="room-settings-button flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-zinc-400 transition hover:border-white/25 hover:text-white"
                             title="Room settings"
                             aria-label="Room settings"
@@ -213,7 +211,7 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
                         </button>
                         <AnimatePresence>
                             {showSettings && (
-                                <AppearancePanel supportsTheater={supportsTheater} />
+                                <AppearancePanel supportsTheater={supportsTheater} panelRef={panelRef} panelEvents={panelEvents} />
                             )}
                         </AnimatePresence>
                     </div>
@@ -270,8 +268,8 @@ const roomTabs = [
     { id: 'chat', label: 'Chat', icon: <MessageSquare size={19} />, controls: 'classic-chat-panel' },
 ];
 
-const RoomTabs = ({ activeTab, onChange, desktop = false }) => (
-    <nav className={desktop ? 'classic-desktop-tabs' : 'mobile-classic-tabs'}
+const RoomTabs = ({ activeTab, onChange, onSelect = onChange, desktop = false, triggerRef }) => (
+    <nav ref={triggerRef} className={desktop ? 'classic-desktop-tabs' : 'mobile-classic-tabs'}
         aria-label={desktop ? 'Room sections' : 'Mobile room sections'} role={desktop ? 'tablist' : undefined}>
         {roomTabs.map(({ id, label, icon, controls }, index) => (
             <button type="button" key={id} data-active={activeTab === id}
@@ -280,7 +278,7 @@ const RoomTabs = ({ activeTab, onChange, desktop = false }) => (
                 aria-selected={desktop ? activeTab === id : undefined}
                 aria-controls={desktop ? controls : undefined}
                 aria-current={!desktop && activeTab === id ? 'page' : undefined}
-                tabIndex={desktop && activeTab !== id ? -1 : undefined}
+                tabIndex={desktop ? (activeTab === id || (!activeTab && index === 0) ? 0 : -1) : undefined}
                 onClick={() => onChange(id)}
                 onKeyDown={desktop ? event => {
                     const next = event.key === 'ArrowRight' ? (index + 1) % roomTabs.length
@@ -288,7 +286,7 @@ const RoomTabs = ({ activeTab, onChange, desktop = false }) => (
                             : event.key === 'Home' ? 0 : event.key === 'End' ? roomTabs.length - 1 : null;
                     if (next === null) return;
                     event.preventDefault();
-                    onChange(roomTabs[next].id);
+                    onSelect(roomTabs[next].id);
                     event.currentTarget.parentElement.children[next].focus();
                 } : undefined}>
                 {icon}<span>{label}</span>
@@ -319,8 +317,15 @@ const RoomLayout = () => {
     const { theme, roomAppearance: preferredRoomAppearance, appearanceSettings } = useTheme();
     const ambientTargetRef = useRef(null);
     const [showUsersPanel, setShowUsersPanel] = useState(true);
-    const [activeRightTool, setActiveRightTool] = useState(null);
-    const [mobileTab, setMobileTab] = useState('watch');
+    const [activePanel, setActivePanel] = useState(() => preferredRoomAppearance === 'cinematic' ? null : 'watch');
+    const mobileTab = ({ members: 'room', voice: 'call', watch: 'watch', chat: 'chat' })[activePanel] || '';
+    const selectTab = useCallback(tab => setActivePanel(({ room: 'members', call: 'voice' })[tab] || tab), []);
+    const togglePanel = useCallback(panel => setActivePanel(current => current === panel ? null : panel), []);
+    const toggleTab = useCallback(tab => togglePanel(({ room: 'members', call: 'voice' })[tab] || tab), [togglePanel]);
+    const closePanel = useCallback(() => setActivePanel(null), []);
+    const settingsPanelRef = useRef(null), leftPanelRef = useRef(null), rightPanelRef = useRef(null), mobilePanelRef = useRef(null);
+    const settingsTriggerRef = useRef(null), leftDockRef = useRef(null), rightDockRef = useRef(null), tabsRef = useRef(null);
+    const triggerRefs = useMemo(() => [settingsTriggerRef, leftDockRef, rightDockRef, tabsRef], []);
     const [joinNickname, setJoinNickname] = useState('');
     const effectiveJoinNickname = accountProfile?.display_name || joinNickname;
     const needsProfile = Boolean(accountUser && !accountProfile && !isProfileLoading);
@@ -332,16 +337,12 @@ const RoomLayout = () => {
     const supportsTheater = useSupportsTheater();
     const cinemaLuxe = preferredRoomAppearance === 'cinematic';
     const roomAppearance = supportsTheater ? preferredRoomAppearance : 'classic';
-
-    useEffect(() => {
-        const closePanels = event => {
-            if (event.key === 'Escape') {
-                setActiveRightTool(null);
-            }
-        };
-        document.addEventListener('keydown', closePanels);
-        return () => document.removeEventListener('keydown', closePanels);
-    }, []);
+    // Appearance can animate out while another panel opens; its departing ref
+    // must not clear the newly opened panel's boundary.
+    const panelRef = activePanel === 'settings' ? settingsPanelRef : !isDesktop ? mobilePanelRef
+        : ['watch', 'info', 'tracks'].includes(activePanel) ? leftPanelRef : rightPanelRef;
+    const dismissiblePanel = isDesktop || activePanel === 'settings' || ['members', 'voice', 'chat'].includes(activePanel) ? activePanel : null;
+    const panelEvents = useRoomPanelDismiss({ activePanel: dismissiblePanel, onClose: closePanel, panelRef, triggerRefs });
 
     if (isRestoringSession) {
         return (
@@ -463,6 +464,7 @@ const RoomLayout = () => {
                     measurePing={measurePing}
                     currentUser={currentUser}
                     users={users}
+                    activePanel={activePanel} togglePanel={togglePanel} panelRef={panelRef} panelEvents={panelEvents} settingsTriggerRef={settingsTriggerRef}
                 />
 
                 {isDesktop ? (
@@ -486,6 +488,9 @@ const RoomLayout = () => {
                                     <span className="video-ambient-bottom" />
                                 </div>
                                 <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} cinemaLuxe={cinemaLuxe}
+                                    activeTheaterTool={['watch', 'info', 'tracks'].includes(activePanel) ? activePanel : null}
+                                    onTheaterToolChange={togglePanel} closeTheaterTool={closePanel} dockRef={leftDockRef}
+                                    panelRef={['watch', 'info', 'tracks'].includes(activePanel) ? panelRef : undefined} panelEvents={panelEvents}
                                     controlsTabLabel={roomAppearance === 'classic' ? 'classic-watch-tab' : undefined} />
                                 {!cinemaLuxe && <div className="cinematic-sofa" aria-hidden="true">
                                     <picture>
@@ -496,9 +501,10 @@ const RoomLayout = () => {
                             </div>
                         </main>
 
-                        <aside id="watchly-right-panel" className="room-right-rail flex min-h-0 flex-col gap-3" data-open-tool={activeRightTool || ''}>
-                            {roomAppearance === 'classic' && <RoomTabs desktop activeTab={mobileTab} onChange={setMobileTab} />}
-                            <nav className="theater-right-dock" aria-label="Room tools">
+                        <aside id="watchly-right-panel" className="room-right-rail flex min-h-0 flex-col gap-3" data-open-tool={activePanel || ''}
+                            ref={roomAppearance === 'classic' && ['members', 'voice', 'chat'].includes(activePanel) ? panelRef : undefined} {...(roomAppearance === 'classic' ? panelEvents : {})}>
+                            {roomAppearance === 'classic' && <RoomTabs desktop triggerRef={tabsRef} activeTab={mobileTab} onChange={toggleTab} onSelect={selectTab} />}
+                            <nav ref={rightDockRef} className="theater-right-dock" aria-label="Room tools">
                                 {[
                                     { id: 'members', label: 'Members and queue', icon: <Users size={21} /> },
                                     { id: 'voice', label: 'Voice call', icon: <PhoneCall size={21} /> },
@@ -509,13 +515,15 @@ const RoomLayout = () => {
                                         key={tool.id}
                                         icon={tool.icon}
                                         label={tool.label}
-                                        active={activeRightTool === tool.id}
+                                        active={activePanel === tool.id}
                                         controls="watchly-right-panel"
-                                        onClick={() => setActiveRightTool(activeRightTool === tool.id ? null : tool.id)}
+                                        onClick={() => togglePanel(tool.id)}
                                     />
                                 ))}
                             </nav>
                             <section className={`room-members-group ${panelClass} overflow-hidden`} data-expanded={showUsersPanel}
+                                {...panelEvents}
+                                ref={roomAppearance === 'cinematic' && activePanel === 'members' ? panelRef : undefined}
                                 id={roomAppearance === 'classic' ? 'classic-room-panel' : undefined}
                                 role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
                                 aria-labelledby={roomAppearance === 'classic' ? 'classic-room-tab' : undefined}>
@@ -546,16 +554,22 @@ const RoomLayout = () => {
                             </section>
 
                             <section className="room-voice-group" id={roomAppearance === 'classic' ? 'classic-call-panel' : undefined}
+                                {...panelEvents}
+                                ref={roomAppearance === 'cinematic' && activePanel === 'voice' ? panelRef : undefined}
                                 role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
                                 aria-labelledby={roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
                                 <VoiceRoom variant={roomAppearance} />
                             </section>
                             <section className="room-share-group" id={roomAppearance === 'classic' ? 'classic-share-panel' : undefined}
+                                {...panelEvents}
+                                ref={roomAppearance === 'cinematic' && activePanel === 'share' ? panelRef : undefined}
                                 role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
                                 aria-labelledby={roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
                                 <ScreenShareAdapter variant={roomAppearance} />
                             </section>
                             <div className="room-chat-group min-h-0 flex-1" id={roomAppearance === 'classic' ? 'classic-chat-panel' : undefined}
+                                {...panelEvents}
+                                ref={roomAppearance === 'cinematic' && activePanel === 'chat' ? panelRef : undefined}
                                 role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
                                 aria-labelledby={roomAppearance === 'classic' ? 'classic-chat-tab' : undefined}>
                                 <ChatUI variant={roomAppearance} hideHeader={roomAppearance === 'classic'}
@@ -564,14 +578,15 @@ const RoomLayout = () => {
                         </aside>
                     </div>
                 ) : (
-                    <div className="room-mobile-workspace" data-orientation={isPortrait ? 'portrait' : 'landscape'} data-mobile-tab={mobileTab}>
+                    <div className="room-mobile-workspace" data-orientation={isPortrait ? 'portrait' : 'landscape'} data-mobile-tab={mobileTab || 'watch'}>
                         <div className="room-mobile-player">
                             <div className="room-mobile-player-inner">
                                 <VideoPlayer ambientTargetRef={ambientTargetRef} appearance="classic" ambientEnabled={false} cinemaLuxe={cinemaLuxe} />
                             </div>
                         </div>
 
-                        <div className="mobile-classic-panels" hidden={mobileTab === 'watch'}>
+                        <div className="mobile-classic-panels" hidden={!['room', 'call', 'chat'].includes(mobileTab)}
+                            ref={['room', 'call', 'chat'].includes(mobileTab) ? panelRef : undefined} {...panelEvents}>
                             <section className="mobile-classic-panel mobile-classic-room" hidden={mobileTab !== 'room'} aria-label="Members and queue">
                                 <div className="mobile-classic-panel-heading">
                                     <div><span>YOUR ROOM</span><h2>Members & Queue</h2></div>
@@ -594,7 +609,7 @@ const RoomLayout = () => {
                             </section>
                         </div>
 
-                        <RoomTabs activeTab={mobileTab} onChange={setMobileTab} />
+                        <RoomTabs triggerRef={tabsRef} activeTab={mobileTab || 'watch'} onChange={toggleTab} />
                     </div>
                 )}
             </div>

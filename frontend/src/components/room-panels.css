@@ -1,0 +1,42 @@
+/* Sizing and dismissal only: preserve the existing room/dock geometry. */
+.room-shell .room-settings-anchor[data-open="false"] .appearance-panel { visibility: hidden; pointer-events: none; }
+.room-shell :is(.room-right-rail, .room-members-group, .room-members-queue, .room-readiness, .mobile-classic-panels, .mobile-classic-panel, .mobile-classic-card) {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.room-shell :is(.room-members-queue, .room-members-queue > section, .room-readiness) { width: 100%; }
+.room-shell .room-members-header { position: relative; gap: 8px; flex-wrap: wrap; }
+.room-shell .room-members-heading { flex: 1 1 64px; min-width: 0; }
+.room-shell .room-members-header .room-account-actions {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
+}
+.room-shell .room-members-header :is(.account-nav-actions, .account-nav-skeleton) { min-width: 0; max-width: 100%; }
+.room-shell .room-members-header button { flex-shrink: 0; max-width: 100%; }
+/* Align this popover to the padded header, not the avatar beside Invite. */
+.room-shell .room-members-header .account-menu-anchor { position: static; }
+.room-shell .room-members-header .account-menu { right: 16px; width: min(230px, calc(100% - 32px)); max-width: 100%; }
+.room-shell .room-member-row, .room-shell .room-members-queue .group\/queue { min-width: 0; width: 100%; box-sizing: border-box; }
+.room-shell .room-member-menu { max-width: calc(100% - 32px); }
+.room-shell .room-readiness-status > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* The dock remains at its current edge. The bounded drawer extends inward
+   instead of losing its usable width to the dock's grid column. */
+.room-shell[data-room-appearance="cinematic"] .room-right-rail > :is(.room-members-group, .room-voice-group, .room-share-group, .room-chat-group) {
+    left: auto;
+    right: calc(var(--theater-dock-width) + 10px);
+    width: min(360px, calc(100vw - var(--theater-dock-width) - 42px - env(safe-area-inset-right, 0px)));
+    max-width: calc(100vw - var(--theater-dock-width) - 42px - env(safe-area-inset-right, 0px));
+    min-width: 0;
+    box-sizing: border-box;
+}
+@media (min-width: 1180px) {
+    .room-shell[data-room-appearance="classic"][data-classic-tab=""] .room-right-rail { height: auto; }
+}

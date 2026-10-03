@@ -39,7 +39,12 @@ const wait = async (predicate, message, timeout = 30000) => { const end = Date.n
         const video = page => page.locator('.room-player-surface video');
         const values = page => video(page).evaluate(element => ({ time: element.currentTime, paused: element.paused, source: element.currentSrc }));
         const allPaused = paused => wait(async () => (await Promise.all(pages.map(values))).every(value => value.paused === paused), `players did not all become ${paused ? 'paused' : 'playing'}`);
-        const setSource = async (page, url) => { await page.locator('#room-link-input').fill(url); await page.locator('.watch-source-controls').getByRole('button', { name: 'Play Now', exact: true }).click(); };
+        const openWatch = async page => {
+            if (await page.locator('#room-link-input').isVisible()) return;
+            const button = page.viewportSize().width >= 1180 ? page.getByRole('tab', { name: 'Watch', exact: true }) : page.locator('.mobile-classic-tabs').getByRole('button', { name: 'Watch', exact: true });
+            await button.click();
+        };
+        const setSource = async (page, url) => { await openWatch(page); await page.locator('#room-link-input').fill(url); await page.locator('.watch-source-controls').getByRole('button', { name: 'Play Now', exact: true }).click(); };
         const member = async page => (await snapshot()).members.find(user => user.id === page._socketId);
         await host.goto(base); await host.getByRole('button', { name: 'Create room', exact: true }).first().click(); await host.getByPlaceholder('Your nickname').fill('Role host'); await host.locator('.room-launcher-submit').click(); await host.waitForURL('**/room/**'); await synced(host);
         const roomId = host.url().split('/').pop();
@@ -49,7 +54,7 @@ const wait = async (predicate, message, timeout = 30000) => { const end = Date.n
         await host.locator('#classic-room-tab').click();
         const modRow = host.locator('.room-members-queue .group.relative').filter({ hasText: 'Role moderator' }); await modRow.hover(); await modRow.getByRole('button').click(); await host.getByRole('button', { name: 'Promote to mod', exact: true }).click();
         await wait(async () => (await member(moderator)).role === 'Moderator', 'promotion missing');
-        await moderator.locator('#room-link-input').waitFor();
+        await openWatch(moderator); await moderator.locator('#room-link-input').waitFor();
         assert.equal((await snapshot()).controllerMemberId, (await member(host)).userId, 'promotion must not require taking the coordinator');
         await host.locator('#classic-watch-tab').click();
         await video(moderator).evaluate(element => element.pause()); await allPaused(true);
@@ -85,6 +90,9 @@ const wait = async (predicate, message, timeout = 30000) => { const end = Date.n
         console.log('PASS Viewer native pause/seek and mobile pause automatically resync; volume, mute and fullscreen stay local; keyboard denial emits no shared commands');
 
         await moderator.setViewportSize({ width: 390, height: 844 });
+        // Keep the 96-second fixture away from its end during the queue checks.
+        await video(moderator).evaluate(element => { element.currentTime = 0; });
+        await openWatch(moderator);
         for (const label of ['first', 'second']) { await moderator.locator('#room-link-input').fill(`${base}/bg-video.mp4?queue=${label}`); await moderator.getByRole('button', { name: 'Queue', exact: true }).click(); }
         await moderator.locator('.mobile-classic-tabs').getByRole('button', { name: 'Room', exact: true }).click(); await moderator.getByRole('button', { name: 'Move queue item 2 up', exact: true }).click();
         await wait(async () => (await snapshot()).queue[0]?.url.endsWith('second'), 'Moderator reorder failed');
@@ -99,7 +107,7 @@ const wait = async (predicate, message, timeout = 30000) => { const end = Date.n
         await emit(host, 'demote_to_viewer', { roomId, targetId: moderator._socketId });
         await wait(async () => !(await member(moderator)).permissions.canControlPlayback, 'demotion did not remove rights'); await sleep(500);
         assert.equal(await moderator.locator('#room-link-input').count(), 0); assert.notEqual((await snapshot()).videoState.playedSeconds, 66);
-        await emit(host, 'promote_to_moderator', { roomId, targetId: moderator._socketId }); await moderator.locator('#room-link-input').waitFor();
+        await emit(host, 'promote_to_moderator', { roomId, targetId: moderator._socketId }); await wait(async () => (await member(moderator)).role === 'Moderator', 're-promotion missing'); await openWatch(moderator); await moderator.locator('#room-link-input').waitFor();
         console.log('PASS Moderator queue add/reorder/remove/play-next/source and immediate demotion cancel a pending unauthorized seek');
 
         const file = { name: 'role-test.mp4', mimeType: 'video/mp4', buffer: readFileSync(path.resolve(__dirname, '../public/bg-video.mp4')) };

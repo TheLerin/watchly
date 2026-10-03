@@ -39,6 +39,7 @@ const ready = async url => {
  const wait=async(fn,label)=>{for(let i=0;i<100;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw new Error(label)};
  const video = page=>page.locator('.room-player-surface video');
  const values=page=>video(page).evaluate(v=>({time:v.currentTime,paused:v.paused,ready:v.readyState,duration:v.duration}));
+ const openTool = async (page, name) => { const button = page.getByRole('button', { name, exact: true }); if (await button.getAttribute('aria-expanded') !== 'true') await button.click(); };
  try {
  const invalidSession = await browser.newPage();
  await invalidSession.addInitScript(() => sessionStorage.setItem('watchTogetherSession', '{invalid'));
@@ -210,6 +211,7 @@ const ready = async url => {
  await host.getByRole('button', { name: 'Stop sharing' }).waitFor();
 
  host.on('dialog', dialog => dialog.accept('Browser regression movie'));
+ await openTool(host, 'Watch controls');
  const chooser = host.waitForEvent('filechooser');
  await host.getByTitle('Play a file that stays on each person’s device').click();
  await (await chooser).setFiles(path.resolve(__dirname, '../public/bg-video.mp4'));
@@ -225,7 +227,9 @@ const ready = async url => {
  await wait(async()=> (await values(host)).paused&&(await values(viewer)).paused,'Start anyway playback did not pause');
  console.log('PASS Start anyway and late file readiness');
  assert.equal(await host.evaluate(() => window.testScreenStream.getVideoTracks()[0].readyState), 'live');
+ await openTool(host, 'Share screen');
  await host.getByRole('button', { name: 'Stop sharing' }).click();
+ await openTool(host, 'Watch controls');
  assert.equal(await host.evaluate(() => window.testScreenStream.getVideoTracks()[0].readyState), 'ended');
  console.log('PASS screen sharing survives readiness updates and stops cleanly (synthetic capture)');
  await wait(async()=> (await values(host)).ready>=3&&(await values(viewer)).ready>=3,'local media not ready');
@@ -302,6 +306,7 @@ const ready = async url => {
  await viewer.getByText('2/2 ready',{exact:true}).waitFor();
  await host.getByText('2/2 ready',{exact:true}).waitFor();
  console.log('PASS local host disconnect, source preservation, reconnect readiness');
+ await openTool(host, 'Watch controls');
  await host.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await host.getByRole('button',{name:'Play Now',exact:true}).click();
  await wait(async()=> !(await values(viewer)).paused,'local to remote playback failed');
@@ -319,15 +324,16 @@ const ready = async url => {
  assert.equal(await host.getByRole('button', { name: 'Play Now', exact: true }).count(), 1, 'Host retains playback rights when Moderator coordinates');
  await viewer.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/bg-video.mp4');
  await viewer.getByRole('button', { name: 'Queue', exact: true }).click();
+ await openTool(viewer, 'Members and queue');
  await viewer.getByRole('button', { name: 'Play Next', exact: true }).waitFor();
  await host.getByRole('button', { name: 'Members and queue' }).click();
  assert.equal(await host.getByRole('button', { name: 'Play Next', exact: true }).count(), 1, 'Host retains queue rights when Moderator coordinates');
  await host.evaluate(async ({ roomId, targetId }) => {
   (await import('/src/socket.js')).socket.emit('demote_to_viewer', { roomId, targetId });
  }, { roomId, targetId: viewerSocketId });
- // The Host's existing watch drawer remains open while a Moderator controls.
- if (!await host.getByRole('button', { name: 'Play Now', exact: true }).count()) await host.getByRole('button', { name: 'Watch controls' }).click();
+ await openTool(host, 'Watch controls');
  await host.getByRole('button', { name: 'Play Now', exact: true }).waitFor();
+ await openTool(host, 'Members and queue');
  await host.getByRole('button', { name: 'Play Next', exact: true }).waitFor();
  assert.equal(await viewer.getByRole('button', { name: 'Play Next', exact: true }).count(), 0);
  console.log('PASS moderator control on links and demotion');
@@ -341,6 +347,7 @@ const ready = async url => {
   return queueLength === 0 && !h.paused && !v.paused && h.time < 4 && v.time < 4;
  }, 'finished video did not automatically play the queued item');
  console.log('PASS queue automatically plays the next video, including the same URL');
+ await openTool(host, 'Watch controls');
  await host.getByRole('textbox', { name: /Watch from Link/ }).fill(baseUrl + '/');
  await host.getByRole('button', { name: 'Play Now', exact: true }).click();
  await host.getByText('This source cannot be played directly in the browser.', { exact: false }).waitFor();

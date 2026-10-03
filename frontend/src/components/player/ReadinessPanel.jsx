@@ -17,15 +17,15 @@ export default function ReadinessPanel({ variant = 'classic', className = '' }) 
     return (
         <section className={`room-readiness border-t border-white/10 p-3 ${className}`} data-room-variant={variant} aria-label="Local file readiness">
             <div className="mb-2 flex justify-between text-xs font-bold text-zinc-400">
-                <span>Local file readiness</span><span>{localReadiness.readyCount}/{localReadiness.totalCount}</span>
+                <span className="min-w-0">Local file readiness</span><span className="shrink-0">{localReadiness.readyCount}/{localReadiness.totalCount}</span>
             </div>
             <div className="space-y-2">
                 {users.map(user => {
                     const state = localReadiness.statuses?.[user.userId] || { status: 'SELECT_FILE' };
                     const [label, color, Icon] = META[state.status] || META.SELECT_FILE;
                     return <div key={user.userId} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="truncate text-zinc-300">{user.nickname}</span>
-                        <span className={`flex max-w-[65%] items-center gap-1 text-right ${color}`} title={state.reason || label}>
+                        <span className="min-w-0 flex-1 truncate text-zinc-300" title={user.nickname}>{user.nickname}</span>
+                        <span className={`room-readiness-status flex min-w-0 max-w-[65%] items-center gap-1 text-right ${color}`} title={state.reason || label}>
                             <Icon size={13} className="shrink-0" />
                             <span>{label}{state.reason && state.reason !== label ? ` — ${state.reason}` : ''}</span>
                         </span>

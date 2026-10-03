@@ -8,7 +8,7 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
   await page.keyboard.press('Escape');
   await page.locator('.appearance-panel').waitFor({ state: 'hidden' });
  };
- const tab = (page, name) => page.getByRole('tab', { name, exact: true }).click();
+ const tab = async (page, name) => { const button = page.getByRole('tab', { name, exact: true }); if (await button.getAttribute('aria-selected') !== 'true') await button.click(); };
  const bounds = async page => {
   const player = await page.locator('.room-player-surface').boundingBox();
   const rail = await page.locator('.room-right-rail').boundingBox();
@@ -44,6 +44,8 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
  await host.setViewportSize({ width: 1366, height: 768 });
  const darkBounds = await bounds(host);
  await appearance(host, 'Light Glass');
+ await tab(host, 'Watch');
+ await wait(async () => host.locator('.classic-desktop-tabs [aria-selected="true"]').evaluate(el => getComputedStyle(el).color === 'rgb(39, 39, 42)'), 'selected Light Glass tab did not finish its transition');
  assert.deepEqual(await bounds(host), darkBounds, 'Light Glass must use the same layout');
  const lightColors = await host.locator('.classic-desktop-tabs').evaluate(el => ({
   background: getComputedStyle(el).backgroundColor,
@@ -52,6 +54,7 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
  assert.equal(lightColors.background, 'rgb(235, 235, 238)');
  assert.equal(lightColors.text, 'rgb(39, 39, 42)');
  await appearance(host, 'Dark Glass');
+ await tab(host, 'Watch');
  await host.getByRole('tab', { name: 'Watch', exact: true }).focus();
  await host.keyboard.press('ArrowRight');
  assert.equal(await host.getByRole('tab', { name: 'Room', exact: true }).getAttribute('aria-selected'), 'true');

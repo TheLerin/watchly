@@ -7,7 +7,7 @@ module.exports = async ({ host, browser, baseUrl, video, wait }) => {
  const settings = page => page.evaluate(() => JSON.parse(localStorage.getItem('watchly-appearance-settings')));
  const open = async () => {
   await host.mouse.move(650, 400);
-  if (!await panel.count()) await host.getByRole('button', { name: 'Room settings', exact: true }).click();
+  if (!await panel.isVisible()) await host.getByRole('button', { name: 'Room settings', exact: true }).click();
  };
  const close = async () => {
   await host.getByRole('button', { name: 'Room settings', exact: true }).click();

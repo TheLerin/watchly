@@ -85,8 +85,8 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
             data-room-variant={variant}
         >
             <section className={compact ? '' : 'flex min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/70'}>
-                <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
-                    <div>
+                <div className="room-members-header flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
+                    <div className="room-members-heading">
                         <h3 className="text-sm font-bold text-white">Members</h3>
                         <p className="text-xs text-zinc-600">{users.length} online</p>
                     </div>
@@ -102,14 +102,14 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
 
                         return (
                             <div key={user.id} className="group relative">
-                                <div className="flex items-center gap-2 rounded-2xl border border-transparent px-2.5 py-2 transition hover:border-white/10 hover:bg-white/[0.04]">
+                                <div className="room-member-row flex items-center gap-2 rounded-2xl border border-transparent px-2.5 py-2 transition hover:border-white/10 hover:bg-white/[0.04]">
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-bold text-black">
                                         <Avatar name={user.nickname} url={user.avatarUrl} size={32} />
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex min-w-0 items-center gap-1.5">
-                                            <span className="truncate text-sm font-semibold text-white">{user.nickname}</span>
-                                            {isMe && <span className="rounded-full border border-white/10 px-1.5 py-0.5 text-[9px] font-bold text-zinc-500">You</span>}
+                                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white" title={user.nickname}>{user.nickname}</span>
+                                            {isMe && <span className="shrink-0 rounded-full border border-white/10 px-1.5 py-0.5 text-[9px] font-bold text-zinc-500">You</span>}
                                         </div>
                                         {user.username && <span className="block truncate text-[10px] text-zinc-500">@{user.username}</span>}
                                         <span className={`mt-1 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${role.className}`}>
@@ -129,7 +129,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                                 e.stopPropagation();
                                                 setOpenMenuId(openMenuId === user.id ? null : user.id);
                                             }}
-                                            className="flex h-8 w-8 items-center justify-center rounded-xl text-zinc-500 opacity-0 transition hover:bg-white/[0.06] hover:text-white group-hover:opacity-100 focus:opacity-100"
+                                            className="room-member-menu-button flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-zinc-500 opacity-0 transition hover:bg-white/[0.06] hover:text-white group-hover:opacity-100 focus:opacity-100"
                                         >
                                             <MoreVertical size={14} />
                                         </button>
@@ -143,7 +143,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                             animate={{ opacity: 1, scale: 1, y: 0 }}
                                             exit={{ opacity: 0, scale: 0.96, y: -4 }}
                                             transition={{ duration: 0.14 }}
-                                            className="absolute right-8 top-9 z-50 w-48 rounded-2xl border border-white/10 bg-black p-1.5 shadow-2xl shadow-black/70"
+                                            className="room-member-menu absolute right-8 top-9 z-50 w-48 rounded-2xl border border-white/10 bg-black p-1.5 shadow-2xl shadow-black/70"
                                         >
                                             {permissions.canAssignRoles && user.role === 'Viewer' && (
                                                 <ActionItem icon={<UserPlus size={14} />} label="Promote to mod" onClick={() => { promoteUser(user.id); setOpenMenuId(null); }} />
@@ -211,7 +211,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                             >
                                 <span className="w-5 shrink-0 font-mono text-xs text-zinc-600">{idx + 1}</span>
                                 <PlayCircle size={14} className="shrink-0 text-zinc-500" />
-                                <span className="flex-1 truncate text-xs font-medium text-zinc-400" title={item.label}>{item.label}</span>
+                                <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-400" title={item.label}>{item.label}</span>
                                 {canManageQueue && (
                                     <div className="flex shrink-0 items-center gap-1">
                                         <button type="button" aria-label={`Move queue item ${idx + 1} up`} disabled={!roomActionsEnabled || idx === 0} onClick={() => reorderQueue(item.id, 'up')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><ArrowUp size={12} /></button>
