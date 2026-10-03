@@ -6,6 +6,7 @@ const fail = message => {
 const split = value => (value || '').split(',').map(item => item.trim()).filter(Boolean);
 const origins = split(process.env.CORS_ORIGIN);
 const turnUrls = split(process.env.TURN_URLS);
+const { livekitConfig } = require('../livekitVoice');
 
 if (process.env.NODE_ENV !== 'production') {
     fail('NODE_ENV must be production.');
@@ -28,12 +29,11 @@ if (!origins.length) {
 
 if (origins.includes('*')) fail('CORS_ORIGIN cannot be * in production.');
 
-if (!process.env.TURN_SHARED_SECRET) {
-    fail('TURN_SHARED_SECRET is required for cross-network voice and Screen Share Beta.');
-}
-if (!turnUrls.length) {
-    fail('TURN_URLS must contain at least one TURN or TURNS URL.');
-}
+if (!livekitConfig()) fail('LIVEKIT_URL (wss://), LIVEKIT_API_KEY and LIVEKIT_API_SECRET are required for LiveKit voice.');
+// coturn remains optional for the retained legacy voice and Screen Share Beta;
+// LiveKit Cloud supplies voice transport/relay independently of these settings.
+if (turnUrls.length && !process.env.TURN_SHARED_SECRET) fail('TURN_SHARED_SECRET is required when TURN_URLS is configured.');
+if (process.env.TURN_SHARED_SECRET && !turnUrls.length) fail('TURN_URLS is required when TURN_SHARED_SECRET is configured.');
 for (const url of turnUrls) {
     if (!/^turns?:[^\s,]+$/i.test(url)) fail(`Invalid TURN URL: ${url}`);
 }

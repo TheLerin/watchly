@@ -16,6 +16,7 @@
     "axios": "^1.14.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "livekit-server-sdk": "^2.19.1",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {

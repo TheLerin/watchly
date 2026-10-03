@@ -5,6 +5,8 @@ const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
 const { PROTOCOL_VERSION } = require('./validators');
+const { createAccountService } = require('./accounts');
+const { registerLivekitVoice } = require('./livekitVoice');
 
 const splitEnvList = (value) => (value || '')
     .split(',')
@@ -33,6 +35,8 @@ const io = new Server(server, {
 // rooms[roomId] = { users: [], videoState: {...}, queue: [], kickedUserIds: Set }
 // User supplied room codes must never become object prototype keys.
 const rooms = new Map();
+const accounts = createAccountService();
+registerLivekitVoice({ app, io, rooms, accounts });
 
 const PUBLIC_STUN_URLS = [
     'stun:stun.l.google.com:19302',
@@ -365,7 +369,7 @@ app.use((err, req, res, next) => {
     }
 });
 
-require('./realtime')({ io, rooms, buildIceConfig });
+require('./realtime')({ io, rooms, buildIceConfig, accounts });
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
