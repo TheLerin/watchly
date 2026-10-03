@@ -3,6 +3,7 @@ import { PROTOCOL_VERSION } from './protocol.js';
 export const terminalRoomError = error => Boolean(error && error.retryable !== true && [
     'ROOM_NOT_FOUND', 'MEMBER_BANNED', 'SESSION_INVALID', 'ROOM_FULL', 'ROOM_LOCKED',
     'ROOM_ENDED', 'FORBIDDEN', 'PROTOCOL_MISMATCH', 'INVALID_ROOM_CODE', 'INVALID_NICKNAME', 'ALREADY_IN_ROOM', 'SESSION_REPLACED',
+    'ACCOUNT_SESSION_MISMATCH', 'ACCOUNT_IN_ROOM', 'PROFILE_REQUIRED',
 ].includes(error.code));
 
 export function readRoomSession(storage) {

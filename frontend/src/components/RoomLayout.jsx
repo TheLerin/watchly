@@ -25,6 +25,7 @@ import TheaterIconButton from './TheaterIconButton';
 import ReadinessPanel from './player/ReadinessPanel';
 import ScreenShareAdapter from './player/ScreenShareAdapter';
 import { useRoom } from '../context/RoomContext';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { architecturalLight } from '../utils/appearanceSettings';
 import AppearancePanel from './AppearancePanel';
@@ -297,6 +298,7 @@ const RoomTabs = ({ activeTab, onChange, desktop = false }) => (
 );
 
 const RoomLayout = () => {
+    const { user: accountUser, profile: accountProfile, isProfileLoading } = useAuth();
     const { roomId } = useParams();
     const navigate = useNavigate();
     const {
@@ -320,6 +322,8 @@ const RoomLayout = () => {
     const [activeRightTool, setActiveRightTool] = useState(null);
     const [mobileTab, setMobileTab] = useState('watch');
     const [joinNickname, setJoinNickname] = useState('');
+    const effectiveJoinNickname = accountProfile?.display_name || joinNickname;
+    const needsProfile = Boolean(accountUser && !accountProfile && !isProfileLoading);
     const [joinError, setJoinError] = useState('');
     const [joinErrorCode, setJoinErrorCode] = useState('');
     const [isJoining, setIsJoining] = useState(false);
@@ -360,10 +364,11 @@ const RoomLayout = () => {
                 className={`${panelClass} relative z-10 w-full max-w-md p-7`}
                 onSubmit={async event => {
                     event.preventDefault();
+                    if (needsProfile) { navigate(`/setup-profile?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`); return; }
                     setJoinError('');
                     setJoinErrorCode('');
                     setIsJoining(true);
-                    try { await joinRoom(roomId.toUpperCase(), joinNickname.trim()); }
+                    try { await joinRoom(roomId.toUpperCase(), effectiveJoinNickname.trim()); }
                     catch (error) { setJoinError(error.message); setJoinErrorCode(error.code || ''); }
                     finally { setIsJoining(false); }
                 }}
@@ -376,23 +381,26 @@ const RoomLayout = () => {
                     id="deep-link-nickname"
                     autoFocus
                     maxLength={24}
-                    value={joinNickname}
+                    value={effectiveJoinNickname}
+                    readOnly={Boolean(accountProfile)}
                     onChange={event => setJoinNickname(event.target.value)}
                     className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none focus:border-white/30"
                     placeholder="Your nickname"
                 />
                 {joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{joinError}</p>}
                 {connectionError && !joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{connectionError}</p>}
+                {needsProfile && <button type="button" className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white" onClick={() => navigate(`/setup-profile?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`)}>Finish profile to join</button>}
+                {!accountUser && connectionError && <button type="button" className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white" onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`)}>Sign in to your account</button>}
                 {joinErrorCode === 'ROOM_NOT_FOUND' && (
                     <button
                         type="button"
-                        disabled={!joinNickname.trim() || isJoining}
+                        disabled={!effectiveJoinNickname.trim() || isJoining}
                         onClick={async () => {
                             setJoinError('');
                             setJoinErrorCode('');
                             setIsJoining(true);
                             try {
-                                const created = await createRoom(joinNickname.trim());
+                                const created = await createRoom(effectiveJoinNickname.trim());
                                 navigate(`/room/${created.roomId}`, { replace: true });
                             } catch (error) {
                                 setJoinError(error.message);
@@ -406,7 +414,7 @@ const RoomLayout = () => {
                         Create a new temporary room
                     </button>
                 )}
-                <button disabled={!joinNickname.trim() || isJoining} className="mt-5 w-full rounded-xl bg-white px-4 py-3 font-bold text-black disabled:opacity-40">
+                <button disabled={!effectiveJoinNickname.trim() || isJoining || needsProfile || isProfileLoading} className="mt-5 w-full rounded-xl bg-white px-4 py-3 font-bold text-black disabled:opacity-40">
                     {isJoining ? 'Starting room server…' : 'Join room'}
                 </button>
                 <button type="button" onClick={() => navigate('/')} className="mt-3 w-full text-sm text-zinc-500 hover:text-white">Back home</button>

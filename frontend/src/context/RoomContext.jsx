@@ -19,6 +19,8 @@ import { createRoomRecovery, readRoomSession, terminalRoomError } from '../utils
 import { acceptsVideoState, mergeChatHistory } from '../utils/roomState';
 import { useLocation } from 'react-router-dom';
 import { actionPermission, getRoomPermissions } from '../utils/roomPermissions';
+import { useAuth } from './AuthContext';
+import { rememberRoom } from '../utils/recentRooms';
 
 const RoomContext = createContext();
 export const useRoom = () => useContext(RoomContext);
@@ -48,6 +50,7 @@ const emptyReadiness = {
 };
 
 export const RoomProvider = ({ children }) => {
+    const { session: accountSession, profile: accountProfile, isAuthLoading } = useAuth();
     const location = useLocation();
     const [isRestoringSession, setIsRestoringSession] = useState(true);
     const [isConnected, setIsConnected] = useState(socket.connected);
@@ -221,6 +224,7 @@ export const RoomProvider = ({ children }) => {
                 sessionRef.current = session;
                 try { sessionStorage.setItem('watchTogetherSession', JSON.stringify(session)); } catch { /* retained in memory */ }
                 setRoomId(joinedRoomId);
+                rememberRoom(localStorage, joinedRoomId);
             }
             setCurrentUser(user);
             currentUserRef.current = user;
@@ -475,6 +479,7 @@ export const RoomProvider = ({ children }) => {
     }, [resetRoom, updateClockOffset, roomRequester]);
 
     useEffect(() => {
+        if (isAuthLoading) return undefined;
         const session = readRoomSession(sessionStorage);
         if (!session || window.location.pathname !== `/room/${session.roomId}`) {
             sessionStorage.removeItem('watchTogetherSession');
@@ -483,11 +488,37 @@ export const RoomProvider = ({ children }) => {
         }
         sessionRef.current = session;
         recoveryRef.current?.resume();
+    }, [isAuthLoading]);
+
+    const accountSyncQueue = useRef(Promise.resolve());
+    const latestAccountToken = useRef(null);
+    latestAccountToken.current = accountSession?.access_token;
+    const syncAccount = useCallback(accessToken => {
+        const operation = accountSyncQueue.current.catch(() => {}).then(() => new Promise((resolve, reject) => {
+            if (accessToken !== latestAccountToken.current) return reject(new Error('Your account session changed. Please retry.'));
+            if (!socket.connected) return reject(new Error('Reconnect before using your account.'));
+            socket.timeout(10000).emit('auth:update', { accessToken }, (error, response) => {
+                if (error || !response?.ok) reject(new Error(response?.error?.message || 'Your account could not reconnect. Please retry sign-in.'));
+                else resolve(response);
+            });
+        }));
+        accountSyncQueue.current = operation; return operation;
     }, []);
 
-    const requestRoom = useCallback((event, payload) => roomRequester.request(event, {
-        ...payload, protocolVersion: PROTOCOL_VERSION,
-    }), [roomRequester]);
+    useEffect(() => {
+        if (!accountSession?.access_token) return;
+        let active = true;
+        const authenticate = () => { void syncAccount(accountSession.access_token).catch(error => { if (active) toast.error(error.message, { id: 'watchly-account' }); }); };
+        if (socket.connected) authenticate();
+        else if (!isAuthLoading && accountProfile) socket.connect();
+        socket.on('connect', authenticate);
+        return () => { active = false; socket.off('connect', authenticate); };
+    }, [accountSession?.access_token, accountProfile, isAuthLoading, syncAccount]);
+
+    const requestRoom = useCallback(async (event, payload) => {
+        if (socket.connected && accountSession?.access_token) await syncAccount(accountSession.access_token);
+        return roomRequester.request(event, { ...payload, protocolVersion: PROTOCOL_VERSION });
+    }, [roomRequester, accountSession?.access_token, syncAccount]);
 
     const joinRoom = useCallback(async (id, nickname) => {
         let resume = {};
@@ -495,10 +526,10 @@ export const RoomProvider = ({ children }) => {
             const saved = JSON.parse(sessionStorage.getItem('watchTogetherSession') || '{}');
             if (saved.roomId === id) resume = { resumeToken: saved.resumeToken };
         } catch { /* start a new membership */ }
-        return requestRoom('room:join', { roomId: id, nickname, ...resume });
-    }, [requestRoom]);
+        return requestRoom('room:join', { roomId: id, nickname: accountProfile?.display_name || nickname, ...resume });
+    }, [requestRoom, accountProfile]);
 
-    const createRoom = useCallback(nickname => requestRoom('room:create', { nickname }), [requestRoom]);
+    const createRoom = useCallback(nickname => requestRoom('room:create', { nickname: accountProfile?.display_name || nickname }), [requestRoom, accountProfile]);
 
     const leaveRoom = useCallback(() => {
         recoveryRef.current?.stop(); sessionRef.current = null;

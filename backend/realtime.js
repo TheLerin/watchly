@@ -3,6 +3,7 @@ const { playlistSource, currentPlaylistItem, resolvePlaylist, movePlaylist } = r
 const { canonicalPosition, createPlayback, reduceCommand } = require('./playback/canonicalState');
 const { PROTOCOL_VERSION, normalizedText, validRoomCode, validMediaId, validCommandId, finiteNonNegative } = require('./validators');
 const { ROLES, roomPermissions, canModerateMember } = require('./permissions');
+const { createAccountService, createFriendPresence } = require('./accounts');
 const MAX_ROOM_USERS = 50;
 const MAX_VOICE_PARTICIPANTS = 6;
 const MAX_SIGNAL_BYTES = 64 * 1024;
@@ -131,7 +132,18 @@ const validCandidate = candidate => (
     ))
 );
 
-module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => ({ iceServers: [] }) }) {
+module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => ({ iceServers: [] }), accounts = createAccountService() }) {
+    const presence = createFriendPresence({ io, accounts });
+    io.use(async (socket, next) => {
+        try {
+            const token = socket.handshake.auth?.accessToken;
+            socket.data.account = token ? await accounts.verify(token) : null;
+            next();
+        } catch (error) {
+            const denied = new Error('Your account could not connect. Sign in again or retry.');
+            denied.data = { code: error.code || 'ACCOUNT_UNAVAILABLE' }; next(denied);
+        }
+    });
     const messageRateLimitMap = new Map();
     const signalRateLimitMap = new Map();
     const playbackRateLimitMap = new Map();
@@ -174,6 +186,10 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         id: user.id,
         userId: user.userId,
         nickname: user.nickname,
+        accountId: user.accountId || null,
+        username: user.authenticated ? user.username : null,
+        avatarUrl: user.authenticated ? user.avatarUrl : null,
+        isAuthenticated: Boolean(user.authenticated),
         role: user.role,
         permissions: roomPermissions(user, room),
         connected: user.connected,
@@ -312,6 +328,68 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
     };
 
     io.on('connection', socket => {
+        let authGeneration = 0, expiryTimer, socialRefreshTimer, lastSocialRefresh = 0, lastInvite = 0;
+        const expireAccount = () => {
+            socket.data.account = null; socket.data.watchFriends = false;
+            const room = rooms.get(socket.data.roomId), member = getUserBySocket(room, socket.id);
+            if (member) { member.authenticated = false; publishControl(room.id, room); }
+            socket.emit('account:expired'); presence.changed();
+        };
+        const armExpiry = () => {
+            clearTimeout(expiryTimer);
+            if (socket.data.account) { expiryTimer = setTimeout(expireAccount, Math.min(2147483647, Math.max(0, socket.data.account.expiresAt - Date.now()))); expiryTimer.unref?.(); }
+        };
+        const associateAccount = account => {
+            const room = rooms.get(socket.data.roomId), member = getUserBySocket(room, socket.id);
+            if (!member) return;
+            if (member.accountId && member.accountId !== account.id) throw Object.assign(new Error('Leave this room before switching accounts.'), { code: 'ACCOUNT_SESSION_MISMATCH' });
+            if (room.users.some(other => other !== member && other.accountId === account.id)) throw Object.assign(new Error('This account already has a membership in this room.'), { code: 'ACCOUNT_IN_ROOM' });
+            if (!account.profile) return; // Profile setup can finish inline without replacing the guest.
+            member.accountId = account.id; member.authenticated = true;
+            member.username = account.profile.username; member.avatarUrl = account.profile.avatar_url;
+            member.nickname = account.profile.display_name;
+            publishControl(room.id, room, { reason: 'ACCOUNT_IDENTITY' });
+        };
+        armExpiry(); presence.changed();
+        socket.on('auth:clear', () => { authGeneration++; clearTimeout(expiryTimer); expireAccount(); });
+        socket.on('auth:update', async ({ accessToken } = {}, callback) => {
+            const generation = ++authGeneration;
+            try {
+                const account = await accounts.verify(accessToken);
+                if (!socket.connected || generation !== authGeneration) return callback?.({ ok: false, error: { code: 'AUTH_REPLACED', message: 'Your account changed. Please retry.' } });
+                associateAccount(account); socket.data.account = account; armExpiry(); presence.changed();
+                socket.emit('account:ready');
+                callback?.({ ok: true, accountId: account.id });
+            } catch (error) { callback?.({ ok: false, error: { code: error.code || 'ACCOUNT_UNAVAILABLE', message: error.message || 'Account features are unavailable.' } }); }
+        });
+        const refreshSocialPresence = () => {
+            if (!socket.data.account || socialRefreshTimer) return;
+            const delay = Math.max(0, 2000 - (Date.now() - lastSocialRefresh));
+            socialRefreshTimer = setTimeout(() => {
+                socialRefreshTimer = null;
+                if (socket.connected && socket.data.account) { lastSocialRefresh = Date.now(); presence.changed(); }
+            }, delay);
+            socialRefreshTimer.unref?.();
+        };
+        socket.on('social:watch', async (_payload, callback) => {
+            if (!socket.data.account) return callback?.({ ok: false });
+            // Subscription intent must survive Strict Mode/remounts even when
+            // the database lookup is rate limited after a recent unwatch.
+            socket.data.watchFriends = true;
+            if (Date.now() - lastSocialRefresh < 2000) { refreshSocialPresence(); return callback?.({ ok: true }); }
+            lastSocialRefresh = Date.now();
+            try { await presence.send(socket); callback?.({ ok: true }); } catch { callback?.({ ok: false }); }
+        });
+        socket.on('social:unwatch', () => { socket.data.watchFriends = false; });
+        socket.on('social:refresh', refreshSocialPresence);
+        socket.on('social:invite', async ({ targetId } = {}, callback) => {
+            const room = rooms.get(socket.data.roomId), member = getUserBySocket(room, socket.id), account = socket.data.account;
+            if (!account || account.expiresAt <= Date.now() || !member || !roomPermissions(member, room).canChangeSource) return callback?.({ ok: false, error: { message: 'Only the Host and Moderators can invite friends from this room.' } });
+            if (Date.now() - lastInvite < 500) return callback?.({ ok: false, error: { message: 'Please wait before inviting again.' } });
+            lastInvite = Date.now();
+            try { const inviteId = await accounts.invite(account, targetId, room.id); callback?.({ ok: true, inviteId }); }
+            catch { callback?.({ ok: false, error: { message: 'This friend could not be invited. Check your connection or friendship and retry.' } }); }
+        });
         console.log('A user connected:', socket.id);
 
         socket.use((packet, next) => {
@@ -368,7 +446,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 return rejectRoom('PROTOCOL_MISMATCH', 'Watchly was updated. Refresh this page to continue.');
             }
             let roomId = creating ? newRoomCode() : String(payload.roomId || '').toUpperCase();
-            let nickname = cleanText(payload.nickname, 24);
+            const account = socket.data.account;
+            let nickname = cleanText(account?.profile?.display_name || payload.nickname, 24);
             if (!nickname) {
                 return rejectRoom('INVALID_NICKNAME', 'Enter a nickname (1–24 characters).');
             }
@@ -393,6 +472,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             let user = suppliedTokenHash
                 ? room.users.find(item => item.resumeTokenHash === suppliedTokenHash)
                 : null;
+            if (user?.accountId && user.accountId !== account?.id) return rejectRoom('ACCOUNT_SESSION_MISMATCH', 'Sign in to the account that owns this room membership.');
             if (!creating && (payload.resumeToken !== undefined || payload.memberId !== undefined) &&
                 (!user || (payload.memberId && payload.memberId !== user.userId))) {
                 return rejectRoom('SESSION_INVALID', 'This room session is no longer valid. Join again to continue.');
@@ -400,14 +480,29 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (user && room.kickedUserIds.has(user.userId)) {
                 return rejectRoom('MEMBER_BANNED', 'This membership was removed from the room.');
             }
-            const resumeToken = user ? payload.resumeToken : crypto.randomBytes(32).toString('base64url');
+            // Verified accounts can recover their single logical membership on
+            // another device. The older socket is fenced by the existing code.
+            if (!user && account && !creating) user = room.users.find(item => item.accountId === account.id) || null;
+            if (user && room.kickedUserIds.has(user.userId)) return rejectRoom('MEMBER_BANNED', 'This membership was removed from the room.');
+            // A guest resume token must not bind a second member to an account
+            // that already owns another member. Reject before mutating sockets.
+            if (account && room.users.some(other => other !== user && other.accountId === account.id)) {
+                return rejectRoom('ACCOUNT_IN_ROOM', 'This account already has a membership in this room.');
+            }
+            if (account && !account.profile && !user) return rejectRoom('PROFILE_REQUIRED', 'Finish your profile before joining with your account.');
+            const resumeToken = user && suppliedTokenHash ? payload.resumeToken : crypto.randomBytes(32).toString('base64url');
+            if (user && !suppliedTokenHash) user.resumeTokenHash = tokenHash(resumeToken);
             if (!user) {
                 if (connectedBeforeJoin.length >= MAX_ROOM_USERS) {
                     return rejectRoom('ROOM_FULL', 'Room is full (max 50 users).');
                 }
                 user = {
                     id: socket.id,
-                    userId: crypto.randomUUID(),
+                    userId: account?.id || crypto.randomUUID(),
+                    accountId: account?.id || null,
+                    authenticated: Boolean(account),
+                    username: account?.profile?.username || null,
+                    avatarUrl: account?.profile?.avatar_url || null,
                     nickname,
                     role: creating ? 'Host' : 'Viewer',
                     connected: true,
@@ -454,6 +549,13 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             socket.userId = user.userId;
             socket.data.roomId = roomId;
             socket.data.memberId = user.userId;
+            if (account?.profile) {
+                // Identity conflicts were checked before room mutation above.
+                user.accountId = account.id; user.authenticated = true;
+                user.username = account.profile.username; user.avatarUrl = account.profile.avatar_url;
+                user.nickname = account.profile.display_name;
+            }
+            presence.changed();
 
             const joined = {
                 ok: true,
@@ -1248,8 +1350,10 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             socket.userId = null;
             socket.data.roomId = null;
             socket.data.memberId = null;
+            presence.changed();
         });
         socket.on('disconnect', () => {
+            authGeneration++; clearTimeout(expiryTimer); clearTimeout(socialRefreshTimer); presence.changed();
             handleDisconnect();
             messageRateLimitMap.delete(socket.data.memberId || socket.id);
             telemetryRateLimitMap.delete(socket.data.memberId);

@@ -46,6 +46,16 @@ test('long outages keep identity and capped retry notifications; permanent error
     f.recovery.dispose();
 });
 
+test('account ownership and profile setup errors stop room retries so auth controls can be shown', () => {
+    for (const code of ['ACCOUNT_SESSION_MISMATCH', 'ACCOUNT_IN_ROOM', 'PROFILE_REQUIRED']) {
+        const f = fixture(); f.connected();
+        f.sent.at(-1).ack(null, { ok: false, error: { code, message: 'Sign in or finish your profile.', retryable: false } });
+        assert.equal(f.phases.at(-1), 'failed', code); assert.equal(f.failures.length, 1, code);
+        f.advance(30000); f.recovery.wake(true); f.connected();
+        assert.equal(f.sent.length, 1, code); f.recovery.dispose();
+    }
+});
+
 test('old ACKs and completion callbacks cannot restore stale state after a flap or intentional leave', () => {
     const f = fixture(); f.connected(); const old = f.sent.at(-1);
     f.disconnected(); f.connected(); old.ack(null, { ok: true, snapshot: { old: true } });

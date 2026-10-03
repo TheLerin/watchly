@@ -4,9 +4,15 @@ import { Toaster } from 'react-hot-toast';
 import { RoomProvider, useRoom } from './context/RoomContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { loadRoomLayout } from './roomRoute';
+import { AuthProvider } from './context/AuthContext';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const RoomLayout = lazy(loadRoomLayout);
+const AuthPage = lazy(() => import('./components/account/AuthPages'));
+const AuthCallback = lazy(() => import('./components/account/AuthPages').then(module => ({ default: module.AuthCallback })));
+const ProfilePage = lazy(() => import('./components/account/AuthPages').then(module => ({ default: module.ProfilePage })));
+const MyWatchly = lazy(() => import('./components/account/MyWatchly'));
+const LegalPage = lazy(() => import('./components/account/LegalPage'));
 
 // BUG-25: Error boundary catches any render-time errors and shows a recovery UI
 class ErrorBoundary extends React.Component {
@@ -82,11 +88,19 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <Router>
+          <AuthProvider>
           <RoomProvider>
             <KickHandler />
             <ProtocolGuard><Suspense fallback={<div className="min-h-screen bg-black" />}><Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/room/:roomId" element={<RoomLayout />} />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/setup-profile" element={<ProfilePage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/my-watchly" element={<MyWatchly />} />
+              <Route path="/terms" element={<LegalPage kind="terms" />} />
+              <Route path="/privacy" element={<LegalPage kind="privacy" />} />
             </Routes></Suspense></ProtocolGuard>
             {/* ISSUE-26: Toaster must be inside the tree so toasts render */}
             <Toaster
@@ -112,6 +126,7 @@ function App() {
               }}
             />
           </RoomProvider>
+          </AuthProvider>
         </Router>
       </ThemeProvider>
     </ErrorBoundary>

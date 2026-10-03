@@ -2,6 +2,8 @@
 
 Watchly uses a Vercel static frontend and a Render Socket.IO backend. Rooms are intentionally temporary and disappear when the backend restarts or deploys. Local File Sync never uploads movie bytes; each browser plays its own selected file.
 
+For optional Supabase accounts, profiles, friends and My Watchly, follow [the account implementation and setup guide](docs/accounts-and-my-watchly.md). It includes the saved database migration, Google/email configuration, backend-only invite secret and verification limits. Guest rooms remain available before account configuration.
+
 ## 1. Deploy the backend to Render
 
 Create a Render Blueprint from `render.yaml`. Configure these secret/environment values on the service:

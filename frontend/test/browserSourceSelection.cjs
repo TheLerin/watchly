@@ -44,6 +44,7 @@ const wait = async (predicate, message, timeout = 30000) => { const end = Date.n
                 window.promptCalls = (window.promptCalls || 0) + 1;
                 if (window.promptMode === 'unsupported') throw new Error('prompt() is not supported.');
                 if (window.promptMode === 'focus') window.dispatchEvent(new Event('focus'));
+                if (window.promptMode === 'resync') window.dispatchEvent(new Event('online'));
                 return 'Private movie';
             };
         });
@@ -95,9 +96,12 @@ const wait = async (predicate, message, timeout = 30000) => { const end = Date.n
         console.log('PASS room resync completes without a private file while same-file readiness remains false');
 
         await emit(host, 'promote_to_moderator', { roomId, targetId }); await moderator.locator('#room-link-input').waitFor();
-        await moderator.evaluate(() => { window.snapshotDelay = 1500; window.promptMode = 'focus'; });
+        // This case must actually wait for a snapshot. A second focus within the
+        // recovery wake throttle can be ignored, so force its recovery path.
+        await moderator.evaluate(() => { window.snapshotDelay = 1500; window.promptMode = 'resync'; });
         await choose(moderator, file);
         await wait(async () => await moderator.evaluate(() => window.promptCalls === 1), 'Moderator file was not inspected');
+        assert.equal(await moderator.locator('.room-ping-button').getAttribute('data-connection-phase'), 'resyncing');
         await emit(host, 'demote_to_viewer', { roomId, targetId });
         await moderator.getByText('Only the Host and Moderators can choose the shared source.', { exact: true }).first().waitFor();
         assert.equal(await moderator.evaluate(() => window.selectionWrites.length), 0, 'demoted member declared a source');

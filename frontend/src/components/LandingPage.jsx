@@ -22,6 +22,8 @@ import useVideoAmbientLight from '../hooks/useVideoAmbientLight';
 import { BackgroundLayers } from './BackgroundLayers';
 import { loadRoomLayout } from '../roomRoute';
 import './cinema-hero.css';
+import AccountActions from './account/AccountActions';
+import { useAuth } from '../context/AuthContext';
 
 export { BackgroundLayers };
 
@@ -124,7 +126,7 @@ const panelVariants = {
 
 const isFocusable = element => element && !element.hasAttribute('disabled') && element.tabIndex !== -1;
 
-const LandingNavbar = ({ onBrand, onCreate, onJoin, onNavigate, storyActive }) => (
+const LandingNavbar = ({ onBrand, onCreate, onNavigate, storyActive }) => (
   <header className={`landing-navbar ${storyActive ? 'is-story-active' : ''}`}>
     <button type="button" className="landing-brand" onClick={onBrand} aria-label="Watchly home">
       <img src="/logo.png" alt="" />
@@ -139,8 +141,7 @@ const LandingNavbar = ({ onBrand, onCreate, onJoin, onNavigate, storyActive }) =
     </nav>
 
     <div className="landing-nav-actions">
-      <button type="button" className="landing-nav-join" onClick={onJoin}>Join room</button>
-      <button type="button" className="landing-nav-create" onClick={onCreate}>Create room</button>
+      <AccountActions onCreate={onCreate} />
     </div>
   </header>
 );
@@ -321,7 +322,7 @@ const CinematicExperience = ({
   );
 };
 
-const RoomLauncher = ({
+export const RoomLauncher = ({
   activeTab,
   canSubmit,
   handleCreate,
@@ -419,6 +420,7 @@ const RoomLauncher = ({
 };
 
 const LandingPage = () => {
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const { createRoom, joinRoom, currentUser, roomId } = useRoom();
   const rootRef = useRef(null);
@@ -426,6 +428,7 @@ const LandingPage = () => {
   const [joinCode, setJoinCode] = useState('');
   const [activeTab, setActiveTab] = useState('create');
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const effectiveNickname = profile?.display_name || nickname;
 
   useEffect(() => {
     if (currentUser && roomId) navigate(`/room/${roomId}`);
@@ -436,13 +439,13 @@ const LandingPage = () => {
   }, []);
 
   const handleCreate = async () => {
-    if (!nickname.trim()) return;
-    try { await createRoom(nickname.trim()); } catch (error) { toast.error(error.message); }
+    if (!effectiveNickname.trim()) return;
+    try { await createRoom(effectiveNickname.trim()); } catch (error) { toast.error(error.message); }
   };
 
   const handleJoin = async () => {
-    if (!nickname.trim() || !joinCode.trim()) return;
-    try { await joinRoom(joinCode.trim().toUpperCase(), nickname.trim()); } catch (error) { toast.error(error.message); }
+    if (!effectiveNickname.trim() || !joinCode.trim()) return;
+    try { await joinRoom(joinCode.trim().toUpperCase(), effectiveNickname.trim()); } catch (error) { toast.error(error.message); }
   };
 
   const handleKey = event => {
@@ -457,7 +460,7 @@ const LandingPage = () => {
   }, []);
   const closeLauncher = useCallback(() => setLauncherOpen(false), []);
 
-  const canSubmit = Boolean(nickname.trim() && (activeTab === 'create' || joinCode.trim()));
+  const canSubmit = Boolean(effectiveNickname.trim() && (activeTab === 'create' || joinCode.trim()));
 
   return (
     <div ref={rootRef} className="watchly-landing">
@@ -474,7 +477,7 @@ const LandingPage = () => {
         handleJoin={handleJoin}
         handleKey={handleKey}
         joinCode={joinCode}
-        nickname={nickname}
+        nickname={effectiveNickname}
         onClose={closeLauncher}
         open={launcherOpen}
         setActiveTab={setActiveTab}

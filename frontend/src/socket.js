@@ -12,3 +12,8 @@ export const socket = io(SOCKET_URL, {
     reconnectionDelayMax: 8000,
     timeout: 10000,
 });
+
+let accessToken = null;
+// Socket.IO reads this on every reconnect, rather than retaining the first JWT.
+socket.auth = callback => callback(accessToken ? { accessToken } : {});
+export const setSocketAccessToken = value => { accessToken = value || null; };

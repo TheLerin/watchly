@@ -15,4 +15,5 @@ backend/gdrive-trace.js
 backend/test-*.js
 *.zip
 *visual-verification*.png
+frontend/test/artifacts/
 

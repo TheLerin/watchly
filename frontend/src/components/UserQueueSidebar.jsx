@@ -19,6 +19,8 @@ import {
 import { useRoom } from '../context/RoomContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { canManageMember } from '../utils/roomPermissions';
+import RoomAccountActions from './account/InviteFriends';
+import Avatar from './account/Avatar';
 
 const MotionDiv = motion.div;
 
@@ -88,6 +90,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                         <h3 className="text-sm font-bold text-white">Members</h3>
                         <p className="text-xs text-zinc-600">{users.length} online</p>
                     </div>
+                    <RoomAccountActions />
                 </div>
 
                 <div className="space-y-1 overflow-y-auto p-2">
@@ -101,13 +104,14 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                             <div key={user.id} className="group relative">
                                 <div className="flex items-center gap-2 rounded-2xl border border-transparent px-2.5 py-2 transition hover:border-white/10 hover:bg-white/[0.04]">
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-bold text-black">
-                                        {user.nickname?.[0]?.toUpperCase() || '?'}
+                                        <Avatar name={user.nickname} url={user.avatarUrl} size={32} />
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex min-w-0 items-center gap-1.5">
                                             <span className="truncate text-sm font-semibold text-white">{user.nickname}</span>
                                             {isMe && <span className="rounded-full border border-white/10 px-1.5 py-0.5 text-[9px] font-bold text-zinc-500">You</span>}
                                         </div>
+                                        {user.username && <span className="block truncate text-[10px] text-zinc-500">@{user.username}</span>}
                                         <span className={`mt-1 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${role.className}`}>
                                             {role.icon}
                                             {role.label}

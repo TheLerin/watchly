@@ -13,6 +13,12 @@ services:
         value: production
       - key: CORS_ORIGIN
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: TURN_URLS
         sync: false
       - key: TURN_SHARED_SECRET
