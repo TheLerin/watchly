@@ -52,3 +52,13 @@
     border: 1px solid rgb(255 255 255 / 11%); border-radius: 17px; background: var(--theater-glass); backdrop-filter: blur(18px);
 }
 .room-shell[data-room-appearance="cinematic"] .room-right-rail[data-open-tool="video"] > .room-video-group { display: block; }
+
+/* One session/player tree; only presentation changes at the breakpoint. */
+.room-mobile-tabs-slot { display: none; }
+@media (max-width: 1179px) {
+    .room-mobile-tabs-slot { display: contents; }
+    .room-mobile-workspace :is(.classic-player-heading, .cinematic-sofa, .video-ambient-light) { display: none; }
+    .room-mobile-workspace :is(.mobile-classic-call, .mobile-classic-share) { flex: none; overflow: visible; }
+    .room-mobile-workspace .mobile-classic-panels:has(.mobile-classic-call:not([hidden])) { overflow-y: auto; gap: 10px; }
+    .room-mobile-workspace .room-video-call { border: 1px solid rgb(255 255 255 / 9%); border-radius: 18px; background: rgb(12 12 12 / 80%); }
+}

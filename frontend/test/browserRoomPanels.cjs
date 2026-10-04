@@ -87,10 +87,12 @@ const wait = async (fn, message) => { const end = Date.now() + 30000; while (Dat
                 const videoBox = await host.locator('.room-player-surface').boundingBox();
                 const playerPoint = { x: videoBox.x + videoBox.width / 2, y: (Math.max(0, videoBox.y) + Math.min(height, videoBox.y + videoBox.height)) / 2 };
                 assert.equal(await host.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.room-player-surface')), playerPoint), true, 'tap target is not within visible player');
-                await host.evaluate(() => { window.drawerPlayerClicks = 0; document.querySelector('.room-player-surface').addEventListener('click', () => window.drawerPlayerClicks++); });
+                // A retained native video can consume the first touch to reveal
+                // its controls. Verify the original pointer reaches the player.
+                await host.evaluate(() => { window.drawerPlayerClicks = 0; document.querySelector('.room-player-surface').addEventListener('pointerdown', () => window.drawerPlayerClicks++); });
                 if (width < 1180) await host.touchscreen.tap(playerPoint.x, playerPoint.y);
                 else await host.mouse.click(playerPoint.x, playerPoint.y);
-                await closed(); assert.ok(await host.evaluate(() => window.drawerPlayerClicks > 0), 'outside dismissal blocked player click');
+                await closed(); assert.ok(await host.evaluate(() => window.drawerPlayerClicks > 0), 'outside dismissal blocked player pointer');
                 await open('chat'); const input = host.getByPlaceholder('Type a message...'); await input.fill('Drawer draft'); await input.click(); assert.equal(await input.isVisible(), true);
                 await open('voice'); await host.getByRole('button', { name: 'Join Voice', exact: true }).waitFor(); assert.equal(await input.isVisible(), false, 'two panels are open');
                 await host.getByRole('button', { name: 'Join Voice', exact: true }).click(); assert.equal(await host.locator('.room-voice:visible').count(), 1);

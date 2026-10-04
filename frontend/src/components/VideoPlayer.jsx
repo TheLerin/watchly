@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import ReactPlayer from 'react-player/lazy'; // FIX #3: lazy import loads only the needed adapter, not all adapters
 import { useRoom } from '../context/RoomContext';
+import { useRoomSession } from '../context/RoomSessionContext';
 import { Play, Link as LinkIcon, Lock, AlertCircle, FolderOpen, RefreshCw, FileVideo, ShieldCheck, Clapperboard, Info, Captions } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -141,8 +142,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const localFileInputRef  = useRef(null);
     const localInputModeRef  = useRef('match');
     const syncIntervalRef    = useRef(null);
-    const localFileUrlRef    = useRef('');
-    const localSessionRef    = useRef(null);
+    const { localFileRef, localFileUrlRef, localSessionRef, localRemuxSessionRef,
+        localFileUrl, localPlaybackUrl, setLocalPlaybackUrl, installLocalFile, releaseLocalFile, aliveRef } = useRoomSession();
     const wasConnectedRef    = useRef(isConnected);
     const resyncSuppressionRef = useRef(false);
     const resyncRequestRef = useRef(resyncRequest);
@@ -153,8 +154,6 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const externalSubtitlesRef = useRef([]);
     const embeddedSubtitlesRef = useRef([]);
     const embeddedSubtitleAbortRef = useRef(null);
-    const localFileRef = useRef(null);
-    const localRemuxSessionRef = useRef(null);
     const localPlaybackSwitchRef = useRef(false);
     const remuxGenerationRef = useRef(0);
     const remuxFailureIdsRef = useRef(new Set());
@@ -211,8 +210,6 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const [autoplayBlocked, setAutoplayBlocked] = useState(false);
     const [embedVolume, setEmbedVolume] = useState(100);
     const [embedMuted, setEmbedMuted] = useState(false);
-    const [localFileUrl, setLocalFileUrl] = useState('');
-    const [localPlaybackUrl, setLocalPlaybackUrl] = useState('');
     const [audioSwitchStatus, setAudioSwitchStatus] = useState(null);
     const [remuxFailureVersion, setRemuxFailureVersion] = useState(0);
     const [fingerprintProgress, setFingerprintProgress] = useState(0);
@@ -631,6 +628,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         isLocalReady,
         mediaInspection,
         remuxFailureVersion,
+        localFileRef, localFileUrlRef, localRemuxSessionRef, setLocalPlaybackUrl,
         videoState.localMedia?.duration,
         videoState.seekVersion,
     ]);
@@ -695,32 +693,15 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     useEffect(() => {
         const activeSession = videoState.localMedia?.sessionId || null;
         if (localSessionRef.current === activeSession) return;
-        if (localFileUrlRef.current) {
-            URL.revokeObjectURL(localFileUrlRef.current);
-            localFileUrlRef.current = '';
-        }
-        localSessionRef.current = null;
-        localFileRef.current = null;
-        setLocalFileUrl('');
-        setLocalPlaybackUrl('');
         setLocalFileError('');
         setFingerprintProgress(0);
-    }, [videoState.localMedia?.sessionId]);
+    }, [videoState.localMedia?.sessionId, localSessionRef]);
 
     useEffect(() => () => {
         clearTimeout(playDebounceRef.current);
         clearTimeout(pauseDebounceRef.current);
         clearTimeout(seekEndTimerRef.current);
         clearTimeout(retryTimerRef.current);
-        clearTimeout(playDebounceRef.current);
-        clearTimeout(pauseDebounceRef.current);
-        if (localFileUrlRef.current) {
-            URL.revokeObjectURL(localFileUrlRef.current);
-            localFileUrlRef.current = '';
-        }
-        localFileRef.current = null;
-        void localRemuxSessionRef.current?.dispose();
-        localRemuxSessionRef.current = null;
     }, []);
 
     useEffect(() => () => {
@@ -1055,19 +1036,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
     const replaceLocalObjectUrl = useCallback((file, sessionId) => {
         if (localSessionRef.current === sessionId && localFileUrlRef.current) return localFileUrlRef.current;
-        void localRemuxSessionRef.current?.dispose();
-        localRemuxSessionRef.current = null;
-        if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
-        const nextUrl = URL.createObjectURL(file);
-        localFileUrlRef.current = nextUrl;
-        localFileRef.current = file;
-        localSessionRef.current = sessionId;
-        setLocalFileUrl(nextUrl);
-        setLocalPlaybackUrl(nextUrl);
+        const nextUrl = installLocalFile(file, sessionId);
         setLocalFileError('');
         setIsPlayerReady(false);
         return nextUrl;
-    }, []);
+    }, [installLocalFile, localFileUrlRef, localSessionRef]);
 
     const handleLocalFile = async event => {
         const file = event.target.files?.[0];
@@ -1101,6 +1074,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                     })),
             ]);
             const duration = durationOutcome.duration || inspectionOutcome.inspection?.duration;
+            if (!aliveRef.current) return;
             if (!Number.isFinite(duration) || duration <= 0) {
                 throw durationOutcome.error || new Error('Watchly could not determine this movie’s duration.');
             }
@@ -1164,16 +1138,12 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             } catch (error) {
                 if (installed && localFileRef.current === file && localSessionRef.current === sessionId) {
                     localInspectionBySessionRef.current.delete(sessionId);
-                    if (localFileUrlRef.current) URL.revokeObjectURL(localFileUrlRef.current);
-                    localFileUrlRef.current = '';
-                    localSessionRef.current = null;
-                    localFileRef.current = null;
-                    setLocalFileUrl('');
-                    setLocalPlaybackUrl('');
+                    releaseLocalFile();
                 }
                 throw error;
             }
         } catch (error) {
+            if (!aliveRef.current) return;
             const message = error.message || 'Could not read this video file.';
             setLocalFileError(message);
             toast.error(message, { duration: 5000 });
@@ -1182,8 +1152,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                 markLocalMediaStatus(expected.sessionId, unsupported ? 'UNSUPPORTED' : 'ERROR', error.message);
             }
         } finally {
-            setIsFingerprinting(false);
-            setIsInspectingMedia(false);
+            if (aliveRef.current) { setIsFingerprinting(false); setIsInspectingMedia(false); }
         }
     };
 
@@ -1309,7 +1278,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             if (embeddedSubtitleAbortRef.current === controller) embeddedSubtitleAbortRef.current = null;
             setSubtitleLoadingId(current => current === trackId ? null : current);
         }
-    }, [subtitleTracks]);
+    }, [subtitleTracks, localFileRef, localSessionRef]);
 
     useEffect(() => {
         if (activeSubtitleId || subtitleLoadingId || !isLocalReady) return;

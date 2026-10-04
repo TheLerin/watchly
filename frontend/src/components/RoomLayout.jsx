@@ -21,7 +21,8 @@ import {
 import ChatUI from './ChatUI';
 import UserQueueSidebar from './UserQueueSidebar';
 import VoiceRoom from './VoiceRoom';
-import { MediaCallProvider, VideoCallPanel, FloatingVideoCall } from './RoomMediaCall';
+import { VideoCallPanel, FloatingVideoCall } from './RoomMediaCall';
+import { RoomSessionProvider } from '../context/RoomSessionContext';
 import VideoPlayer from './VideoPlayer';
 import TheaterIconButton from './TheaterIconButton';
 import ReadinessPanel from './player/ReadinessPanel';
@@ -298,7 +299,7 @@ const RoomTabs = ({ activeTab, onChange, onSelect = onChange, desktop = false, t
     </nav>
 );
 
-const RoomLayout = () => {
+const RoomPresentation = () => {
     const { user: accountUser, profile: accountProfile, isProfileLoading } = useAuth();
     const { roomId } = useParams();
     const navigate = useNavigate();
@@ -431,7 +432,7 @@ const RoomLayout = () => {
     );
 
     return (
-        <MediaCallProvider key={`${roomId}:${currentUser?.userId}`}><div
+        <div
             ref={ambientTargetRef}
             className="room-shell relative h-[100dvh] w-full overflow-hidden bg-black text-white"
             data-room-appearance={roomAppearance}
@@ -474,9 +475,9 @@ const RoomLayout = () => {
                     activePanel={activePanel} togglePanel={togglePanel} panelRef={panelRef} panelEvents={panelEvents} settingsTriggerRef={settingsTriggerRef}
                 />
 
-                {isDesktop ? (
-                    <div className="room-desktop-workspace mx-auto grid h-[calc(100dvh-64px)] w-full max-w-[1800px] gap-3 p-3 xl:gap-4 xl:p-4">
-                        <main className={`room-player-zone ${panelClass} min-h-0 overflow-hidden p-3 xl:p-4`}>
+                <div className={isDesktop ? "room-desktop-workspace mx-auto grid h-[calc(100dvh-64px)] w-full max-w-[1800px] gap-3 p-3 xl:gap-4 xl:p-4" : "room-mobile-workspace"}
+                    data-orientation={isPortrait ? "portrait" : "landscape"} data-mobile-tab={mobileTab || "watch"}>
+                        <main className={isDesktop ? `room-player-zone ${panelClass} min-h-0 overflow-hidden p-3 xl:p-4` : "room-mobile-player"}>
                             <div className="classic-player-heading mb-3 flex items-center justify-between gap-3">
                                 <div className="min-w-0">
                                     <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">Now watching</p>
@@ -487,18 +488,18 @@ const RoomLayout = () => {
                                     Synced
                                 </div>
                             </div>
-                            <div className="room-video-stage h-[calc(100%-52px)] min-h-0">
+                            <div className={isDesktop ? "room-video-stage h-[calc(100%-52px)] min-h-0" : "room-mobile-player-inner"}>
                                 <div className="video-ambient-light" aria-hidden="true">
                                     <span className="video-ambient-top" />
                                     <span className="video-ambient-left" />
                                     <span className="video-ambient-right" />
                                     <span className="video-ambient-bottom" />
                                 </div>
-                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} cinemaLuxe={cinemaLuxe}
-                                    activeTheaterTool={['watch', 'info', 'tracks'].includes(activePanel) ? activePanel : null}
+                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance={roomAppearance} cinemaLuxe={cinemaLuxe} ambientEnabled={isDesktop}
+                                    activeTheaterTool={isDesktop && ['watch', 'info', 'tracks'].includes(activePanel) ? activePanel : null}
                                     onTheaterToolChange={togglePanel} closeTheaterTool={closePanel} dockRef={leftDockRef}
                                     panelRef={['watch', 'info', 'tracks'].includes(activePanel) ? panelRef : undefined} panelEvents={panelEvents}
-                                    controlsTabLabel={roomAppearance === 'classic' ? 'classic-watch-tab' : undefined} />
+                                    controlsTabLabel={isDesktop && roomAppearance === 'classic' ? 'classic-watch-tab' : undefined} />
                                 {!cinemaLuxe && <div className="cinematic-sofa" aria-hidden="true">
                                     <picture>
                                         <source srcSet="/assets/sofa-couple.webp" type="image/webp" />
@@ -508,9 +509,10 @@ const RoomLayout = () => {
                             </div>
                         </main>
 
-                        <aside id="watchly-right-panel" className="room-right-rail flex min-h-0 flex-col gap-3" data-open-tool={activePanel || ''}
-                            ref={roomAppearance === 'classic' && ['members', 'voice', 'chat', 'video'].includes(activePanel) ? panelRef : undefined} {...(roomAppearance === 'classic' ? panelEvents : {})}>
-                            {roomAppearance === 'classic' && <RoomTabs desktop triggerRef={tabsRef} activeTab={mobileTab} onChange={toggleTab} onSelect={selectTab} />}
+                        <aside id="watchly-right-panel" className={isDesktop ? "room-right-rail flex min-h-0 flex-col gap-3" : "mobile-classic-panels"} data-open-tool={activePanel || ''}
+                            hidden={!isDesktop && !['room', 'call', 'chat', 'video'].includes(mobileTab)}
+                            ref={(!isDesktop || roomAppearance === 'classic') && ['members', 'voice', 'chat', 'video'].includes(activePanel) ? panelRef : undefined} {...(roomAppearance === 'classic' ? panelEvents : {})}>
+                            {isDesktop && roomAppearance === 'classic' && <RoomTabs desktop triggerRef={tabsRef} activeTab={mobileTab} onChange={toggleTab} onSelect={selectTab} />}
                             <nav ref={rightDockRef} className="theater-right-dock" aria-label="Room tools">
                                 {[
                                     { id: 'members', label: 'Members and queue', icon: <Users size={21} /> },
@@ -529,19 +531,20 @@ const RoomLayout = () => {
                                     />
                                 ))}
                             </nav>
-                            <section className={`room-members-group ${panelClass} overflow-hidden`} data-expanded={showUsersPanel}
+                            <section className={isDesktop ? `room-members-group ${panelClass} overflow-hidden` : "mobile-classic-panel mobile-classic-room"} data-expanded={showUsersPanel}
+                                hidden={!isDesktop && mobileTab !== 'room'} aria-label={!isDesktop ? "Members and queue" : undefined}
                                 {...panelEvents}
                                 ref={roomAppearance === 'cinematic' && activePanel === 'members' ? panelRef : undefined}
-                                id={roomAppearance === 'classic' ? 'classic-room-panel' : undefined}
-                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
-                                aria-labelledby={roomAppearance === 'classic' ? 'classic-room-tab' : undefined}>
-                                <PanelHeader
+                                id={isDesktop && roomAppearance === 'classic' ? 'classic-room-panel' : undefined}
+                                role={isDesktop && roomAppearance === 'classic' ? 'tabpanel' : undefined}
+                                aria-labelledby={isDesktop && roomAppearance === 'classic' ? 'classic-room-tab' : undefined}>
+                                {isDesktop ? <PanelHeader
                                     icon={<Users size={15} className="text-zinc-400" />}
                                     title="Members & Queue"
                                     count={users.length}
                                     open={showUsersPanel}
                                     onToggle={() => setShowUsersPanel(v => !v)}
-                                />
+                                /> : <div className="mobile-classic-panel-heading"><div><span>YOUR ROOM</span><h2>Members &amp; Queue</h2></div><small>{users.length} online</small></div>}
                                 <AnimatePresence initial={false}>
                                     {(showUsersPanel || roomAppearance === 'classic') && (
                                         <MotionDiv
@@ -552,7 +555,7 @@ const RoomLayout = () => {
                                             transition={{ duration: 0.22 }}
                                             className="overflow-hidden"
                                         >
-                                            <div className="max-h-[34vh] overflow-y-auto">
+                                            <div className={isDesktop ? "max-h-[34vh] overflow-y-auto" : "mobile-classic-card"}>
                                                 <UserQueueSidebar compact variant={roomAppearance} />
                                                 <ReadinessPanel variant={roomAppearance} />
                                             </div>
@@ -561,77 +564,45 @@ const RoomLayout = () => {
                                 </AnimatePresence>
                             </section>
 
-                            <section className="room-voice-group" id={roomAppearance === 'classic' ? 'classic-call-panel' : undefined}
+                            <section className={isDesktop ? "room-voice-group" : "mobile-classic-panel mobile-classic-call"} hidden={!isDesktop && mobileTab !== 'call'} aria-label={!isDesktop ? "Voice and screen share" : undefined} id={isDesktop && roomAppearance === 'classic' ? 'classic-call-panel' : undefined}
                                 {...panelEvents}
                                 ref={roomAppearance === 'cinematic' && activePanel === 'voice' ? panelRef : undefined}
-                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
-                                aria-labelledby={roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
+                                role={isDesktop && roomAppearance === 'classic' ? 'tabpanel' : undefined}
+                                aria-labelledby={isDesktop && roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
+                                {!isDesktop && <div className="mobile-classic-panel-heading"><div><span>CONNECT</span><h2>Voice &amp; Share</h2></div></div>}
                                 <VoiceRoom variant={roomAppearance} />
                             </section>
-                            <section className="room-share-group" id={roomAppearance === 'classic' ? 'classic-share-panel' : undefined}
+                            <section className={isDesktop ? "room-share-group" : "mobile-classic-panel mobile-classic-share"} hidden={!isDesktop && mobileTab !== 'call'} id={isDesktop && roomAppearance === 'classic' ? 'classic-share-panel' : undefined}
                                 {...panelEvents}
                                 ref={roomAppearance === 'cinematic' && activePanel === 'share' ? panelRef : undefined}
-                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
-                                aria-labelledby={roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
+                                role={isDesktop && roomAppearance === 'classic' ? 'tabpanel' : undefined}
+                                aria-labelledby={isDesktop && roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
                                 <ScreenShareAdapter variant={roomAppearance} />
                             </section>
-                            <section className="room-video-group" id={roomAppearance === 'classic' ? 'classic-video-panel' : undefined}
+                            <section className={isDesktop ? "room-video-group" : "mobile-classic-panel mobile-classic-video"} hidden={!isDesktop && mobileTab !== 'video'} aria-label={!isDesktop ? "Video call" : undefined} id={isDesktop && roomAppearance === 'classic' ? 'classic-video-panel' : undefined}
                                 {...panelEvents} ref={roomAppearance === 'cinematic' && activePanel === 'video' ? panelRef : undefined}
-                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined} aria-labelledby={roomAppearance === 'classic' ? 'classic-video-tab' : undefined}>
+                                role={isDesktop && roomAppearance === 'classic' ? 'tabpanel' : undefined} aria-labelledby={isDesktop && roomAppearance === 'classic' ? 'classic-video-tab' : undefined}>
                                 <VideoCallPanel mode={videoPanelMode} onPopOut={popOutVideo} onRestore={restoreVideo} />
                             </section>
-                            <div className="room-chat-group min-h-0 flex-1" id={roomAppearance === 'classic' ? 'classic-chat-panel' : undefined}
+                            <div className={isDesktop ? "room-chat-group min-h-0 flex-1" : "mobile-classic-panel mobile-classic-chat"} hidden={!isDesktop && mobileTab !== 'chat'} aria-label={!isDesktop ? "Live chat" : undefined} id={isDesktop && roomAppearance === 'classic' ? 'classic-chat-panel' : undefined}
                                 {...panelEvents}
                                 ref={roomAppearance === 'cinematic' && activePanel === 'chat' ? panelRef : undefined}
-                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined}
-                                aria-labelledby={roomAppearance === 'classic' ? 'classic-chat-tab' : undefined}>
+                                role={isDesktop && roomAppearance === 'classic' ? 'tabpanel' : undefined}
+                                aria-labelledby={isDesktop && roomAppearance === 'classic' ? 'classic-chat-tab' : undefined}>
                                 <ChatUI variant={roomAppearance} hideHeader={roomAppearance === 'classic'}
-                                    visible={roomAppearance !== 'classic' || mobileTab === 'chat'} />
+                                    className={isDesktop ? '' : 'mobile-classic-chat-ui'} visible={roomAppearance !== 'classic' || mobileTab === 'chat'} />
                             </div>
                         </aside>
-                    </div>
-                ) : (
-                    <div className="room-mobile-workspace" data-orientation={isPortrait ? 'portrait' : 'landscape'} data-mobile-tab={mobileTab || 'watch'}>
-                        <div className="room-mobile-player">
-                            <div className="room-mobile-player-inner">
-                                <VideoPlayer ambientTargetRef={ambientTargetRef} appearance="classic" ambientEnabled={false} cinemaLuxe={cinemaLuxe} />
-                            </div>
-                        </div>
-
-                        <div className="mobile-classic-panels" hidden={!['room', 'call', 'chat', 'video'].includes(mobileTab)}
-                            ref={['room', 'call', 'chat', 'video'].includes(mobileTab) ? panelRef : undefined} {...panelEvents}>
-                            <section className="mobile-classic-panel mobile-classic-room" hidden={mobileTab !== 'room'} aria-label="Members and queue">
-                                <div className="mobile-classic-panel-heading">
-                                    <div><span>YOUR ROOM</span><h2>Members & Queue</h2></div>
-                                    <small>{users.length} online</small>
-                                </div>
-                                <div className="mobile-classic-card">
-                                    <UserQueueSidebar compact variant="classic" />
-                                    <ReadinessPanel variant="classic" />
-                                </div>
-                            </section>
-                            <section className="mobile-classic-panel mobile-classic-call" hidden={mobileTab !== 'call'} aria-label="Voice and screen share">
-                                <div className="mobile-classic-panel-heading">
-                                    <div><span>CONNECT</span><h2>Voice & Share</h2></div>
-                                </div>
-                                <VoiceRoom variant="classic" />
-                                <ScreenShareAdapter variant="classic" />
-                            </section>
-                            <section className="mobile-classic-panel mobile-classic-chat" hidden={mobileTab !== 'chat'} aria-label="Live chat">
-                                <ChatUI hideHeader variant="classic" className="mobile-classic-chat-ui" visible={mobileTab === 'chat'} />
-                            </section>
-                            <section className="mobile-classic-panel mobile-classic-video" hidden={mobileTab !== 'video'} aria-label="Video call">
-                                <div className="mobile-classic-card"><VideoCallPanel mode={videoPanelMode} onPopOut={popOutVideo} onRestore={restoreVideo} /></div>
-                            </section>
-                        </div>
-
-                        <RoomTabs triggerRef={tabsRef} activeTab={mobileTab || 'watch'} onChange={toggleTab} />
-                    </div>
-                )}
+                        <div className="room-mobile-tabs-slot"><RoomTabs triggerRef={isDesktop ? undefined : tabsRef} activeTab={mobileTab || 'watch'} onChange={toggleTab} /></div>
+                </div>
             </div>
             <FloatingVideoCall visible={videoPanelMode === 'floating'} onRestore={restoreVideo} />
-        </div></MediaCallProvider>
+        </div>
     );
 };
 
-export default RoomLayout;
+export default function RoomLayout() {
+    const { roomId } = useParams();
+    const { currentUser } = useRoom();
+    return <RoomSessionProvider key={`${roomId}:${currentUser?.userId || 'joining'}`}><RoomPresentation /></RoomSessionProvider>;
+}
