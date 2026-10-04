@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { loadRoomLayout } from './roomRoute';
 import { AuthProvider } from './context/AuthContext';
 import { SocialProvider } from './context/SocialContext';
+import { SoundEffectsProvider } from './context/SoundEffectsContext';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const RoomLayout = lazy(loadRoomLayout);
@@ -88,6 +89,7 @@ function App() {
     // BUG-01: Router wraps RoomProvider so useNavigate works everywhere
     <ErrorBoundary>
       <ThemeProvider>
+        <SoundEffectsProvider>
         <Router>
           <AuthProvider>
           <SocialProvider>
@@ -131,6 +133,7 @@ function App() {
           </SocialProvider>
           </AuthProvider>
         </Router>
+        </SoundEffectsProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

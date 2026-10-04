@@ -23,14 +23,16 @@ module.exports = async ({ host, browser, baseUrl, video, wait }) => {
  const before = await video(host).evaluate(el => ({ src: el.currentSrc, time: el.currentTime }));
  await open();
  assert.equal(await panel.getByText('Cinema Luxe', { exact: true }).count(), 0);
- assert.equal(await panel.getByRole('heading').count(), 6);
+ assert.equal(await panel.getByRole('heading').count(), 7);
  const bounds = await panel.boundingBox();
  assert.ok(bounds.width >= 390 && bounds.width <= 420);
  assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 720);
  await choice('Classic');
  assert.equal(await shell.getAttribute('data-room-appearance'), 'classic');
  assert.equal(await panel.getByRole('heading', { name: 'Cinema preset', exact: true }).count(), 0);
- assert.equal(await panel.getByRole('switch').count(), 0);
+ assert.equal(await panel.getByRole('switch').count(), 3);
+ assert.equal(await panel.getByRole('heading', { name: 'Sound', exact: true }).count(), 1);
+ assert.equal(await panel.getByRole('switch', { name: 'Ambient screen lighting', exact: true }).count(), 0);
  assert.equal(await host.locator('.cinema-luxe-scene').count(), 0);
  await choice('Light Glass');
  assert.equal(await shell.getAttribute('data-theme'), 'glass-light');

@@ -31,6 +31,23 @@ const receive = (client, event, matches = () => true) => new Promise((resolve, r
     client.on(event, handler);
 });
 
+test('existing membership events distinguish intentional departure from socket recovery', async () => {
+    const host = await connect(), room = await emit(host, 'room:create', { nickname: 'Sound host', protocolVersion: 2 });
+    const guest = await connect(), newMember = receive(host, 'user_joined');
+    const joined = await emit(guest, 'room:join', { roomId: room.roomId, nickname: 'Sound guest', protocolVersion: 2 });
+    assert.equal((await newMember).resumed, false);
+    const left = () => new Promise(resolve => host.once('user_left', (socketId, details) => resolve({ socketId, ...details })));
+    const disconnected = left(), oldId = guest.id; guest.disconnect();
+    assert.deepEqual(await disconnected, { socketId: oldId, reason: 'disconnect', memberId: joined.memberId });
+    const resumed = await connect();
+    const recoveringMember = receive(host, 'user_joined');
+    await emit(resumed, 'room:join', { roomId: room.roomId, nickname: 'Sound guest', protocolVersion: 2, resumeToken: joined.resumeToken, memberId: joined.memberId });
+    assert.equal((await recoveringMember).resumed, true);
+    const intentional = left(), resumedId = resumed.id; resumed.emit('leave_room', { roomId: room.roomId });
+    assert.deepEqual(await intentional, { socketId: resumedId, reason: 'left', memberId: joined.memberId });
+    assert.equal((await emit(host, 'room:snapshot', {})).snapshot.members.length, 1);
+});
+
 test('resume credentials keep one member and fence a superseded active socket', async () => {
     const host = await connect();
     const room = await emit(host, 'room:create', { nickname: 'Resume host', protocolVersion: 2 });

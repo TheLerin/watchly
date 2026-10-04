@@ -285,22 +285,24 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         return true;
     };
 
-    const voicePresence = (roomId, user) => {
+    const voicePresence = (roomId, user, reason) => {
         io.to(roomId).emit('voice_updated', {
             userId: user.id,
+            memberId: user.userId,
+            reason,
             isVoiceActive: Boolean(user.isVoiceActive),
             isMuted: Boolean(user.isMuted)
         });
     };
 
-    const removeVoice = (socket, room, notify = true) => {
+    const removeVoice = (socket, room, notify = true, reason = 'left') => {
         if (!room) return;
         room.voiceSocketIds.delete(socket.id);
         const user = getUserBySocket(room, socket.id);
         if (user) {
             user.isVoiceActive = false;
             user.isMuted = true;
-            if (notify) voicePresence(socket.data.roomId, user);
+            if (notify) voicePresence(socket.data.roomId, user, reason);
         }
         if (notify) {
             socket.to(socket.data.roomId).emit('voice_peer_left', { userId: socket.id });
@@ -491,6 +493,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             }
             if (account && !account.profile && !user) return rejectRoom('PROFILE_REQUIRED', 'Finish your profile before joining with your account.');
             const resumeToken = user && suppliedTokenHash ? payload.resumeToken : crypto.randomBytes(32).toString('base64url');
+            const resumedMembership = Boolean(user);
             if (user && !suppliedTokenHash) user.resumeTokenHash = tokenHash(resumeToken);
             if (!user) {
                 if (connectedBeforeJoin.length >= MAX_ROOM_USERS) {
@@ -575,6 +578,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             callback?.(joined);
             socket.to(roomId).emit('user_joined', {
                 ...publicUser(room, user),
+                resumed: resumedMembership,
                 localReady: room.media || room.videoState.sourceType === 'local' ? false : null
             });
             if (room.media || room.videoState.sourceType === 'local') emitReadiness(roomId, room);
@@ -709,7 +713,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 room.controllerLeaseUntil = null;
                 publishControl(roomId, room, { reason: 'CONTROLLER_REMOVED' });
             }
-            io.to(roomId).emit('user_left', target.id);
+            io.to(roomId).emit('user_left', target.id, { reason: 'kicked', memberId: target.userId });
             if (room.media || room.videoState.sourceType === 'local') emitReadiness(roomId, room);
         });
 
@@ -1286,11 +1290,11 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             io.to(socket.data.roomId).emit('screen:stopped');
         });
 
-        const handleDisconnect = () => {
+        const handleDisconnect = (reason = 'disconnect') => {
             const roomId = socket.data.roomId;
             const room = rooms.get(roomId);
             if (!room) return;
-            removeVoice(socket, room);
+            removeVoice(socket, room, true, reason);
 
             const user = room.users.find(item => item.id === socket.id && item.connected);
             if (!user) return;
@@ -1302,7 +1306,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 room.screenViewerSocketIds.clear();
                 io.to(roomId).emit('screen:stopped');
             }
-            socket.to(roomId).emit('user_left', socket.id);
+            socket.to(roomId).emit('user_left', socket.id, { reason, memberId: user.userId });
 
             const remaining = room.users.filter(item => item.connected);
             if (remaining.length === 0) scheduleRoomCleanup(roomId, room);
@@ -1344,7 +1348,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
 
         socket.on('leave_room', () => {
             const roomId = socket.data.roomId;
-            handleDisconnect();
+            handleDisconnect('left');
             if (roomId) socket.leave(roomId);
             socket.roomId = null;
             socket.userId = null;

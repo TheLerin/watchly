@@ -21,6 +21,8 @@ import { useLocation } from 'react-router-dom';
 import { actionPermission, getRoomPermissions } from '../utils/roomPermissions';
 import { useAuth } from './AuthContext';
 import { rememberRoom } from '../utils/recentRooms';
+import { useSoundEffects } from './SoundEffectsContext';
+import { createMembershipSounds, createCallPresenceSounds } from '../utils/soundNotifications';
 
 const RoomContext = createContext();
 export const useRoom = () => useContext(RoomContext);
@@ -50,6 +52,7 @@ const emptyReadiness = {
 };
 
 export const RoomProvider = ({ children }) => {
+    const { playSound } = useSoundEffects();
     const { session: accountSession, profile: accountProfile, isAuthLoading } = useAuth();
     const location = useLocation();
     const [isRestoringSession, setIsRestoringSession] = useState(true);
@@ -163,6 +166,9 @@ export const RoomProvider = ({ children }) => {
         // Membership notifications are socket side effects. Keep them outside
         // state updaters, which React can replay while rendering the provider.
         const knownMembers = new Map();
+        const memberSounds = createMembershipSounds({ play: playSound, ready: () => connectionPhaseRef.current === 'connected' && socket.connected,
+            self: () => sessionRef.current?.memberId });
+        const legacyVoiceSounds = createCallPresenceSounds({ play: playSound, ready: () => connectionPhaseRef.current === 'connected' && socket.connected });
         const permissionsDuringSync = new Map();
         const applyReadiness = payload => {
             if (!payload) return;
@@ -241,6 +247,8 @@ export const RoomProvider = ({ children }) => {
             activeMediaIdRef.current = snapshot.media?.mediaId || initialVideoState?.localMedia?.sessionId || null;
             knownMembers.clear();
             for (const member of members) knownMembers.set(member.userId || member.id, member);
+            memberSounds.baseline(members.map(member => member.userId || member.id), sessionRef.current?.roomId);
+            legacyVoiceSounds.baseline(members.filter(member => member.isVoiceActive).map(member => member.userId));
             setUsers(members);
             currentUserRef.current = members.find(member => member.userId === sessionRef.current?.memberId) || null;
             setCurrentUser(currentUserRef.current);
@@ -261,6 +269,7 @@ export const RoomProvider = ({ children }) => {
         };
         const onUserJoined = newUser => {
             const memberKey = newUser.userId || newUser.id;
+            memberSounds.joined(memberKey, newUser.resumed);
             const alreadyKnown = knownMembers.has(memberKey);
             knownMembers.set(memberKey, newUser);
             setUsers(previous => {
@@ -276,8 +285,9 @@ export const RoomProvider = ({ children }) => {
             });
             if (!alreadyKnown) toast(`${newUser.nickname} joined`, { icon: '👋', duration: 2000 });
         };
-        const onUserLeft = userId => {
+        const onUserLeft = (userId, details = {}) => {
             const leaving = [...knownMembers.values()].find(user => user.id === userId);
+            memberSounds.left(details.memberId || leaving?.userId || userId, details.reason);
             if (leaving) knownMembers.delete(leaving.userId || leaving.id);
             setUsers(previous => previous.filter(user => user.id !== userId));
             if (leaving) toast(`${leaving.nickname} left`, { icon: '🚪', duration: 2000 });
@@ -337,7 +347,11 @@ export const RoomProvider = ({ children }) => {
         const onVideoSeeked = state => recoveryRef.current?.acceptsEvents() && applyVideoState(state);
         const onQueueUpdated = nextQueue => setQueue(nextQueue || []);
         const onPlaylistNotice = payload => toast(payload.message, { duration: 2500 });
-        const onVoiceUpdated = ({ userId, isVoiceActive, isMuted }) => {
+        const onVoiceUpdated = ({ userId, memberId, isVoiceActive, isMuted, reason }) => {
+            if (import.meta.env.VITE_VOICE_PROVIDER === 'legacy' && memberId !== sessionRef.current?.memberId) {
+                if (isVoiceActive) legacyVoiceSounds.joined(memberId);
+                else legacyVoiceSounds.left(memberId, reason === 'left');
+            }
             setUsers(previous => previous.map(user => (
                 user.id === userId ? { ...user, isVoiceActive, isMuted } : user
             )));
@@ -476,7 +490,7 @@ export const RoomProvider = ({ children }) => {
             socket.off('playback:state', onPlaybackState);
             socket.off('room:error', onRoomError);
         };
-    }, [resetRoom, updateClockOffset, roomRequester]);
+    }, [resetRoom, updateClockOffset, roomRequester, playSound]);
 
     useEffect(() => {
         if (isAuthLoading) return undefined;

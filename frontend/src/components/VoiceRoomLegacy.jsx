@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useRoom } from '../context/RoomContext';
 import { socket } from '../socket';
 import { NETWORK_QUALITY_META, formatPing } from '../utils/networkQuality';
+import { useSoundEffects } from '../context/SoundEffectsContext';
 
 const FORCE_RELAY = import.meta.env.DEV && import.meta.env.VITE_FORCE_RELAY === 'true';
 const MAX_VOICE_PARTICIPANTS = 6;
@@ -31,6 +32,7 @@ const formatCallDuration = seconds => {
 const MotionDiv = motion.div;
 
 const VoiceRoom = ({ variant = 'classic', className = '' }) => {
+    const { playSound } = useSoundEffects();
     const {
         roomId,
         currentUser,
@@ -449,6 +451,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
     }, [cleanupPeers, roomId, stopLocalStream]);
 
     const leaveVoice = useCallback(() => {
+        if (isVoiceActiveRef.current) playSound('voiceLeave');
         voiceReconnectGeneration.current++;
         if (socket.connected) socket.emit('leave_voice', { roomId });
         cleanupPeers();
@@ -458,7 +461,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
         setCallStartedAt(null);
         setVoiceError('');
         setAudioBlocked(false);
-    }, [cleanupPeers, roomId, stopLocalStream]);
+    }, [cleanupPeers, roomId, stopLocalStream, playSound]);
 
     const toggleVoice = async event => {
         event?.stopPropagation();
@@ -500,6 +503,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
             setCallStartedAt(Date.now());
 
             const response = await joinVoiceOnServer();
+            playSound('voiceJoin');
             for (const peer of response.peers || []) {
                 createPeerConnection(peer.id, true);
             }
@@ -529,6 +533,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
         track.enabled = !nextMuted;
         isMutedRef.current = nextMuted;
         setIsMuted(nextMuted);
+        playSound(nextMuted ? 'mute' : 'unmute');
         if (socket.connected) socket.emit('update_voice_mute', { roomId, isMuted: nextMuted });
     };
 

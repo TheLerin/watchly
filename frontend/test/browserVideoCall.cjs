@@ -45,8 +45,9 @@ const audio = page => page.evaluate(async () => {
         const chrome=process.env.BROWSER_EXECUTABLE||'C:/Program Files/Google/Chrome/Application/chrome.exe';
         const edge=process.env.SECOND_BROWSER_EXECUTABLE||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
         for(const [executablePath,name,color,frequency] of [[chrome,'A',[82,90,240],440],[existsSync(edge)?edge:chrome,'B',[41,240,110],880]]) {
-            const browser=await chromium.launch({executablePath,headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',`--use-file-for-fake-video-capture=${cameraFile(`camera-${name}.y4m`,color)}`,`--use-file-for-fake-audio-capture=${tone(`call-${name}.wav`,frequency)}`,'--autoplay-policy=no-user-gesture-required','--mute-audio','--disable-background-timer-throttling','--disable-renderer-backgrounding']}); browsers.push(browser);
-            const page=await browser.newPage({viewport:{width:1366,height:768},hasTouch:true});pages.push(page);page.on('pageerror',error=>errors.push(error.message));
+            const browser=await chromium.launch({executablePath,headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',`--use-file-for-fake-video-capture=${cameraFile(`camera-${name}.y4m`,color)}`,`--use-file-for-fake-audio-capture=${tone(`call-${name}.wav`,frequency)}`,'--mute-audio','--disable-background-timer-throttling','--disable-renderer-backgrounding']}); browsers.push(browser);
+            const context=await browser.newContext({viewport:{width:1366,height:768},hasTouch:true});const page=await context.newPage();pages.push(page);page.on('pageerror',error=>errors.push(error.message));
+            await page.addInitScript(require('./soundEffectsChecks.cjs').instrument);
             await page.addInitScript(()=>{
                 localStorage.setItem('watchly-appearance-settings',JSON.stringify({uiTheme:'glass-dark',roomStyle:'classic',hideDelay:'never'}));
                 window.callCaptures=[];window.callTracks=[];window.callTokenRequests=0;
@@ -64,12 +65,15 @@ const audio = page => page.evaluate(async () => {
             if(await button.getAttribute(cinema?'aria-expanded':desktop?'aria-selected':'data-active')!=='true')await button.click();};
         await a.goto(base);await a.getByRole('button',{name:'Create room',exact:true}).first().click();await a.getByPlaceholder('Your nickname').fill('Camera A');await a.locator('.room-launcher-submit').click();await a.waitForURL('**/room/**');
         const roomId=a.url().split('/').pop();await b.goto(a.url());await b.getByLabel('Nickname',{exact:true}).fill('Camera B');await b.getByRole('button',{name:'Join room',exact:true}).click();await synced(a);await synced(b);
+        await wait(async()=> (await require('./soundEffectsChecks.cjs').counts(a)).roomJoin===1,'new room member did not play one cue');
+        assert.equal((await require('./soundEffectsChecks.cjs').counts(b)).roomJoin,0,'self room join played a cue');
         for(const page of [a,b])assert.equal(await page.evaluate(()=>window.callCaptures.length+window.callTokenRequests),0);
         const snapshot=()=>a.evaluate(async()=>{const{socket}=await import('/src/socket.js');return new Promise(resolve=>socket.emit('room:snapshot',{},result=>resolve(result.snapshot)));});
         await open(a,'Watch');await a.locator('#room-link-input').fill(`${base}/bg-video.mp4`);await a.getByRole('button',{name:'Play Now',exact:true}).click();
         const movie=page=>page.locator('.room-player-surface video');await movie(a).waitFor();await movie(b).waitFor();
         for(const page of [a,b]){await page.evaluate(async()=>{const url=performance.getEntriesByType('resource').map(entry=>entry.name).find(url=>url.includes('/deps/livekit-client.js'));const{Room,RoomEvent}=await import(url);const emit=Room.prototype.emit;window.callConnectionStates=[];Room.prototype.emit=function(event,...args){window.testCallRoom=this;if(event===RoomEvent.ConnectionStateChanged)window.callConnectionStates.push(args[0]);return emit.call(this,event,...args);};});await open(page,'Call');await page.getByRole('button',{name:'Join Voice',exact:true}).click();await page.getByRole('button',{name:'Mute microphone',exact:true}).waitFor();}
         await wait(async()=>{const value=await audio(a);return value.playing&&value.rms>.01&&Math.abs(value.frequency-880)<20;},'A did not hear B');await wait(async()=>{const value=await audio(b);return value.playing&&value.rms>.01&&Math.abs(value.frequency-440)<20;},'B did not hear A');evidence.audio={aHearsB:await audio(a),bHearsA:await audio(b)};
+        assert.equal((await require('./soundEffectsChecks.cjs').counts(a)).voiceJoin,2);assert.equal((await require('./soundEffectsChecks.cjs').counts(b)).voiceJoin,1);
         await a.getByRole('button',{name:'Mute microphone',exact:true}).click();await wait(async()=>(await audio(b)).rms<.003,'A mute did not silence remote audio');
         for(const page of [a,b]){await open(page,'Video');await page.getByRole('button',{name:'Turn camera on',exact:true}).click();await page.locator('.video-call-content:visible[data-camera-on="true"]').waitFor();}
         const tile=(page,name)=>page.locator('.call-camera-tile').filter({hasText:name});
@@ -80,13 +84,18 @@ const audio = page => page.evaluate(async () => {
         assert.equal(await a.locator('.video-call-content:visible').getAttribute('data-microphone-on'),'false','camera join unmuted voice');
         for(const page of [a,b])assert.equal(await page.evaluate(()=>window.callTokenRequests),1,'camera added another connection/token');
         evidence.checks.push('Two browser processes decode opposite camera colors/frames; one token each; muted voice stays muted');
+        const soundBefore=await Promise.all([a,b].map(page=>page.evaluate(()=>window.soundStarts.length)));
         await require('./roomLifecycleChecks.cjs')({ a, b, open, wait, snapshot, evidence });
+        assert.deepEqual(await Promise.all([a,b].map(page=>page.evaluate(()=>window.soundStarts.length))),soundBefore,'layout changes played media cues');
+        await require('./soundEffectsChecks.cjs')({a,b,open,wait,audio,decode,synced,snapshot,base,backendUrl,roomId,evidence});
         await a.getByRole('button',{name:'Turn camera off',exact:true}).click();await tile(b,'Camera A').locator('.call-camera-fallback').waitFor();assert.equal(await tile(b,'Camera A').locator('video').count(),0);
         await a.getByRole('button',{name:'Unmute microphone',exact:true}).click();await a.getByRole('button',{name:'Mute microphone',exact:true}).waitFor();
         await open(a,'Call');await a.getByRole('button',{name:'Mute microphone',exact:true}).click();await open(a,'Video');await a.getByRole('button',{name:'Unmute microphone',exact:true}).waitFor();
         await a.getByRole('button',{name:'Turn camera on',exact:true}).click();await tile(b,'Camera A').locator('video').waitFor();
         await b.getByRole('button',{name:'Mute microphone',exact:true}).click();await wait(async()=>(await audio(a)).rms<.003,'B mute did not silence remote audio');await b.getByRole('button',{name:'Unmute microphone',exact:true}).click();await wait(async()=>(await audio(a)).rms>.01,'B unmute did not resume audio');
-        await a.evaluate(()=>window.testCallRoom.simulateScenario('signal-reconnect'));await wait(()=>a.evaluate(()=>window.callConnectionStates.some(value=>value.toLowerCase().includes('reconnecting'))&&window.testCallRoom.state==='connected'),'LiveKit signaling did not reconnect');await synced(a);await wait(async()=>{try{return(await decode(b,'Camera A')).frames>3;}catch{return false;}},'camera did not recover after reconnect');assert.equal(await a.evaluate(()=>window.callTokenRequests),1);evidence.checks.push('Real bidirectional PCM and mute silence/restoration; SDK signaling disconnect reconnects without affecting Watchly');
+        const soundsBeforeSignal=await Promise.all([a,b].map(page=>page.evaluate(()=>window.soundStarts.length)));
+        await a.evaluate(()=>{window.callConnectionStates=[];return window.testCallRoom.simulateScenario('signal-reconnect');});await wait(()=>a.evaluate(()=>window.callConnectionStates.some(value=>value.toLowerCase().includes('reconnecting'))&&window.testCallRoom.state==='connected'),'LiveKit signaling did not reconnect');await synced(a);await wait(async()=>{try{return(await decode(b,'Camera A')).frames>3;}catch{return false;}},'camera did not recover after reconnect');assert.equal(await a.evaluate(()=>window.callTokenRequests),1);evidence.checks.push('Real bidirectional PCM and mute silence/restoration; SDK signaling disconnect reconnects without affecting Watchly');
+        assert.deepEqual(await Promise.all([a,b].map(page=>page.evaluate(()=>window.soundStarts.length))),soundsBeforeSignal,'signal reconnect played notification cues');
         evidence.checks.push('Camera off releases video/fallback without leaving; microphone state shared between Voice and Video');
         await a.getByRole('button',{name:'Pop out video call',exact:true}).click();const floating=a.getByRole('region',{name:'Floating video call',exact:true});await floating.waitFor();
         await require('./floatingCallChecks.cjs')({a,b,floating,open,wait,decode,audio,evidence,artifacts});

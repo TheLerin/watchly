@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Check, RotateCcw } from 'lucide-react';
 import { useTheme, THEME_META, ROOM_APPEARANCE_META } from '../context/ThemeContext';
 import { CINEMA_PRESET_META } from '../utils/appearanceSettings';
+import SoundSettings from './SoundSettings';
 
 const MotionDiv = motion.div;
 
@@ -107,6 +108,7 @@ export default function AppearancePanel({ supportsTheater, panelRef, panelEvents
                         <ToggleRow label="Reduce motion" setting="reduceMotion" />
                     </section>
                 </>}
+                <SoundSettings />
                 <button type="button" className="appearance-reset" onClick={resetAppearance}><RotateCcw size={13} aria-hidden="true" />Reset appearance</button>
             </div>
         </MotionDiv>
