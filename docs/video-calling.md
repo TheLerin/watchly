@@ -49,13 +49,13 @@ Tiles show name, local-user label, avatar/camera-off fallback, microphone status
 
 ## 5. Floating overlay
 
-The effective mode is `sidebar`, `floating` or `hidden`, derived from pop-out and active panel state. Floating mode replaces sidebar rendering with a restore placeholder, giving one active camera renderer. A dark glass window starts at 360x240, saves device-local geometry under `watchly-floating-call`, and can be restored, minimized or closed to the Video tab without leaving media.
+The effective mode is `sidebar`, `floating` or `hidden`, derived from pop-out and active panel state. Floating mode replaces sidebar rendering with a restore placeholder, giving one active camera renderer. A video-only frame with remote participants starts at 360x240, saves device-local geometry under `watchly-floating-call`, and can be restored, minimized or closed to the Video tab without leaving media.
 
-The portal root has `pointer-events: none`; only the floating window accepts pointer events. Movie controls outside it remain available. Layer 180 places the call above movie content; device menus stay inside the call layer.
+The portal root has `pointer-events: none`; only the floating window accepts pointer events. Movie controls outside it remain available. Layer 180 places the call above movie content. Floating mode hides self without changing camera publication, uses hover/tap icon controls, and shows Waiting for others when no remote participants remain. See [floating-video-call.md](floating-video-call.md) for refinement details.
 
 ## 6. Drag
 
-The title bar uses primary pointer events and pointer capture for mouse and touch. Interactive buttons do not start dragging. `touch-action: none` and prevented selection keep dragging stable. Updates are scheduled through animation frames, clamped to visible bounds; cancellation and cleanup release gesture state.
+The video surface uses primary pointer events and pointer capture for mouse and touch. Interactive buttons do not start dragging. `touch-action: none` and prevented selection keep dragging stable. Updates are scheduled through animation frames, clamped to visible bounds; cancellation and cleanup release gesture state.
 
 ## 7. Resize
 
@@ -65,7 +65,7 @@ A corner handle uses pointer capture with the same bounds logic and supports arr
 
 React always portals into the same DOM container. That container is physically moved into the current paintable `document.fullscreenElement`, or back into `document.body` outside fullscreen. The portal target itself does not change, so fullscreen relocation preserves mounted tiles, tracks and Room ownership.
 
-The floating header's fullscreen action uses the existing `.room-player-surface` wrapper, matching Watchly's existing custom fullscreen control. It does not change the player implementation or native movie PiP.
+The floating overlay's fullscreen action uses the existing `.room-player-surface` wrapper, matching Watchly's existing custom fullscreen control. It does not change the player implementation or native movie PiP.
 
 ## 9. Fullscreen changes
 
@@ -116,6 +116,6 @@ For the video test, set `LIVEKIT_TEST_SERVER` to an official local LiveKit serve
 
 The new media verification used local SFU transport and synthetic devices; this pass did not repeat the deployed LiveKit Cloud test, test physical USB unplugging, or exercise Safari/iOS hardware. Missing/unplugged-device handling has controller tests. Zoom checks use logical viewport/DPR equivalents, not a browser settings menu.
 
-Browser-native movie PiP is a separate browser surface and cannot display this in-app call overlay. Native fullscreen of a `<video>` or cross-origin iframe cannot paint Watchly HTML over it; use Watchly's wrapper fullscreen control or the floating header's fullscreen action for the overlay. Platform-native iOS fullscreen can have the same restriction. The app keeps the connection alive in those modes, but cannot override the browser/OS surface.
+Browser-native movie PiP is a separate browser surface and cannot display this in-app call overlay. Native fullscreen of a `<video>` or cross-origin iframe cannot paint Watchly HTML over it; use Watchly's wrapper fullscreen control or the floating overlay's fullscreen action for the overlay. Platform-native iOS fullscreen can have the same restriction. The app keeps the connection alive in those modes, but cannot override the browser/OS surface.
 
 Camera and microphone require HTTPS or localhost, supported browser APIs and user permission. Device labels and front/rear selection depend on available hardware and browser support. Autoplay-blocked remote audio has an explicit Enable call audio action.

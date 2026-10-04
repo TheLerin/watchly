@@ -7,7 +7,7 @@ import { useRoom } from '../context/RoomContext';
 import Avatar from './account/Avatar';
 import './video-call.css';
 
-function CameraTile({ reference }) {
+function CameraTile({ reference, floating = false }) {
     const { users } = useRoom(), participant = reference.participant;
     const speaking = useIsSpeaking(participant);
     const micMuted = useIsMuted({ participant, source: Track.Source.Microphone });
@@ -17,8 +17,23 @@ function CameraTile({ reference }) {
     const member = users.find(user => `watchly-${user.userId}` === participant.identity);
     const name = member?.nickname || participant.name || 'Watchly member';
     return <div className="call-camera-tile" data-identity={participant.identity} data-camera-on={Boolean(live)} data-speaking={speaking && !micMuted}>
-        {live ? <VideoTrack trackRef={reference} muted playsInline autoPlay /> : <div className="call-camera-fallback"><Avatar name={name} url={member?.avatarUrl} size={44} /><span>Camera off</span></div>}
+        {live ? <VideoTrack trackRef={reference} muted playsInline autoPlay /> : <div className="call-camera-fallback"><Avatar name={name} url={member?.avatarUrl} size={44} />{floating && <span>{name}</span>}<span>Camera off</span></div>}
         <div className="call-camera-caption"><span title={name}>{name}{participant.isLocal && <small> You</small>}</span><span aria-label={micMuted ? 'Microphone muted' : 'Microphone on'}>{micMuted ? <MicOff size={13} /> : <Mic size={13} />}</span></div>
+    </div>;
+}
+
+// Presentation only: filtering the preview never changes local publications.
+export function FloatingCameraSurface({ compact }) {
+    const { room } = useMediaCall();
+    const connection = useConnectionState(), { isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant();
+    const references = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
+    const speakers = useSpeakingParticipants();
+    const remote = connection === ConnectionState.Disconnected ? [] : references.filter(ref => ref.participant.identity && !ref.participant.isLocal);
+    const ordered = [...remote].sort((a, b) => Number(speakers.includes(b.participant)) - Number(speakers.includes(a.participant)));
+    const tiles = compact ? ordered.slice(0, 1) : ordered;
+    return <div className="video-call-content floating-call-surface" data-call-state={connection} data-camera-on={isCameraEnabled} data-microphone-on={isMicrophoneEnabled} data-call-room={room.name}>
+        {tiles.length ? <div className="call-camera-grid" data-count={tiles.length} aria-label="Video call participants">{tiles.map(ref => <CameraTile key={ref.participant.identity} reference={ref} floating />)}</div>
+            : <p className="floating-call-empty" role="status">Waiting for others…</p>}
     </div>;
 }
 

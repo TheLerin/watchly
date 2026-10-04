@@ -27,22 +27,30 @@
 .call-device-settings select { min-width: 0; max-width: 100%; width: 100%; padding: 7px; color: #ddd; background: #222225; border: 1px solid #3a3a40; border-radius: 6px; }
 .call-device-settings p { margin: 7px 0 0; font-size: 10px; color: #888; }
 .watchly-floating-root { position: fixed; inset: 0; z-index: 180; pointer-events: none; }
-.floating-video-call { position: absolute; display: flex; flex-direction: column; box-sizing: border-box; pointer-events: auto; overflow: hidden; color: #eee;
-    border: 1px solid rgb(255 255 255 / 15%); border-radius: 14px; background: rgb(14 14 17 / 94%); box-shadow: 0 8px 32px rgb(0 0 0 / 35%); backdrop-filter: blur(16px); }
-.floating-call-header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 5px; min-height: 38px; padding: 6px 9px; border-bottom: 1px solid rgb(255 255 255 / 8%); cursor: move; touch-action: none; user-select: none; }
-.floating-call-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.floating-call-header > div { display: flex; flex: none; gap: 2px; }
-.floating-call-header button { display: flex; align-items: center; justify-content: center; width: 25px; height: 25px; border: 0; border-radius: 5px; background: transparent; color: #aaa; cursor: pointer; }
-.floating-video-call > .video-call-content { padding: 8px 10px 12px; flex: 1; overflow-y: auto; }
-.floating-video-call .call-camera-grid { flex: 1; grid-auto-rows: minmax(64px, 1fr); align-content: stretch; }
-.floating-video-call .call-camera-tile { aspect-ratio: auto; min-height: 64px; }
-.floating-video-call .call-device-settings { position: absolute; z-index: 2; inset: 72px 8px 15px; overflow-y: auto; }
-.floating-video-call .video-call-status { font-size: 10px; }
-.floating-video-call .video-call-actions button { min-height: 28px; padding: 4px 6px; }
-.floating-call-resize { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; border: 0; background: linear-gradient(135deg, transparent 65%, #555 66%, transparent 72%, #555 73%, transparent 79%); touch-action: none; cursor: nwse-resize; }
-.floating-video-call[data-narrow="true"] .call-button-label { display: none; }
-.floating-video-call[data-narrow="true"] .video-call-actions button { padding: 4px; font-size: 10px; }
-.floating-video-call[data-narrow="true"] .video-call-status { flex-wrap: wrap; }
+.floating-video-call { position: absolute; box-sizing: border-box; pointer-events: auto; overflow: hidden; color: #eee;
+    border: 1px solid rgb(255 255 255 / 14%); border-radius: 16px; background: #101012; box-shadow: 0 8px 28px rgb(0 0 0 / 35%); touch-action: none; cursor: move; user-select: none; }
+.floating-call-surface { position: absolute; inset: 0; gap: 0; }
+.floating-video-call .call-camera-grid { height: 100%; grid-auto-rows: minmax(0, 1fr); align-content: stretch; gap: 2px; }
+.floating-video-call .call-camera-tile { aspect-ratio: auto; min-height: 0; border-radius: 0; border-color: transparent; }
+.floating-video-call .call-camera-tile[data-speaking="true"]::after { content: ''; position: absolute; inset: 0; border: 1px solid rgb(190 200 192 / 55%); pointer-events: none; }
+.floating-video-call .call-camera-caption { bottom: auto; top: 0; background: linear-gradient(rgb(0 0 0 / 50%), transparent); opacity: 0; transition: opacity .18s ease; pointer-events: none; }
+.floating-video-call[data-controls-visible="true"] .call-camera-caption { opacity: 1; }
+.floating-video-call .call-camera-fallback { padding: 0; }
+.floating-call-empty { margin: auto; padding: 8px; font-size: 12px; color: #999; text-align: center; }
+.floating-call-error { position: absolute; top: 0; left: 0; right: 0; margin: 0; padding: 8px; background: rgb(0 0 0 / 80%); color: #dda3a3; font-size: 11px; pointer-events: none; }
+.floating-call-overlay { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: flex-end; padding: 12px 16px 12px 8px; background: linear-gradient(transparent 55%, rgb(0 0 0 / 65%)); opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+.floating-video-call[data-controls-visible="true"] .floating-call-overlay { opacity: 1; }
+.floating-call-controls { display: flex; gap: 3px; }
+.floating-call-controls button { display: flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid rgb(255 255 255 / 9%); border-radius: 8px; background: rgb(20 20 23 / 75%); color: #eee; cursor: pointer; pointer-events: none; }
+.floating-video-call[data-controls-visible="true"] .floating-call-controls button { pointer-events: auto; }
+.floating-call-controls button:hover { background: rgb(55 55 59 / 90%); }
+.floating-call-controls button:disabled { opacity: .4; cursor: not-allowed; }
+.floating-video-call[data-minimized="true"] .floating-call-overlay { padding: 9px; background: transparent; align-items: center; }
+.floating-video-call[data-narrow="true"] .floating-call-overlay { padding: 7px 10px 10px 4px; }
+.floating-video-call[data-narrow="true"] .floating-call-controls { gap: 1px; }
+.floating-video-call[data-narrow="true"] .floating-call-controls button { width: 21px; height: 27px; border-radius: 6px; }
+.floating-call-resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; padding: 0; border: 0; background: linear-gradient(135deg, transparent 65%, #999 66%, transparent 72%, #999 73%, transparent 79%); opacity: 0; transition: opacity .18s ease; touch-action: none; cursor: nwse-resize; }
+.floating-call-resize:hover, .floating-call-resize:focus-visible, .floating-video-call[data-controls-visible="true"] .floating-call-resize { opacity: .55; }
 .watchly-media-audio > button { position: fixed; z-index: 185; bottom: 12px; left: 12px; padding: 9px 12px; background: #252529; color: #eee; border-radius: 10px; }
 @media (max-width: 600px) {
     .floating-video-call .call-camera-grid { grid-template-columns: minmax(0, 1fr); }

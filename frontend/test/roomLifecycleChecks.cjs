@@ -82,10 +82,10 @@ module.exports = async ({ a, b, open, wait, snapshot, evidence }) => {
     for (const tab of ['Room', 'Chat', 'Call', 'Video', 'Watch']) { await open(a, tab); await verify(`tab ${tab}`); }
     await open(a, 'Video'); await a.getByRole('button', { name: 'Pop out video call', exact: true }).click();
     const floating = a.getByRole('region', { name: 'Floating video call', exact: true });
-    await floating.getByRole('button', { name: 'Fullscreen movie with video call', exact: true }).click();
+    await floating.hover({position:{x:10,y:10}});await floating.getByRole('button', { name: 'Fullscreen movie with video call', exact: true }).click();
     await wait(() => a.evaluate(() => Boolean(document.fullscreenElement)), 'fullscreen failed'); await verify('fullscreen');
     await a.evaluate(() => document.exitFullscreen()); await verify('fullscreen exit');
-    await floating.getByRole('button', { name: 'Restore video panel', exact: true }).click(); await verify('restore');
+    await floating.hover({position:{x:10,y:10}});await floating.getByRole('button', { name: 'Restore video panel', exact: true }).click(); await verify('restore');
     await movie(a).evaluate(video => video.pause()); await wait(async () => (await snapshot()).playback.status !== 'playing' && await movie(a).evaluate(video => video.paused && !video.seeking) && await movie(b).evaluate(video => video.paused && !video.seeking), 'pause sync failed');
     // Explicit play/pause seeks can finish decoding asynchronously and report
     // READY again; require retained readiness rather than zero reports here.
