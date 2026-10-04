@@ -18,7 +18,7 @@ and never includes the server signing secret or raw credential configuration.
 Tokens expire in 120 seconds, target `watchly-voice-<ROOM CODE>`, and use
 `watchly-<stable opaque Watchly member ID>` as participant identity. The server
 derives the display name from the verified Watchly membership. Grants allow
-room join, publication and subscription, restrict publication to microphone,
+room join, publication and subscription, restrict publication to microphone and camera,
 and disable data publication. They grant no LiveKit room-administration rights.
 Token issuance is limited to eight joins per member per minute.
 
@@ -26,12 +26,14 @@ Token issuance is limited to eight joins per member per minute.
 
 Mounting/joining/reloading a Watchly room does not request a voice token,
 microphone or LiveKit connection. Join Voice performs token authorization,
-then microphone capture, LiveKit connection and microphone publication.
-Camera capture is never requested. LiveKit's React audio renderer attaches
-remote audio; its Enable voice audio button handles blocked autoplay.
+then LiveKit connection, microphone capture and microphone publication.
+Join Voice never requests camera capture. The Video tab separately enables
+camera on explicit action through the same Room; see [video calling](video-calling.md).
+One shared React audio renderer attaches remote audio; its Enable call audio
+button handles blocked autoplay.
 
 Controls show Join Voice, Leave Voice, Mute/Unmute, connection state, joined
-participants, speaking and muted indicators. Leaving and unmounting disconnect
+participants, speaking and muted indicators. Leave Voice is labeled Leave call while the camera is on. Leaving and unmounting disconnect
 LiveKit and stop capture, including a microphone permission request that resolves
 after cancellation. The controller fences stale asynchronous work and repeated
 Join clicks. LiveKit reconnects its existing connection; joining Watchly alone

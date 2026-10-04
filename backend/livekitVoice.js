@@ -74,7 +74,7 @@ function registerLivekitVoice({ app, io, rooms, accounts, env = process.env }) {
                 identity: voiceIdentity(member.userId), name: member.nickname, ttl: 120,
             });
             token.addGrant({ room: voiceRoomName(req.body.roomId), roomJoin: true, canPublish: true, canSubscribe: true,
-                canPublishData: false, canPublishSources: [TrackSource.MICROPHONE] });
+                canPublishData: false, canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA] });
             const participantToken = await token.toJwt();
             check(); // Membership/account changes during async verification/signing fence this response.
             res.json({ serverUrl: config.serverUrl, participantToken });

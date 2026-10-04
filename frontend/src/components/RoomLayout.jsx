@@ -16,10 +16,12 @@ import {
     Users,
     Wifi,
     WifiOff,
+    Video,
 } from 'lucide-react';
 import ChatUI from './ChatUI';
 import UserQueueSidebar from './UserQueueSidebar';
 import VoiceRoom from './VoiceRoom';
+import { MediaCallProvider, VideoCallPanel, FloatingVideoCall } from './RoomMediaCall';
 import VideoPlayer from './VideoPlayer';
 import TheaterIconButton from './TheaterIconButton';
 import ReadinessPanel from './player/ReadinessPanel';
@@ -266,6 +268,7 @@ const roomTabs = [
     { id: 'room', label: 'Room', icon: <Users size={19} />, controls: 'classic-room-panel' },
     { id: 'call', label: 'Call', icon: <PhoneCall size={19} />, controls: 'classic-call-panel classic-share-panel' },
     { id: 'chat', label: 'Chat', icon: <MessageSquare size={19} />, controls: 'classic-chat-panel' },
+    { id: 'video', label: 'Video', icon: <Video size={19} />, controls: 'classic-video-panel' },
 ];
 
 const RoomTabs = ({ activeTab, onChange, onSelect = onChange, desktop = false, triggerRef }) => (
@@ -318,11 +321,15 @@ const RoomLayout = () => {
     const ambientTargetRef = useRef(null);
     const [showUsersPanel, setShowUsersPanel] = useState(true);
     const [activePanel, setActivePanel] = useState(() => preferredRoomAppearance === 'cinematic' ? null : 'watch');
-    const mobileTab = ({ members: 'room', voice: 'call', watch: 'watch', chat: 'chat' })[activePanel] || '';
+    const [videoPoppedOut, setVideoPoppedOut] = useState(false);
+    const videoPanelMode = videoPoppedOut ? 'floating' : activePanel === 'video' ? 'sidebar' : 'hidden';
+    const mobileTab = ({ members: 'room', voice: 'call', watch: 'watch', chat: 'chat', video: 'video' })[activePanel] || '';
     const selectTab = useCallback(tab => setActivePanel(({ room: 'members', call: 'voice' })[tab] || tab), []);
     const togglePanel = useCallback(panel => setActivePanel(current => current === panel ? null : panel), []);
     const toggleTab = useCallback(tab => togglePanel(({ room: 'members', call: 'voice' })[tab] || tab), [togglePanel]);
     const closePanel = useCallback(() => setActivePanel(null), []);
+    const popOutVideo = useCallback(() => { setVideoPoppedOut(true); setActivePanel(null); }, []);
+    const restoreVideo = useCallback(() => { setVideoPoppedOut(false); setActivePanel('video'); }, []);
     const settingsPanelRef = useRef(null), leftPanelRef = useRef(null), rightPanelRef = useRef(null), mobilePanelRef = useRef(null);
     const settingsTriggerRef = useRef(null), leftDockRef = useRef(null), rightDockRef = useRef(null), tabsRef = useRef(null);
     const triggerRefs = useMemo(() => [settingsTriggerRef, leftDockRef, rightDockRef, tabsRef], []);
@@ -341,7 +348,7 @@ const RoomLayout = () => {
     // must not clear the newly opened panel's boundary.
     const panelRef = activePanel === 'settings' ? settingsPanelRef : !isDesktop ? mobilePanelRef
         : ['watch', 'info', 'tracks'].includes(activePanel) ? leftPanelRef : rightPanelRef;
-    const dismissiblePanel = isDesktop || activePanel === 'settings' || ['members', 'voice', 'chat'].includes(activePanel) ? activePanel : null;
+    const dismissiblePanel = isDesktop || activePanel === 'settings' || ['members', 'voice', 'chat', 'video'].includes(activePanel) ? activePanel : null;
     const panelEvents = useRoomPanelDismiss({ activePanel: dismissiblePanel, onClose: closePanel, panelRef, triggerRefs });
 
     if (isRestoringSession) {
@@ -424,7 +431,7 @@ const RoomLayout = () => {
     );
 
     return (
-        <div
+        <MediaCallProvider key={`${roomId}:${currentUser?.userId}`}><div
             ref={ambientTargetRef}
             className="room-shell relative h-[100dvh] w-full overflow-hidden bg-black text-white"
             data-room-appearance={roomAppearance}
@@ -502,12 +509,13 @@ const RoomLayout = () => {
                         </main>
 
                         <aside id="watchly-right-panel" className="room-right-rail flex min-h-0 flex-col gap-3" data-open-tool={activePanel || ''}
-                            ref={roomAppearance === 'classic' && ['members', 'voice', 'chat'].includes(activePanel) ? panelRef : undefined} {...(roomAppearance === 'classic' ? panelEvents : {})}>
+                            ref={roomAppearance === 'classic' && ['members', 'voice', 'chat', 'video'].includes(activePanel) ? panelRef : undefined} {...(roomAppearance === 'classic' ? panelEvents : {})}>
                             {roomAppearance === 'classic' && <RoomTabs desktop triggerRef={tabsRef} activeTab={mobileTab} onChange={toggleTab} onSelect={selectTab} />}
                             <nav ref={rightDockRef} className="theater-right-dock" aria-label="Room tools">
                                 {[
                                     { id: 'members', label: 'Members and queue', icon: <Users size={21} /> },
                                     { id: 'voice', label: 'Voice call', icon: <PhoneCall size={21} /> },
+                                    { id: 'video', label: 'Video call', icon: <Video size={21} /> },
                                     { id: 'share', label: 'Share screen', icon: <MonitorUp size={21} /> },
                                     { id: 'chat', label: 'Live chat', icon: <MessageSquare size={21} /> },
                                 ].map(tool => (
@@ -567,6 +575,11 @@ const RoomLayout = () => {
                                 aria-labelledby={roomAppearance === 'classic' ? 'classic-call-tab' : undefined}>
                                 <ScreenShareAdapter variant={roomAppearance} />
                             </section>
+                            <section className="room-video-group" id={roomAppearance === 'classic' ? 'classic-video-panel' : undefined}
+                                {...panelEvents} ref={roomAppearance === 'cinematic' && activePanel === 'video' ? panelRef : undefined}
+                                role={roomAppearance === 'classic' ? 'tabpanel' : undefined} aria-labelledby={roomAppearance === 'classic' ? 'classic-video-tab' : undefined}>
+                                <VideoCallPanel mode={videoPanelMode} onPopOut={popOutVideo} onRestore={restoreVideo} />
+                            </section>
                             <div className="room-chat-group min-h-0 flex-1" id={roomAppearance === 'classic' ? 'classic-chat-panel' : undefined}
                                 {...panelEvents}
                                 ref={roomAppearance === 'cinematic' && activePanel === 'chat' ? panelRef : undefined}
@@ -585,8 +598,8 @@ const RoomLayout = () => {
                             </div>
                         </div>
 
-                        <div className="mobile-classic-panels" hidden={!['room', 'call', 'chat'].includes(mobileTab)}
-                            ref={['room', 'call', 'chat'].includes(mobileTab) ? panelRef : undefined} {...panelEvents}>
+                        <div className="mobile-classic-panels" hidden={!['room', 'call', 'chat', 'video'].includes(mobileTab)}
+                            ref={['room', 'call', 'chat', 'video'].includes(mobileTab) ? panelRef : undefined} {...panelEvents}>
                             <section className="mobile-classic-panel mobile-classic-room" hidden={mobileTab !== 'room'} aria-label="Members and queue">
                                 <div className="mobile-classic-panel-heading">
                                     <div><span>YOUR ROOM</span><h2>Members & Queue</h2></div>
@@ -607,13 +620,17 @@ const RoomLayout = () => {
                             <section className="mobile-classic-panel mobile-classic-chat" hidden={mobileTab !== 'chat'} aria-label="Live chat">
                                 <ChatUI hideHeader variant="classic" className="mobile-classic-chat-ui" visible={mobileTab === 'chat'} />
                             </section>
+                            <section className="mobile-classic-panel mobile-classic-video" hidden={mobileTab !== 'video'} aria-label="Video call">
+                                <div className="mobile-classic-card"><VideoCallPanel mode={videoPanelMode} onPopOut={popOutVideo} onRestore={restoreVideo} /></div>
+                            </section>
                         </div>
 
                         <RoomTabs triggerRef={tabsRef} activeTab={mobileTab || 'watch'} onChange={toggleTab} />
                     </div>
                 )}
             </div>
-        </div>
+            <FloatingVideoCall visible={videoPanelMode === 'floating'} onRestore={restoreVideo} />
+        </div></MediaCallProvider>
     );
 };
 

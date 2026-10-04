@@ -31,13 +31,13 @@ test.before(async () => {
 });
 test.after(async () => { closeVoice(); clients.forEach(socket => socket.close()); await new Promise(resolve => io.close(resolve)); });
 
-test('active guest credentials mint a scoped microphone-only JWT without changing Watchly roles or voice signaling', async () => {
+test('active guest credentials mint a scoped microphone and camera JWT without changing Watchly roles or voice signaling', async () => {
     const host = await create(), viewer = await connect(); const joined = await call(viewer, 'room:join', { roomId: host.room.roomId, nickname: 'Viewer', protocolVersion: 2 });
     const claims = await decode(await request({ ...body(host), identity: 'forged', room: 'another-room', role: 'admin' }));
     assert.equal(claims.sub, voiceIdentity(host.room.memberId)); assert.notEqual(claims.sub, host.socket.id); assert.notEqual(claims.sub, 'Guest nickname');
     assert.equal(claims.name, 'Guest nickname'); assert.equal(claims.video.room, voiceRoomName(host.room.roomId));
     assert.equal(claims.video.roomJoin, true); assert.equal(claims.video.canPublish, true); assert.equal(claims.video.canSubscribe, true); assert.equal(claims.video.canPublishData, false);
-    assert.deepEqual(claims.video.canPublishSources, ['microphone']); assert.ok(claims.exp - claims.nbf <= 120);
+    assert.deepEqual(claims.video.canPublishSources, ['microphone', 'camera']); assert.equal(claims.video.roomAdmin, undefined); assert.ok(claims.exp - claims.nbf <= 120);
     await decode(await request(body({ socket: viewer, room: joined })));
     const snapshot = (await call(host.socket, 'room:snapshot')).snapshot;
     assert.deepEqual(snapshot.members.map(member => member.role), ['Host', 'Viewer']); assert.ok(snapshot.members.every(member => !member.isVoiceActive));

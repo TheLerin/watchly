@@ -15,7 +15,7 @@ const tone = (name, frequency) => {
     const file = path.join(artifacts, name); writeFileSync(file, wav); return file;
 };
 const audio = page => page.evaluate(async () => {
-    const element = [...document.querySelectorAll('.livekit-voice audio')].find(audio => audio.srcObject?.getAudioTracks().some(track => track.readyState === 'live'));
+    const element = [...document.querySelectorAll('.watchly-media-audio audio')].find(audio => audio.srcObject?.getAudioTracks().some(track => track.readyState === 'live'));
     if (!element) return { rms: 0, frequency: 0, playing: false };
     if (!window.voiceProbe || window.voiceProbe.stream !== element.srcObject) {
         window.voiceProbe?.source.disconnect(); await window.voiceProbe?.context.close();
@@ -65,17 +65,17 @@ const audio = page => page.evaluate(async () => {
         await memberships();
         for (const page of [a, b]) { await page.locator('#classic-call-tab').click(); await page.locator('[data-voice-provider="livekit"]').waitFor(); assert.equal(await page.evaluate(() => window.voiceCaptureCalls.length), 0); assert.equal(await page.locator('[data-voice-provider="livekit"]').getAttribute('data-voice-state'), 'disconnected'); }
         assert.equal(tokens.length, 0); result.checks.push('No voice connection, token request, or microphone capture on Watchly room join');
-        for (const page of [a, b]) { await page.getByRole('button', { name: 'Join Voice', exact: true }).click(); await wait(async () => await page.locator('.livekit-voice').getAttribute('data-voice-state') === 'connected', 'LiveKit voice failed to connect'); await page.getByRole('button', { name: 'Mute', exact: true }).waitFor(); }
+        for (const page of [a, b]) { await page.getByRole('button', { name: 'Join Voice', exact: true }).click(); await wait(async () => await page.locator('.livekit-voice').getAttribute('data-voice-state') === 'connected', 'LiveKit voice failed to connect'); await page.getByRole('button', { name: 'Mute microphone', exact: true }).waitFor(); }
         for (const page of [a, b]) { await wait(async () => await page.locator('.livekit-voice-person').count() === 2, 'LiveKit participants missing'); assert.equal(await page.evaluate(() => window.voiceCaptureCalls.every(call => !call.video)), true); const stats = await page.evaluate(async () => { const all = await Promise.all(window.voicePeers.map(peer => peer.getStats())); return all.flatMap(report => [...report.values()]).filter(value => value.type === 'outbound-rtp' && value.kind === 'video').length; }); assert.equal(stats, 0); }
         await wait(async () => { const value = await audio(a); return value.playing && value.rms > .01 && Math.abs(value.frequency - 880) < 20; }, 'A did not render/decode B microphone audio');
         await wait(async () => { const value = await audio(b); return value.playing && value.rms > .01 && Math.abs(value.frequency - 440) < 20; }, 'B did not render/decode A microphone audio');
         result.audio = { aHearsB: await audio(a), bHearsA: await audio(b) }; result.checks.push('Bidirectional decoded microphone audio rendered and playing; camera/video publication absent');
         await wait(async () => await a.locator('.livekit-voice-person[data-speaking="true"]').count() > 0, 'Speaking indicator missing');
         await a.screenshot({ path: path.join(artifacts, 'livekit-a-connected.png'), fullPage: true }); await b.screenshot({ path: path.join(artifacts, 'livekit-b-connected.png'), fullPage: true });
-        await b.getByRole('button', { name: 'Mute', exact: true }).click(); await b.getByRole('button', { name: 'Unmute', exact: true }).waitFor();
+        await b.getByRole('button', { name: 'Mute microphone', exact: true }).click(); await b.getByRole('button', { name: 'Unmute microphone', exact: true }).waitFor();
         await wait(async () => await a.locator('.livekit-voice-person').filter({ hasText: 'Voice B' }).getAttribute('data-muted') === 'true', 'Remote mute indicator missing');
         await wait(async () => (await audio(a)).rms < .003, 'Muted B microphone remained audible');
-        await b.getByRole('button', { name: 'Unmute', exact: true }).click(); await b.getByRole('button', { name: 'Mute', exact: true }).waitFor();
+        await b.getByRole('button', { name: 'Unmute microphone', exact: true }).click(); await b.getByRole('button', { name: 'Mute microphone', exact: true }).waitFor();
         await wait(async () => { const value = await audio(a); return value.rms > .01 && Math.abs(value.frequency - 880) < 20; }, 'Unmuted B microphone did not resume audio'); result.checks.push('Mute stops remote audio and updates indicator; Unmute restores audio');
         await b.getByRole('button', { name: 'Leave Voice', exact: true }).click(); await b.getByRole('button', { name: 'Join Voice', exact: true }).waitFor();
         await wait(async () => await a.locator('.livekit-voice-person').count() === 1, 'Leaving voice did not remove participant');
@@ -83,7 +83,7 @@ const audio = page => page.evaluate(async () => {
         await memberships(); result.checks.push('Leaving stops microphone and removes LiveKit participant while both Watchly memberships/room synchronization remain intact');
         await a.locator('#classic-call-tab').click(); await a.getByRole('button', { name: 'Leave Voice', exact: true }).click(); assert.equal(await a.evaluate(() => window.voiceCapturedTracks.every(track => track.readyState === 'ended')), true);
         assert.deepEqual(errors, []); assert.equal(tokens.length, 2);
-        for (const token of tokens) { assert.deepEqual(Object.keys(token).sort(), ['participantToken', 'serverUrl']); const claims = JSON.parse(Buffer.from(token.participantToken.split('.')[1], 'base64url')); assert.deepEqual(claims.video.canPublishSources, ['microphone']); assert.equal(claims.video.room, `watchly-voice-${roomId}`); }
+        for (const token of tokens) { assert.deepEqual(Object.keys(token).sort(), ['participantToken', 'serverUrl']); const claims = JSON.parse(Buffer.from(token.participantToken.split('.')[1], 'base64url')); assert.deepEqual(claims.video.canPublishSources, ['microphone', 'camera']); assert.equal(claims.video.room, `watchly-voice-${roomId}`); }
         result.passed = true; writeFileSync(path.join(artifacts, 'livekit-verification.json'), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result, null, 2));
     } catch (error) {
         for (const [name, page] of [['a', a], ['b', b]]) if (page) { await page.screenshot({ path: path.join(artifacts, `livekit-${name}-failure.png`), fullPage: true }).catch(() => {}); console.error(name, await page.locator('.room-voice').innerText().catch(() => 'voice controls unavailable')); }

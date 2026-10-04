@@ -59,7 +59,7 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
  await host.keyboard.press('ArrowRight');
  assert.equal(await host.getByRole('tab', { name: 'Room', exact: true }).getAttribute('aria-selected'), 'true');
  await host.keyboard.press('End');
- assert.equal(await host.getByRole('tab', { name: 'Chat', exact: true }).evaluate(el => el === document.activeElement), true);
+ assert.equal(await host.getByRole('tab', { name: 'Video', exact: true }).evaluate(el => el === document.activeElement), true);
  await host.keyboard.press('Home');
  assert.equal(await host.getByRole('tab', { name: 'Watch', exact: true }).getAttribute('aria-selected'), 'true');
  console.log('PASS Classic desktop sizing, single controls, Light Glass, keyboard tabs');

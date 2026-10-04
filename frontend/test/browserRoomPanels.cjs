@@ -94,7 +94,7 @@ const wait = async (fn, message) => { const end = Date.now() + 30000; while (Dat
                 await open('chat'); const input = host.getByPlaceholder('Type a message...'); await input.fill('Drawer draft'); await input.click(); assert.equal(await input.isVisible(), true);
                 await open('voice'); await host.getByRole('button', { name: 'Join Voice', exact: true }).waitFor(); assert.equal(await input.isVisible(), false, 'two panels are open');
                 await host.getByRole('button', { name: 'Join Voice', exact: true }).click(); assert.equal(await host.locator('.room-voice:visible').count(), 1);
-                await host.getByText('LiveKit voice is not configured on the backend yet.', { exact: true }).waitFor();
+                await host.locator('.room-voice:visible').getByText('LiveKit voice is not configured on the backend yet.', { exact: true }).waitFor();
                 assert.equal(await host.getByRole('button', { name: 'Join Voice', exact: true }).isVisible(), true);
                 await host.getByRole('button', { name: 'Room settings', exact: true }).click(); await host.locator('.appearance-panel').waitFor(); assert.equal(await host.locator('.room-voice:visible').count(), 0);
                 await host.locator('.appearance-panel').getByRole('heading', { name: 'Appearance', exact: true }).click(); assert.equal(await host.locator('.appearance-panel').isVisible(), true);

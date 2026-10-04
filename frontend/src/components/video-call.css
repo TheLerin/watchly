@@ -1,0 +1,50 @@
+.room-video-call { min-width: 0; padding: 14px; color: var(--classic-text, #eee); }
+.room-video-call h2 { margin: 0 0 10px; font-size: 14px; font-weight: 700; }
+.video-call-content { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 9px; }
+.video-call-status { display: flex; justify-content: space-between; gap: 6px; color: #96969f; font-size: 11px; }
+.video-call-status > span { color: #ccc; }
+.video-call-actions { display: flex; flex-wrap: wrap; flex: none; gap: 5px; }
+.video-call-actions button, .call-error button, .call-empty button, .call-device-settings button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 7px 9px;
+    border: 1px solid rgb(255 255 255 / 12%); border-radius: 9px; background: rgb(255 255 255 / 4%); color: inherit; font-size: 11px;
+}
+.video-call-content button:disabled { opacity: .45; cursor: not-allowed; }
+.video-call-content button:focus-visible, .floating-video-call button:focus-visible { outline: 2px solid #aaa; outline-offset: 2px; }
+.call-camera-grid { display: grid; min-width: 0; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; overflow-y: auto; align-content: start; }
+.call-camera-grid[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+.call-camera-tile { position: relative; min-width: 0; aspect-ratio: 4 / 3; overflow: hidden; border: 1px solid rgb(255 255 255 / 10%); border-radius: 10px; background: #141416; }
+.call-camera-tile[data-speaking="true"] { border-color: rgb(190 200 192 / 60%); }
+.call-camera-tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.call-camera-fallback { display: flex; height: 100%; padding-bottom: 20px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; color: #85858e; font-size: 10px; }
+.call-camera-caption { position: absolute; bottom: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; background: rgb(0 0 0 / 68%); font-size: 11px; }
+.call-camera-caption > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-camera-caption small { color: #aaa; font-size: 9px; }
+.call-empty, .call-error { margin: 0; font-size: 12px; line-height: 1.5; color: #90909a; }
+.call-error { color: #dda3a3; }
+.call-error > div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.call-device-settings { padding: 9px; border: 1px solid rgb(255 255 255 / 12%); border-radius: 10px; background: #151518; }
+.call-device-settings label { display: flex; min-width: 0; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: 11px; }
+.call-device-settings select { min-width: 0; max-width: 100%; width: 100%; padding: 7px; color: #ddd; background: #222225; border: 1px solid #3a3a40; border-radius: 6px; }
+.call-device-settings p { margin: 7px 0 0; font-size: 10px; color: #888; }
+.watchly-floating-root { position: fixed; inset: 0; z-index: 180; pointer-events: none; }
+.floating-video-call { position: absolute; display: flex; flex-direction: column; box-sizing: border-box; pointer-events: auto; overflow: hidden; color: #eee;
+    border: 1px solid rgb(255 255 255 / 15%); border-radius: 14px; background: rgb(14 14 17 / 94%); box-shadow: 0 8px 32px rgb(0 0 0 / 35%); backdrop-filter: blur(16px); }
+.floating-call-header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 5px; min-height: 38px; padding: 6px 9px; border-bottom: 1px solid rgb(255 255 255 / 8%); cursor: move; touch-action: none; user-select: none; }
+.floating-call-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.floating-call-header > div { display: flex; flex: none; gap: 2px; }
+.floating-call-header button { display: flex; align-items: center; justify-content: center; width: 25px; height: 25px; border: 0; border-radius: 5px; background: transparent; color: #aaa; cursor: pointer; }
+.floating-video-call > .video-call-content { padding: 8px 10px 12px; flex: 1; overflow-y: auto; }
+.floating-video-call .call-camera-grid { flex: 1; grid-auto-rows: minmax(64px, 1fr); align-content: stretch; }
+.floating-video-call .call-camera-tile { aspect-ratio: auto; min-height: 64px; }
+.floating-video-call .call-device-settings { position: absolute; z-index: 2; inset: 72px 8px 15px; overflow-y: auto; }
+.floating-video-call .video-call-status { font-size: 10px; }
+.floating-video-call .video-call-actions button { min-height: 28px; padding: 4px 6px; }
+.floating-call-resize { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; border: 0; background: linear-gradient(135deg, transparent 65%, #555 66%, transparent 72%, #555 73%, transparent 79%); touch-action: none; cursor: nwse-resize; }
+.floating-video-call[data-narrow="true"] .call-button-label { display: none; }
+.floating-video-call[data-narrow="true"] .video-call-actions button { padding: 4px; font-size: 10px; }
+.floating-video-call[data-narrow="true"] .video-call-status { flex-wrap: wrap; }
+.watchly-media-audio > button { position: fixed; z-index: 185; bottom: 12px; left: 12px; padding: 9px 12px; background: #252529; color: #eee; border-radius: 10px; }
+@media (max-width: 600px) {
+    .floating-video-call .call-camera-grid { grid-template-columns: minmax(0, 1fr); }
+    .floating-video-call .call-camera-fallback .account-avatar { width: 28px !important; height: 28px !important; }
+}

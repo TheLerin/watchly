@@ -21,7 +21,9 @@ const ready = async url => {
  const baseUrl = 'http://127.0.0.1:' + frontendPort;
  const backendUrl = 'http://127.0.0.1:' + backendPort;
  const backend = fork(path.resolve(__dirname, '../../backend/server.js'), [], { env: { ...process.env, PORT: String(backendPort), CORS_ORIGIN: baseUrl }, stdio: 'ignore' });
- const frontend = fork(path.resolve(__dirname, '../node_modules/vite/bin/vite.js'), ['--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], { cwd: path.resolve(__dirname, '..'), env: { ...process.env, VITE_BACKEND_URL: backendUrl }, stdio: 'ignore' });
+ // This suite retains the legacy voice rollback checks without an SFU.
+ // browserVideoCall.cjs separately verifies real shared LiveKit media.
+ const frontend = fork(path.resolve(__dirname, '../node_modules/vite/bin/vite.js'), ['--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], { cwd: path.resolve(__dirname, '..'), env: { ...process.env, VITE_BACKEND_URL: backendUrl, VITE_VOICE_PROVIDER: 'legacy' }, stdio: 'ignore' });
  let browser;
  try {
  await Promise.all([ready(backendUrl), ready(baseUrl)]);
@@ -94,7 +96,7 @@ const ready = async url => {
  await wait(async () => await host.locator('.room-shell').getAttribute('data-room-appearance') === 'classic', 'mobile portrait did not use classic room');
  assert.equal(await host.locator('.room-mobile-workspace').count(), 1);
  assert.equal(await host.locator('.cinematic-mobile-dock').count(), 0);
- assert.equal(await host.locator('.mobile-classic-tabs button').count(), 4);
+ assert.equal(await host.locator('.mobile-classic-tabs button').count(), 5);
  await host.getByRole('button', { name: 'Room', exact: true }).click();
  await host.locator('.room-mobile-workspace[data-mobile-tab="room"]').waitFor();
  assert.ok(await host.locator('.mobile-classic-room').isVisible());
