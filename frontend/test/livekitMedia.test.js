@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMediaSession } from '../src/utils/livekitMedia.js';
-import { clampCallRect } from '../src/utils/floatingCall.js';
+import { clampCallRect, resizeCallRect } from '../src/utils/floatingCall.js';
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const setup = (overrides = {}) => {
     const calls = [], states = [], publications = new Map();
@@ -81,5 +81,18 @@ test('floating geometry clamps saved positions, sizes, orientation and narrow mo
         assert.ok(value.x >= 8 && value.y >= 8); assert.ok(value.x + value.width <= width - 8); assert.ok(value.y + value.height <= height - 8);
         if (width < 600) assert.ok(value.width <= width * .55);
         if (width < 600 || (width < 1180 && height < 500)) assert.ok(value.height <= 240 && value.height <= height * .55);
+    }
+});
+
+test('floating camera can grow inward from a viewport corner and preserve the opposite edge', () => {
+    const bounds = { width: 1366, height: 768 }, rect = clampCallRect({}, bounds);
+    const larger = resizeCallRect(rect, bounds, 'top-left', -100, -70);
+    assert.equal(larger.width, rect.width + 100); assert.equal(larger.height, rect.height + 70);
+    assert.equal(larger.x + larger.width, rect.x + rect.width); assert.equal(larger.y + larger.height, rect.y + rect.height);
+    const smaller = resizeCallRect(larger, bounds, 'top-left', 10000, 10000);
+    assert.equal(smaller.width, 260); assert.equal(smaller.height, 180);
+    for (const edge of ['top', 'right', 'bottom', 'left', 'top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+        const value = resizeCallRect(rect, bounds, edge, -10000, -10000);
+        assert.ok(value.x >= 8 && value.y >= 8 && value.x + value.width <= bounds.width - 8 && value.y + value.height <= bounds.height - 8);
     }
 });

@@ -38,7 +38,7 @@
 .floating-video-call .call-camera-fallback { padding: 0; }
 .floating-call-empty { margin: auto; padding: 8px; font-size: 12px; color: #999; text-align: center; }
 .floating-call-error { position: absolute; top: 0; left: 0; right: 0; margin: 0; padding: 8px; background: rgb(0 0 0 / 80%); color: #dda3a3; font-size: 11px; pointer-events: none; }
-.floating-call-overlay { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: flex-end; padding: 12px 16px 12px 8px; background: linear-gradient(transparent 55%, rgb(0 0 0 / 65%)); opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+.floating-call-overlay { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: flex-end; padding: 12px 16px 28px 8px; background: linear-gradient(transparent 55%, rgb(0 0 0 / 65%)); opacity: 0; pointer-events: none; transition: opacity .18s ease; }
 .floating-video-call[data-controls-visible="true"] .floating-call-overlay { opacity: 1; }
 .floating-call-controls { display: flex; gap: 3px; }
 .floating-call-controls button { display: flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid rgb(255 255 255 / 9%); border-radius: 8px; background: rgb(20 20 23 / 75%); color: #eee; cursor: pointer; pointer-events: none; }
@@ -46,10 +46,22 @@
 .floating-call-controls button:hover { background: rgb(55 55 59 / 90%); }
 .floating-call-controls button:disabled { opacity: .4; cursor: not-allowed; }
 .floating-video-call[data-minimized="true"] .floating-call-overlay { padding: 9px; background: transparent; align-items: center; }
-.floating-video-call[data-narrow="true"] .floating-call-overlay { padding: 7px 10px 10px 4px; }
+.floating-video-call[data-narrow="true"] .floating-call-overlay { padding: 7px 10px 28px 4px; }
 .floating-video-call[data-narrow="true"] .floating-call-controls { gap: 1px; }
 .floating-video-call[data-narrow="true"] .floating-call-controls button { width: 21px; height: 27px; border-radius: 6px; }
-.floating-call-resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; padding: 0; border: 0; background: linear-gradient(135deg, transparent 65%, #999 66%, transparent 72%, #999 73%, transparent 79%); opacity: 0; transition: opacity .18s ease; touch-action: none; cursor: nwse-resize; }
+.floating-call-resize { position: absolute; padding: 0; border: 0; background: transparent; opacity: 0; transition: opacity .18s ease; touch-action: none; }
+.floating-call-resize[data-edge="top"], .floating-call-resize[data-edge="bottom"] { left: 26px; right: 26px; height: 7px; cursor: ns-resize; }
+.floating-call-resize[data-edge="top"] { top: 0; }
+.floating-call-resize[data-edge="bottom"] { bottom: 0; }
+.floating-call-resize[data-edge="left"], .floating-call-resize[data-edge="right"] { top: 26px; bottom: 26px; width: 7px; cursor: ew-resize; }
+.floating-call-resize[data-edge="left"] { left: 0; }
+.floating-call-resize[data-edge="right"] { right: 0; }
+.floating-call-resize[data-edge*="-"] { width: 26px; height: 26px; }
+.floating-call-resize[data-edge="top-left"] { top: 0; left: 0; cursor: nwse-resize; }
+.floating-call-resize[data-edge="top-right"] { top: 0; right: 0; cursor: nesw-resize; }
+.floating-call-resize[data-edge="bottom-left"] { bottom: 0; left: 0; cursor: nesw-resize; }
+.floating-call-resize[data-edge="bottom-right"] { bottom: 0; right: 0; cursor: nwse-resize; }
+.floating-call-resize[data-edge="bottom-right"]::after { content: ''; position: absolute; right: 5px; bottom: 5px; width: 12px; height: 12px; background: linear-gradient(135deg, transparent 55%, #bbb 56%, transparent 65%, #bbb 66%, transparent 75%); }
 .floating-call-resize:hover, .floating-call-resize:focus-visible, .floating-video-call[data-controls-visible="true"] .floating-call-resize { opacity: .55; }
 .watchly-media-audio > button { position: fixed; z-index: 185; bottom: 12px; left: 12px; padding: 9px 12px; background: #252529; color: #eee; border-radius: 10px; }
 @media (max-width: 600px) {

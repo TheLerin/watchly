@@ -6,7 +6,7 @@ import { ConnectionState } from 'livekit-client';
 import { FloatingCameraSurface } from './VideoCallPanel';
 import { useMediaCall } from './LiveKitMediaProvider';
 import { useRoom } from '../context/RoomContext';
-import { clampCallRect } from '../utils/floatingCall';
+import { clampCallRect, resizeCallRect } from '../utils/floatingCall';
 import './video-call.css';
 
 const STORAGE_KEY = 'watchly-floating-call';
@@ -62,9 +62,8 @@ export default function FloatingVideoCall({ visible, onRestore }) {
         const dx = event.clientX - active.startX, dy = event.clientY - active.startY;
         if (!active.moved && Math.hypot(dx, dy) < 4) return;
         active.moved = true; reveal();
-        const next = active.resize ? { ...active.rect, width: active.rect.width + dx, height: active.rect.height + dy }
+        const next = active.resize ? resizeCallRect(active.rect, bounds.current, active.resize, dx, dy)
             : { ...active.rect, x: active.rect.x + dx, y: active.rect.y + dy };
-        if (active.resize) { next.width = Math.min(next.width, bounds.current.width - next.x - 8); next.height = Math.min(next.height, bounds.current.height - next.y - 8); }
         cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(() => setRect(clampCallRect(next, bounds.current)));
     };
     const end = event => {
@@ -95,7 +94,10 @@ export default function FloatingVideoCall({ visible, onRestore }) {
             {iconButton('Restore video panel', onRestore, <PanelRight size={14} />)}
             {iconButton('Close floating window and restore video panel', onRestore, <X size={14} />)}
         </div></div>
-        {!minimized && <button type="button" className="floating-call-resize" aria-label="Resize video call" title="Resize video call" onPointerDown={event => start(event, true)}
-            onKeyDown={event => { if (!event.key.startsWith('Arrow')) return; event.preventDefault(); setRect(current => clampCallRect({ ...current, width: current.width + (event.key === 'ArrowRight' ? 16 : event.key === 'ArrowLeft' ? -16 : 0), height: current.height + (event.key === 'ArrowDown' ? 16 : event.key === 'ArrowUp' ? -16 : 0) }, bounds.current)); }} />}
+        {!minimized && ['top', 'right', 'bottom', 'left', 'top-left', 'top-right', 'bottom-left', 'bottom-right'].map(edge => {
+            const label = edge === 'bottom-right' ? 'Resize video call' : `Resize video call from ${edge}`;
+            return <button key={edge} type="button" className="floating-call-resize" data-edge={edge} aria-label={label} title={label} onPointerDown={event => start(event, edge)}
+                onKeyDown={event => { if (!event.key.startsWith('Arrow')) return; event.preventDefault(); setRect(current => resizeCallRect(current, bounds.current, edge, event.key === 'ArrowRight' ? 16 : event.key === 'ArrowLeft' ? -16 : 0, event.key === 'ArrowDown' ? 16 : event.key === 'ArrowUp' ? -16 : 0)); }} />;
+        })}
     </section>, mount);
 }
