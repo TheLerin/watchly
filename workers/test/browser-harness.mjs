@@ -57,19 +57,26 @@ try {
   const logo = host.locator('.landing-brand img');
   await logo.evaluate(image => image.decode());
   assert.equal(await logo.evaluate(image => image.naturalWidth), 192);
-  const fill = await createButton.evaluate(button => {
-    const cycle = button.getAnimations().find(animation => animation.animationName === 'watchly-spectrum-cycle');
+  const fill = await createButton.evaluate(async button => {
+    const cycle = button.getAnimations().find(animation => animation.animationName === 'watchly-action-color');
     if (!cycle) return null;
-    cycle.currentTime = 0;
-    const start = getComputedStyle(button).backgroundPosition;
-    cycle.currentTime = 3000;
-    const next = getComputedStyle(button).backgroundPosition;
-    return { start, next, image: getComputedStyle(button).backgroundImage };
+    cycle.pause();
+    await cycle.ready;
+    const duration = cycle.effect.getTiming().duration;
+    const colors = [0, 0.08, 0.16, 0.32, 0.5, 0.68, 0.84, 1].map(phase => {
+      cycle.currentTime = phase * duration;
+      return getComputedStyle(button).backgroundColor;
+    });
+    const image = getComputedStyle(button).backgroundImage;
+    cycle.play();
+    return { colors, duration, image };
   });
-  assert.match(fill?.image || '', /repeating-linear-gradient/);
-  assert.notEqual(fill.start, fill.next);
+  assert.equal(fill?.image, 'none');
+  assert.equal(fill.duration, 36000);
+  assert.equal(new Set(fill.colors.slice(0, -1)).size, 7);
+  assert.equal(fill.colors[0], fill.colors.at(-1));
   await createButton.click();
-  assert.equal(await host.locator('.room-launcher-submit').evaluate(button => getComputedStyle(button).animationName), 'watchly-spectrum-cycle');
+  assert.equal(await host.locator('.room-launcher-submit').evaluate(button => getComputedStyle(button).animationName), 'watchly-action-color');
   await host.getByPlaceholder('Your nickname').fill('Harness host'); await host.locator('.room-launcher-submit').click();
   await host.waitForURL('**/room/**');
   const code = host.url().split('/').pop(); await host.locator('.room-shell').waitFor();
@@ -175,13 +182,17 @@ try {
   assert.equal(await reduced.locator('.cinema-video').getAttribute('poster'), '/bg-video-mobile-poster.jpg');
   const reducedCreate = reduced.getByRole('button', { name: 'Create room', exact: true }).first();
   assert.equal(await reducedCreate.evaluate(button => getComputedStyle(button).animationName), 'none');
-  assert.match(await reducedCreate.evaluate(button => getComputedStyle(button).backgroundImage), /repeating-linear-gradient/);
+  assert.equal(await reducedCreate.evaluate(button => getComputedStyle(button).backgroundColor), fill.colors[0]);
   const account = await context.newPage();
   await account.goto('https://watchly.test/auth');
   const emailAction = account.getByRole('button', { name: 'Continue with email' });
-  assert.match(await emailAction.evaluate(button => getComputedStyle(button).backgroundImage), /repeating-linear-gradient/);
+  const accountFill = await emailAction.evaluate(button => {
+    const style = getComputedStyle(button);
+    return { image: style.backgroundImage, animation: style.animationName };
+  });
+  assert.deepEqual(accountFill, { image: 'none', animation: 'watchly-action-color' });
   await account.close();
-  console.log('PASS Chromium logo, cycling action fills, buffering ring during a playback stall and reduced-motion styling.');
+  console.log('PASS Chromium logo, solid action fills with smooth palette interpolation, buffering ring during a playback stall and reduced-motion styling.');
   // Test the actual browser challenge flow with a deterministic widget and Siteverify fixture.
   // No production key or success bypass exists in application code.
   const guards = new Map(), originalFetch = globalThis.fetch;

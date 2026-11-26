@@ -86,17 +86,18 @@
 .livekit-voice-actions .livekit-voice-join,
 .room-shell[data-room-appearance="cinematic"] .room-voice-join {
   background-color: var(--watchly-turquoise);
-  background-image: repeating-linear-gradient(90deg,
-    var(--watchly-action-blue) 0%, var(--watchly-cyan) 8%, var(--watchly-turquoise) 16%,
-    var(--watchly-mint) 25%, var(--watchly-lavender) 33%, var(--watchly-gold) 42%, var(--watchly-action-blue) 50%);
-  background-size: 200% 100%;
   color: var(--watchly-ink);
-  animation: watchly-spectrum-cycle 12s linear infinite;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%), 0 4px 12px rgb(0 0 0 / 14%);
+  animation: watchly-action-color 36s linear infinite;
 }
 
-@keyframes watchly-spectrum-cycle {
-  from { background-position: 0% 50%; }
-  to { background-position: 100% 50%; }
+@keyframes watchly-action-color {
+  0%, 100% { background-color: var(--watchly-turquoise); }
+  16% { background-color: var(--watchly-mint); }
+  32% { background-color: var(--watchly-gold); }
+  50% { background-color: var(--watchly-lavender); }
+  68% { background-color: var(--watchly-action-blue); }
+  84% { background-color: var(--watchly-cyan); }
 }
 
 .watchly-action:enabled:hover,
