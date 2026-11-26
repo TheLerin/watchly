@@ -23,11 +23,14 @@ import { useAuth } from './AuthContext';
 import { rememberRoom } from '../utils/recentRooms';
 import { useSoundEffects } from './SoundEffectsContext';
 import { createMembershipSounds, createCallPresenceSounds } from '../utils/soundNotifications';
+import { applyQueueDelta } from '../utils/queueState';
+import { guestCredential } from '../utils/guestCredential';
+import { expectedRemotePosition } from '../../../shared/playback-core.mjs';
 
 const RoomContext = createContext();
 export const useRoom = () => useContext(RoomContext);
 
-const PING_INTERVAL_MS = 7000;
+const PING_INTERVAL_MS = 60000;
 const PING_TIMEOUT_MS = 2500;
 
 const emptyVideoState = () => ({
@@ -67,6 +70,9 @@ export const RoomProvider = ({ children }) => {
     const [videoState, setVideoState] = useState(emptyVideoState);
     const [localReadiness, setLocalReadiness] = useState(emptyReadiness);
     const [queue, setQueue] = useState([]);
+    const [roomAccess, setRoomAccess] = useState(null);
+    const queueStateRef = useRef({ queue: [], revision: 0 });
+    const queueRecoveringRef = useRef(false);
     const [controllerMemberId, setControllerMemberId] = useState(null);
     const [mediaDescriptor, setMediaDescriptor] = useState(null);
     const [playback, setPlayback] = useState(null);
@@ -100,6 +106,8 @@ export const RoomProvider = ({ children }) => {
         setUsers([]);
         setMessages([]);
         setQueue([]);
+        setRoomAccess(null);
+        queueStateRef.current = { queue: [], revision: 0 }; queueRecoveringRef.current = false;
         videoStateRef.current = emptyVideoState();
         setVideoState(videoStateRef.current);
         setLocalReadiness(emptyReadiness);
@@ -121,10 +129,8 @@ export const RoomProvider = ({ children }) => {
     }, []);
 
     const getExpectedPosition = useCallback((state = videoStateRef.current) => {
-        const base = Number(state?.playedSeconds) || 0;
-        if (!state?.isPlaying || !Number.isFinite(state?.updatedAt)) return base;
         const serverNow = Date.now() + serverClockOffsetRef.current;
-        return Math.max(0, base + Math.max(0, serverNow - state.updatedAt) / 1000);
+        return expectedRemotePosition(state, serverNow);
     }, []);
 
     const measurePing = useCallback(() => {
@@ -155,7 +161,7 @@ export const RoomProvider = ({ children }) => {
     useEffect(() => {
         if (!isConnected) return undefined;
         const firstPingId = setTimeout(measurePing, 0);
-        const intervalId = setInterval(measurePing, PING_INTERVAL_MS);
+        const intervalId = setInterval(() => { if (!document.hidden) void measurePing(); }, PING_INTERVAL_MS);
         return () => {
             clearTimeout(firstPingId);
             clearInterval(intervalId);
@@ -237,6 +243,7 @@ export const RoomProvider = ({ children }) => {
         };
         const applySnapshot = (snapshot, id) => {
             if (!snapshot) return;
+            setRoomAccess(snapshot.access || null);
             const initialVideoState = snapshot.videoState;
             // Role events can arrive after the snapshot was generated but before
             // its ACK/player restoration. Preserve those newer capabilities.
@@ -252,7 +259,10 @@ export const RoomProvider = ({ children }) => {
             setUsers(members);
             currentUserRef.current = members.find(member => member.userId === sessionRef.current?.memberId) || null;
             setCurrentUser(currentUserRef.current);
-            setQueue(snapshot.queue || []);
+            if ((snapshot.queueRevision || 0) >= queueStateRef.current.revision) {
+                queueStateRef.current = { queue: snapshot.queue || [], revision: snapshot.queueRevision || 0 };
+                setQueue(queueStateRef.current.queue);
+            }
             setMessages(previous => mergeChatHistory(previous, snapshot.chatHistory));
             setControllerMemberId(snapshot.controllerMemberId);
             setMediaDescriptor(snapshot.media);
@@ -346,6 +356,24 @@ export const RoomProvider = ({ children }) => {
         const onVideoProgress = state => recoveryRef.current?.acceptsEvents() && applyVideoState(state);
         const onVideoSeeked = state => recoveryRef.current?.acceptsEvents() && applyVideoState(state);
         const onQueueUpdated = nextQueue => setQueue(nextQueue || []);
+        const onQueueDelta = delta => {
+            if (!socket.connected || !sessionRef.current?.roomId || isKicked.current) return;
+            const next = applyQueueDelta(queueStateRef.current, delta);
+            if (next.needsSnapshot) {
+                if (queueRecoveringRef.current) return;
+                queueRecoveringRef.current = true;
+                const room = sessionRef.current?.roomId;
+                socket.timeout(5000).emit('room:snapshot', {}, (error, result) => {
+                    queueRecoveringRef.current = false;
+                    const snapshot = result?.snapshot;
+                    if (error || !result?.ok || room !== sessionRef.current?.roomId || snapshot?.roomId !== room || snapshot.queueRevision < queueStateRef.current.revision) return;
+                    queueStateRef.current = { queue: snapshot.queue || [], revision: snapshot.queueRevision || 0 };
+                    setQueue(queueStateRef.current.queue);
+                });
+                return;
+            }
+            queueStateRef.current = next; setQueue(next.queue);
+        };
         const onPlaylistNotice = payload => toast(payload.message, { duration: 2500 });
         const onVoiceUpdated = ({ userId, memberId, isVoiceActive, isMuted, reason }) => {
             if (import.meta.env.VITE_VOICE_PROVIDER === 'legacy' && memberId !== sessionRef.current?.memberId) {
@@ -454,6 +482,8 @@ export const RoomProvider = ({ children }) => {
         socket.on('video_progress', onVideoProgress);
         socket.on('video_seeked', onVideoSeeked);
         socket.on('queue_updated', onQueueUpdated);
+        socket.on('queue:delta', onQueueDelta);
+        socket.on('room:access-state', setRoomAccess);
         socket.on('playlist_notice', onPlaylistNotice);
         socket.on('voice_updated', onVoiceUpdated);
         socket.on('error_message', onErrorMessage);
@@ -481,6 +511,8 @@ export const RoomProvider = ({ children }) => {
             socket.off('video_progress', onVideoProgress);
             socket.off('video_seeked', onVideoSeeked);
             socket.off('queue_updated', onQueueUpdated);
+            socket.off('queue:delta', onQueueDelta);
+            socket.off('room:access-state', setRoomAccess);
             socket.off('playlist_notice', onPlaylistNotice);
             socket.off('voice_updated', onVoiceUpdated);
             socket.off('error_message', onErrorMessage);
@@ -534,16 +566,24 @@ export const RoomProvider = ({ children }) => {
         return roomRequester.request(event, { ...payload, protocolVersion: PROTOCOL_VERSION });
     }, [roomRequester, accountSession?.access_token, syncAccount]);
 
-    const joinRoom = useCallback(async (id, nickname) => {
+    const joinRoom = useCallback(async (id, nickname, options = {}) => {
         let resume = {};
         try {
             const saved = JSON.parse(sessionStorage.getItem('watchTogetherSession') || '{}');
             if (saved.roomId === id) resume = { resumeToken: saved.resumeToken };
         } catch { /* start a new membership */ }
-        return requestRoom('room:join', { roomId: id, nickname: accountProfile?.display_name || nickname, ...resume });
+        return requestRoom('room:join', { roomId: id, nickname: accountProfile?.display_name || nickname, guestKey: guestCredential(), ...options, ...resume });
     }, [requestRoom, accountProfile]);
 
-    const createRoom = useCallback(nickname => requestRoom('room:create', { nickname: accountProfile?.display_name || nickname }), [requestRoom, accountProfile]);
+    const createRoom = useCallback(nickname => requestRoom('room:create', { nickname: accountProfile?.display_name || nickname, guestKey: guestCredential() }), [requestRoom, accountProfile]);
+
+    const accessRequest = useCallback((event, payload = {}) => new Promise((resolve, reject) => {
+        if (!socket.connected) return reject(new Error('Reconnect before changing room access.'));
+        socket.timeout(15000).emit(event, payload, (error, result) => {
+            if (error || !result?.ok) return reject(new Error(result?.error?.message || 'Room access could not be updated.'));
+            if (result.access) setRoomAccess(result.access); resolve(result);
+        });
+    }), []);
 
     const leaveRoom = useCallback(() => {
         recoveryRef.current?.stop(); sessionRef.current = null;
@@ -760,6 +800,8 @@ export const RoomProvider = ({ children }) => {
             videoState,
             localReadiness,
             queue,
+            roomAccess,
+            accessRequest,
             controllerMemberId,
             mediaDescriptor,
             playback,

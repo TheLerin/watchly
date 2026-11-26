@@ -1,6 +1,10 @@
-const crypto = require('crypto');
+const { safeEvents } = require('./safeEvents');
+const { createRoomAccess } = require('./roomAccess');
+const crypto = require('node:crypto');
+const process = require('node:process');
 const { playlistSource, currentPlaylistItem, resolvePlaylist, movePlaylist } = require('./youtubePlaylist');
 const { canonicalPosition, createPlayback, reduceCommand } = require('./playback/canonicalState');
+const { projectRemote, transitionRemote, remoteCanonical } = require('../shared/playback-core.mjs');
 const { PROTOCOL_VERSION, normalizedText, validRoomCode, validMediaId, validCommandId, finiteNonNegative } = require('./validators');
 const { ROLES, roomPermissions, canModerateMember } = require('./permissions');
 const { createAccountService, createFriendPresence } = require('./accounts');
@@ -30,14 +34,8 @@ const createVideoState = () => ({
 });
 
 const advancePlayback = (room, now = Date.now()) => {
-    const state = room.videoState;
-    if (state.isPlaying) {
-        state.playedSeconds = clampSeconds(
-            state.playedSeconds + Math.max(0, now - state.updatedAt) / 1000
-        );
-    }
-    state.updatedAt = now;
-    return state;
+    Object.assign(room.videoState, projectRemote(room.videoState, now, MAX_MEDIA_SECONDS));
+    return room.videoState;
 };
 
 const remoteVideoState = (previous, url, magnetURI = '', playing = true) => {
@@ -52,8 +50,7 @@ const remoteVideoState = (previous, url, magnetURI = '', playing = true) => {
 };
 
 const snapshot = (room, includePlaylist = true) => {
-    advancePlayback(room);
-    const state = { ...room.videoState };
+    const state = projectRemote(room.videoState, Date.now(), MAX_MEDIA_SECONDS);
     if (!includePlaylist) {
         delete state.playlistItems;
         delete state.playlistTitles;
@@ -132,12 +129,14 @@ const validCandidate = candidate => (
     ))
 );
 
-module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => ({ iceServers: [] }), accounts = createAccountService() }) {
-    const presence = createFriendPresence({ io, accounts });
+module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => ({ iceServers: [] }), accounts = createAccountService(), runtime = {} }) {
+    const { setTimeout = globalThis.setTimeout, clearTimeout = globalThis.clearTimeout, setInterval = globalThis.setInterval } = runtime;
+    const presence = runtime.presence || createFriendPresence({ io, accounts });
+    const accessControl = createRoomAccess({ io, rooms, runtime });
     io.use(async (socket, next) => {
         try {
             const token = socket.handshake.auth?.accessToken;
-            socket.data.account = token ? await accounts.verify(token) : null;
+            socket.data.account = token ? await (runtime.verifyAccount ? runtime.verifyAccount(token, socket) : accounts.verify(token)) : null;
             next();
         } catch (error) {
             const denied = new Error('Your account could not connect. Sign in again or retry.');
@@ -167,7 +166,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             ) {
                 rooms.delete(roomId);
             }
-        }, ROOM_EMPTY_GRACE_MS);
+        }, runtime.hibernating ? Math.max(0, room.lastActiveAt + ROOM_EMPTY_GRACE_MS - Date.now()) : ROOM_EMPTY_GRACE_MS);
         timer.unref?.();
         roomCleanupTimers.set(roomId, timer);
     };
@@ -204,6 +203,15 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
     const publicUsers = room => room.users
         .filter(user => user.connected)
         .map(user => publicUser(room, user));
+
+    const publishQueue = (roomId, room, operation) => {
+        const baseRevision = room.queueRevision || 0;
+        room.queueRevision = baseRevision + 1;
+        for (const socket of io.sockets.sockets.values()) if (socket.connected && socket.data.roomId === roomId) {
+            if (socket.data.queueDeltas) socket.emit('queue:delta', { baseRevision, revision: room.queueRevision, ...operation });
+            else socket.emit('queue_updated', room.queue);
+        }
+    };
 
     const publishControl = (roomId, room, details = {}) => io.to(roomId).emit('control:changed', {
         controllerMemberId: room.controllerMemberId, members: publicUsers(room), ...details,
@@ -246,10 +254,11 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         };
     };
 
-    const playbackSnapshot = room => ({ ...room.playback, mediaId: room.media?.mediaId || null, sourceEpoch: room.videoState.sourceEpoch || 0 });
+    const playbackSnapshot = room => ({ ...(room.media ? room.playback : remoteCanonical(room.videoState)), mediaId: room.media?.mediaId || room.videoState.sourceId || null, sourceEpoch: room.videoState.sourceEpoch || 0 });
     const roomSnapshot = (room, memberId) => ({
         roomId: room.id,
         protocolVersion: PROTOCOL_VERSION,
+        snapshotVersion: 1,
         memberId,
         members: publicUsers(room),
         controllerMemberId: room.controllerMemberId,
@@ -259,6 +268,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         readiness: readinessPayload(room),
         playback: playbackSnapshot(room),
         queue: room.queue,
+        queueRevision: room.queueRevision || 0,
+        access: accessControl.state(room, io.sockets.sockets.get(room.users.find(user => user.userId === memberId)?.id) || { id: '', data: {} }),
         chatHistory: room.chatHistory,
         serverTimeMs: Date.now()
     });
@@ -280,7 +291,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         room.localReadyUserIds.clear();
         room.videoState = remoteVideoState(room.videoState, next.url, next.magnetURI, true);
         io.to(roomId).emit('video_changed', snapshot(room));
-        io.to(roomId).emit('queue_updated', room.queue);
+        publishQueue(roomId, room, { op: 'remove', itemId: next.id });
         emitReadiness(roomId, room);
         return true;
     };
@@ -329,13 +340,57 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         return { room, target };
     };
 
+    const scheduleHostLease = (roomId, room, user) => {
+        clearTimeout(hostLeaseTimers.get(roomId));
+        const timer = setTimeout(() => {
+                    hostLeaseTimers.delete(roomId);
+                    if (user.connected || rooms.get(roomId) !== room || room.controllerMemberId !== user.userId) return;
+                    const candidates = room.users.filter(item => item.connected).sort((a, b) => a.joinedAt - b.joinedAt);
+                    const nextHost = candidates.find(item => item.role === 'Moderator') || candidates[0];
+                    if (!nextHost) return;
+                    room.controllerMemberId = nextHost.userId;
+                    room.controllerLeaseUntil = null;
+                    publishControl(roomId, room, { reason: 'HOST_LEASE_EXPIRED' });
+
+        }, Math.max(0, (room.controllerLeaseUntil || Date.now() + CONTROLLER_LEASE_MS) - Date.now()));
+        timer.unref?.();
+        hostLeaseTimers.set(roomId, timer);
+    };
+
     io.on('connection', socket => {
+        const on = safeEvents(socket, async name => {
+            if (['auth:update', 'auth:clear', 'room:join', 'room:create', 'room:snapshot', 'clock:ping', 'network_ping', 'leave_room'].includes(name)) return;
+            const room = rooms.get(socket.data.roomId), member = room?.users.find(user => user.id === socket.id && user.connected);
+            if (!member?.accountId) return;
+            const account = socket.data.account;
+            if (!runtime.hibernating && account?.token && accounts.sessionActive && Date.now() - (account.sessionCheckedAt || 0) >= 60000) {
+                try { await accounts.sessionActive(account); } catch { if (socket.data.account === account) expireAccount(); }
+            }
+            if (!member.authenticated || socket.data.account?.id !== member.accountId || socket.data.account.expiresAt <= Date.now()) {
+                return { ok: false, error: { code: 'AUTH_REQUIRED', message: 'Sign in again before using this membership.' } };
+            }
+        });
+        accessControl.handlers(socket, on);
+        socket.data.queueDeltas ??= Array.isArray(socket.handshake.auth?.features) && socket.handshake.auth.features.includes('queue-delta-v1');
         let authGeneration = 0, expiryTimer, socialRefreshTimer, lastSocialRefresh = 0, lastInvite = 0;
         const expireAccount = () => {
             socket.data.account = null; socket.data.watchFriends = false;
             const room = rooms.get(socket.data.roomId), member = getUserBySocket(room, socket.id);
             if (member) { member.authenticated = false; publishControl(room.id, room); }
+            if (member) {
+                removeVoice(socket, room);
+                try { (runtime.onAccountExpired || runtime.onMemberKicked)?.(room.id, member.userId)?.catch?.(() => console.error('Account media removal failed')); }
+                catch { console.error('Account media removal failed'); }
+                if (room.screenSharerMemberId === member.userId) {
+                    room.screenSharerMemberId = null; room.screenViewerSocketIds.clear(); io.to(room.id).emit('screen:stopped');
+                } else if (room.screenViewerSocketIds.delete(socket.id)) {
+                    const sharer = room.users.find(user => user.userId === room.screenSharerMemberId && user.connected);
+                    if (sharer) io.to(sharer.id).emit('screen:viewer-left', { socketId: socket.id });
+                    socket.emit('screen:stopped');
+                }
+            }
             socket.emit('account:expired'); presence.changed();
+            if (room?.access?.visibility === 'private' || room?.access?.accountOnly) socket.disconnect(true);
         };
         const armExpiry = () => {
             clearTimeout(expiryTimer);
@@ -353,11 +408,11 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             publishControl(room.id, room, { reason: 'ACCOUNT_IDENTITY' });
         };
         armExpiry(); presence.changed();
-        socket.on('auth:clear', () => { authGeneration++; clearTimeout(expiryTimer); expireAccount(); });
-        socket.on('auth:update', async ({ accessToken } = {}, callback) => {
+        on('auth:clear', () => { authGeneration++; clearTimeout(expiryTimer); expireAccount(); });
+        on('auth:update', async ({ accessToken } = {}, callback) => {
             const generation = ++authGeneration;
             try {
-                const account = await accounts.verify(accessToken);
+                const account = await (runtime.verifyAccount ? runtime.verifyAccount(accessToken, socket) : accounts.verify(accessToken));
                 if (!socket.connected || generation !== authGeneration) return callback?.({ ok: false, error: { code: 'AUTH_REPLACED', message: 'Your account changed. Please retry.' } });
                 associateAccount(account); socket.data.account = account; armExpiry(); presence.changed();
                 socket.emit('account:ready');
@@ -367,13 +422,20 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
         const refreshSocialPresence = () => {
             if (!socket.data.account || socialRefreshTimer) return;
             const delay = Math.max(0, 2000 - (Date.now() - lastSocialRefresh));
-            socialRefreshTimer = setTimeout(() => {
+            socket.data.socialRefreshAt ||= Date.now() + delay;
+            socialRefreshTimer = setTimeout(async () => {
                 socialRefreshTimer = null;
-                if (socket.connected && socket.data.account) { lastSocialRefresh = Date.now(); presence.changed(); }
-            }, delay);
+                delete socket.data.socialRefreshAt;
+                if (socket.connected && socket.data.account) {
+                    lastSocialRefresh = Date.now();
+                    if (presence.refresh) await presence.refresh(socket).catch(() => {});
+                    else presence.changed();
+                }
+            }, Math.max(0, socket.data.socialRefreshAt - Date.now()));
             socialRefreshTimer.unref?.();
         };
-        socket.on('social:watch', async (_payload, callback) => {
+        if (socket.data.socialRefreshAt) refreshSocialPresence();
+        on('social:watch', async (_payload, callback) => {
             if (!socket.data.account) return callback?.({ ok: false });
             // Subscription intent must survive Strict Mode/remounts even when
             // the database lookup is rate limited after a recent unwatch.
@@ -382,24 +444,24 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             lastSocialRefresh = Date.now();
             try { await presence.send(socket); callback?.({ ok: true }); } catch { callback?.({ ok: false }); }
         });
-        socket.on('social:unwatch', () => { socket.data.watchFriends = false; });
-        socket.on('social:refresh', refreshSocialPresence);
-        socket.on('social:invite', async ({ targetId } = {}, callback) => {
+        on('social:unwatch', () => { socket.data.watchFriends = false; });
+        on('social:refresh', refreshSocialPresence);
+        on('social:invite', async ({ targetId } = {}, callback) => {
             const room = rooms.get(socket.data.roomId), member = getUserBySocket(room, socket.id), account = socket.data.account;
-            if (!account || account.expiresAt <= Date.now() || !member || !roomPermissions(member, room).canChangeSource) return callback?.({ ok: false, error: { message: 'Only the Host and Moderators can invite friends from this room.' } });
+            if (!account || account.expiresAt <= Date.now() || !member || !['Host', 'Moderator'].includes(member.role)) return callback?.({ ok: false, error: { message: 'Only the Host and Moderators can invite friends from this room.' } });
             if (Date.now() - lastInvite < 500) return callback?.({ ok: false, error: { message: 'Please wait before inviting again.' } });
             lastInvite = Date.now();
-            try { const inviteId = await accounts.invite(account, targetId, room.id); callback?.({ ok: true, inviteId }); }
+            try {
+                const inviteId = await (runtime.inviteFriend ? runtime.inviteFriend(account, targetId, room, socket) : accounts.invite(account, targetId, room.id));
+                if (!socket.connected || socket.data.account !== account || rooms.get(room.id) !== room || !['Host', 'Moderator'].includes(getUserBySocket(room, socket.id)?.role)) return callback?.({ ok: false, error: { message: 'Your room authorization changed. Retry the invitation.' } });
+                accessControl.friendInvited(room, targetId); callback?.({ ok: true, inviteId });
+            }
             catch { callback?.({ ok: false, error: { message: 'This friend could not be invited. Check your connection or friendship and retry.' } }); }
         });
-        console.log('A user connected:', socket.id);
+        if (!runtime.hibernating) console.log('A user connected:', socket.id);
 
         socket.use((packet, next) => {
-            if (packet.length > 1 && (!packet[1] || typeof packet[1] !== 'object' || Array.isArray(packet[1]))) {
-                packet[1] = {};
-            }
-            const activeRoom = rooms.get(socket.data.roomId);
-            if (activeRoom) activeRoom.lastActiveAt = Date.now();
+            if (socket.data.account?.expiresAt <= Date.now()) expireAccount();
             next();
         });
 
@@ -418,6 +480,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                     users: [],
                     videoState: createVideoState(),
                     queue: [],
+                    queueRevision: 0,
                     kickedUserIds: new Set(),
                     chatHistory: [],
                     localReadyUserIds: new Set(),
@@ -437,7 +500,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                     lastActiveAt: Date.now()
         });
 
-        const enterRoom = (payload = {}, callback, creating = false) => {
+        const enterRoom = async (payload = {}, callback, creating = false) => {
             const rejectRoom = (code, message, retryable = false) => {
                 const error = { code, message, retryable };
                 socket.emit('room:error', error);
@@ -447,7 +510,9 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (suppliedVersion !== PROTOCOL_VERSION) {
                 return rejectRoom('PROTOCOL_MISMATCH', 'Watchly was updated. Refresh this page to continue.');
             }
-            let roomId = creating ? newRoomCode() : String(payload.roomId || '').toUpperCase();
+            let roomId = creating ? (runtime.roomCode || newRoomCode()) : String(payload.roomId || '').toUpperCase();
+            if (runtime.roomCode && roomId !== runtime.roomCode) return rejectRoom('FORBIDDEN', 'This connection belongs to another room.');
+            if (creating && rooms.has(roomId)) return rejectRoom('ROOM_EXISTS', 'This room already exists.');
             const account = socket.data.account;
             let nickname = cleanText(account?.profile?.display_name || payload.nickname, 24);
             if (!nickname) {
@@ -468,11 +533,10 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 return rejectRoom('ROOM_NOT_FOUND', 'This temporary room does not exist or has expired.');
             }
 
-            const connectedBeforeJoin = room.users.filter(item => item.connected);
             const suppliedTokenHash = typeof payload.resumeToken === 'string' && payload.resumeToken.length >= 32
                 ? tokenHash(payload.resumeToken) : null;
             let user = suppliedTokenHash
-                ? room.users.find(item => item.resumeTokenHash === suppliedTokenHash)
+                ? room.users.find(item => item.resumeTokenHash === suppliedTokenHash || (!item.connected && item.previousResumeTokenHash === suppliedTokenHash && item.previousResumeTokenUntil > Date.now()))
                 : null;
             if (user?.accountId && user.accountId !== account?.id) return rejectRoom('ACCOUNT_SESSION_MISMATCH', 'Sign in to the account that owns this room membership.');
             if (!creating && (payload.resumeToken !== undefined || payload.memberId !== undefined) &&
@@ -492,13 +556,23 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 return rejectRoom('ACCOUNT_IN_ROOM', 'This account already has a membership in this room.');
             }
             if (account && !account.profile && !user) return rejectRoom('PROFILE_REQUIRED', 'Finish your profile before joining with your account.');
-            const resumeToken = user && suppliedTokenHash ? payload.resumeToken : crypto.randomBytes(32).toString('base64url');
+            const admission = await accessControl.check(room, socket, payload, user);
+            if (!admission.ok) return rejectRoom(admission.error.code, admission.error.message);
+            if (!socket.connected || rooms.get(roomId) !== room) return rejectRoom('ROOM_NOT_FOUND', 'This room is no longer available.');
+            if (user && room.kickedUserIds.has(user.userId)) return rejectRoom('MEMBER_BANNED', 'This membership was removed from the room.');
+            if (!user && account && room.users.some(other => other.accountId === account.id)) return rejectRoom('ACCOUNT_IN_ROOM', 'This account already has a membership in this room.');
+            const rotateProof = Boolean(user && (user.id !== socket.id || !suppliedTokenHash));
+            const resumeToken = user && suppliedTokenHash && !rotateProof ? payload.resumeToken : crypto.randomBytes(32).toString('base64url');
             const resumedMembership = Boolean(user);
-            if (user && !suppliedTokenHash) user.resumeTokenHash = tokenHash(resumeToken);
+            if (rotateProof) {
+                user.previousResumeTokenHash = user.resumeTokenHash; user.previousResumeTokenUntil = Date.now() + 30000;
+                user.resumeTokenHash = tokenHash(resumeToken);
+            }
             if (!user) {
-                if (connectedBeforeJoin.length >= MAX_ROOM_USERS) {
+                if (room.users.filter(item => item.connected).length >= MAX_ROOM_USERS || room.users.length >= 500) {
                     return rejectRoom('ROOM_FULL', 'Room is full (max 50 users).');
                 }
+                if (admission.consume && admission.consume() === false) return rejectRoom('ACCESS_CHANGED', 'Room admission changed. Retry joining.');
                 user = {
                     id: socket.id,
                     userId: account?.id || crypto.randomUUID(),
@@ -512,6 +586,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                     isVoiceActive: false,
                     isMuted: true,
                     resumeTokenHash: tokenHash(resumeToken),
+                    guestKeyHash: admission.guestHash,
                     joinedAt: Date.now()
                 };
                 room.users.push(user);
@@ -582,30 +657,38 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 localReady: room.media || room.videoState.sourceType === 'local' ? false : null
             });
             if (room.media || room.videoState.sourceType === 'local') emitReadiness(roomId, room);
+            accessControl.publish(room);
+            if (room.screenSharerMemberId && room.screenSharerMemberId !== user.userId && !room.screenViewerSocketIds.has(socket.id)) {
+                const sharer = room.users.find(item => item.userId === room.screenSharerMemberId && item.connected);
+                if (sharer && room.screenViewerSocketIds.size < 3) {
+                    room.screenViewerSocketIds.add(socket.id);
+                    io.to(sharer.id).emit('screen:viewer-added', { socketId: socket.id, memberId: user.userId });
+                } else socket.emit('screen:unavailable', { code: 'PARTICIPANT_LIMIT', message: 'Screen Share Beta supports up to three viewers.' });
+            }
         };
 
-        socket.on('room:create', (payload, callback) => enterRoom(payload, callback, true));
-        socket.on('room:join', (payload, callback) => enterRoom(payload, callback, false));
+        on('room:create', (payload, callback) => enterRoom(payload, callback, true));
+        on('room:join', (payload, callback) => enterRoom(payload, callback, false));
 
-        socket.on('room:snapshot', (_payload, callback) => {
+        on('room:snapshot', (_payload, callback) => {
             const room = rooms.get(socket.data.roomId);
             if (!room || !getUserBySocket(room, socket.id)) return callback?.(protocolError('NOT_IN_ROOM', 'Join a room first.'));
             callback?.({ ok: true, snapshot: roomSnapshot(room, socket.data.memberId) });
         });
 
-        socket.on('clock:ping', ({ clientSendMs } = {}, callback) => callback?.({
+        on('clock:ping', ({ clientSendMs } = {}, callback) => callback?.({
             clientSendMs,
             serverTimeMs: Date.now()
         }));
 
-        socket.on('ice:config', (_payload = {}, callback) => {
+        on('ice:config', (_payload = {}, callback) => {
             const room = rooms.get(socket.data.roomId);
             const user = getUserBySocket(room, socket.id);
             if (!room || !user) return callback?.(protocolError('NOT_IN_ROOM', 'Join a room before requesting relay credentials.'));
             callback?.({ ok: true, ...buildIceConfig(user.userId) });
         });
 
-        socket.on('send_message', ({ roomId, message } = {}) => {
+        on('send_message', ({ roomId, message } = {}) => {
             const room = getBoundRoom(socket, roomId);
             if (!room || !message || typeof message.text !== 'string') return;
             const now = Date.now();
@@ -623,6 +706,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 role: sender.role,
                 time: cleanText(message.time, 20)
             };
+            if (room.chatHistory.some(item => item.id === safeMessage.id)) return;
             room.chatHistory.push(safeMessage);
             room.chatHistory = room.chatHistory.slice(-100);
             io.to(roomId).emit('receive_message', safeMessage);
@@ -636,7 +720,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             action(room, sender, target);
         };
 
-        socket.on('promote_to_moderator', ({ roomId, targetId } = {}) => {
+        on('promote_to_moderator', ({ roomId, targetId } = {}) => {
             roleAction(roomId, targetId, (room, sender, target) => {
                 if (roomPermissions(sender, room).canAssignRoles && target.role === ROLES.VIEWER) {
                     target.role = 'Moderator';
@@ -645,7 +729,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             });
         });
 
-        socket.on('demote_to_viewer', ({ roomId, targetId } = {}) => {
+        on('demote_to_viewer', ({ roomId, targetId } = {}) => {
             roleAction(roomId, targetId, (room, sender, target) => {
                 if (roomPermissions(sender, room).canAssignRoles && target.role === ROLES.MODERATOR) {
                     target.role = 'Viewer';
@@ -658,7 +742,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             });
         });
 
-        socket.on('transfer_host', ({ roomId, targetId } = {}) => {
+        on('transfer_host', ({ roomId, targetId } = {}) => {
             roleAction(roomId, targetId, (room, sender, target) => {
                 if (!roomPermissions(sender, room).canTransferOwnership) return;
                 clearTimeout(hostLeaseTimers.get(roomId));
@@ -673,7 +757,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             });
         });
 
-        socket.on('kick_user', ({ roomId, targetId } = {}) => {
+        on('kick_user', async ({ roomId, targetId } = {}) => {
             const room = getBoundRoom(socket, roomId);
             const sender = getUserBySocket(room, socket.id);
             const target = room?.users.find(user => (
@@ -685,9 +769,12 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (!allowed) return;
 
             room.kickedUserIds.add(target.userId);
+            accessControl.ban(room, target);
             room.localReadyUserIds.delete(target.userId);
             room.mediaStatuses.delete(target.userId);
             room.screenViewerSocketIds.delete(target.id);
+            const sharer = room.users.find(item => item.userId === room.screenSharerMemberId && item.connected);
+            if (sharer && sharer !== target) io.to(sharer.id).emit('screen:viewer-left', { socketId: target.id });
             if (room.screenSharerMemberId === target.userId) {
                 room.screenSharerMemberId = null;
                 room.screenViewerSocketIds.clear();
@@ -715,6 +802,9 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             }
             io.to(roomId).emit('user_left', target.id, { reason: 'kicked', memberId: target.userId });
             if (room.media || room.videoState.sourceType === 'local') emitReadiness(roomId, room);
+            // Room privileges are revoked before the external media server is contacted.
+            try { await runtime.onMemberKicked?.(roomId, target.userId); }
+            catch { socket.emit('error_message', { message: 'Room access was removed, but the media server could not confirm removal. Retry media removal.' }); }
         });
 
         const authorize = (roomId, permission, callback) => {
@@ -734,7 +824,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 : null;
         };
 
-        socket.on('control:request', (_payload = {}, callback) => {
+        on('control:request', (_payload = {}, callback) => {
             const room = rooms.get(socket.data.roomId);
             const user = getUserBySocket(room, socket.id);
             if (!room || !user || !roomPermissions(user, room).canRequestControl) {
@@ -751,7 +841,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             callback?.({ ok: true });
         });
 
-        socket.on('media:declare', ({ descriptor } = {}, callback) => {
+        on('media:declare', ({ descriptor } = {}, callback) => {
             const access = authorize(socket.data.roomId, 'canChangeSource', callback);
             if (!access) return;
             const declaredSize = Number(String(descriptor?.mediaId || '').split(':')[1]);
@@ -785,7 +875,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             callback?.({ ok: true, snapshot: roomSnapshot(room, user.userId) });
         });
 
-        socket.on('media:ready', ({ mediaId, status, reason, fingerprint, size, duration } = {}, callback) => {
+        on('media:ready', ({ mediaId, status, reason, fingerprint, size, duration } = {}, callback) => {
             const room = rooms.get(socket.data.roomId);
             const user = getUserBySocket(room, socket.id);
             const allowed = new Set(['READY', 'MISMATCH', 'UNSUPPORTED', 'ERROR', 'SELECT_FILE', 'BUFFERING']);
@@ -813,7 +903,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             callback?.({ ok: true });
         });
 
-        socket.on('playback:command', (payload = {}, callback) => {
+        on('playback:command', (payload = {}, callback) => {
             const room = rooms.get(socket.data.roomId);
             const user = getUserBySocket(room, socket.id);
             if (!authorize(socket.data.roomId, payload.action === 'SEEK' ? 'canSeek' : 'canControlPlayback', callback)) return;
@@ -871,7 +961,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             callback?.({ ok: true, playback: completedPlayback });
         });
 
-        socket.on('playback:telemetry', ({ mediaId, positionSec, readyState, buffering, lastSeq } = {}) => {
+        on('playback:telemetry', ({ mediaId, positionSec, readyState, buffering, lastSeq } = {}) => {
             const room = rooms.get(socket.data.roomId);
             const user = getUserBySocket(room, socket.id);
             if (!room || !user || mediaId !== room.media?.mediaId || !finiteNonNegative(positionSec) ||
@@ -917,7 +1007,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             publishPlaylist(roomId, room);
         };
 
-        socket.on('playlist_update', (payload = {}, callback) => {
+        on('playlist_update', (payload = {}, callback) => {
             const room = getBoundRoom(socket, payload.roomId);
             const user = getUserBySocket(room, socket.id);
             if (!room || !user || !currentPlaylistItem(room.videoState, payload)) return callback?.(protocolError('STALE_PLAYLIST', 'The playlist item has changed.'));
@@ -963,7 +1053,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             callback?.({ ok: true, videoState: snapshot(room) });
         });
 
-        socket.on('change_video', ({ roomId, url, magnetURI = '' } = {}) => {
+        on('change_video', ({ roomId, url, magnetURI = '' } = {}) => {
             const access = authorize(roomId, 'canChangeSource');
             if (!access) return;
             if ((!url && !magnetURI) || (url && !isHttpUrl(url)) || !validMagnet(magnetURI) || playlistSource(url)?.invalid) {
@@ -983,7 +1073,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             emitReadiness(roomId, room);
         });
 
-        socket.on('select_local_media', ({ roomId, localMedia } = {}, callback) => {
+        on('select_local_media', ({ roomId, localMedia } = {}, callback) => {
             const access = authorize(roomId, 'canChangeSource', callback);
             if (!access) return;
             if (!access || !validLocalManifest(localMedia)) {
@@ -1024,7 +1114,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (typeof callback === 'function') callback({ ok: true, videoState: state });
         });
 
-        socket.on('local_media_ready', ({ roomId, mediaSessionId, fingerprint, size, duration } = {}) => {
+        on('local_media_ready', ({ roomId, mediaSessionId, fingerprint, size, duration } = {}) => {
             const room = getBoundRoom(socket, roomId);
             const user = getUserBySocket(room, socket.id);
             const media = room?.videoState.localMedia;
@@ -1042,7 +1132,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             emitReadiness(roomId, room);
         });
 
-        socket.on('local_media_not_ready', ({ roomId, mediaSessionId } = {}) => {
+        on('local_media_not_ready', ({ roomId, mediaSessionId } = {}) => {
             const room = getBoundRoom(socket, roomId);
             const user = getUserBySocket(room, socket.id);
             if (!user || mediaSessionId !== room.videoState.localMedia?.sessionId) return;
@@ -1050,18 +1140,16 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             emitReadiness(roomId, room);
         });
 
-        socket.on('sync_progress', (payload = {}) => {
+        on('sync_progress', (payload = {}) => {
             const access = coordinator(payload.roomId);
             if (!access || !mediaEventIsCurrent(access.room, payload)) return;
             if (!isFiniteNumber(payload.playedSeconds)) return;
             const { room } = access;
-            room.videoState.playedSeconds = clampSeconds(payload.playedSeconds);
-            room.videoState.updatedAt = Date.now();
-            room.videoState.stateVersion += 1;
+            room.videoState = transitionRemote(room.videoState, { action: 'PROGRESS', positionSec: clampSeconds(payload.playedSeconds), durationSec: MAX_MEDIA_SECONDS });
             io.to(payload.roomId).emit('video_progress', snapshot(room, false));
         });
 
-        socket.on('play_video', (payload = {}) => {
+        on('play_video', (payload = {}) => {
             const access = authorize(payload.roomId, 'canControlPlayback');
             if (!access || !mediaEventIsCurrent(access.room, payload)) return;
             const { room } = access;
@@ -1076,30 +1164,20 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             }
             room.lastEndedSourceId = null;
             claimCoordinator(payload.roomId, room, access.user);
-            advancePlayback(room);
-            if (!room.videoState.isPlaying) {
-                room.videoState.isPlaying = true;
-                room.videoState.stateVersion += 1;
-            }
+            room.videoState = transitionRemote(room.videoState, { action: 'PLAY', durationSec: MAX_MEDIA_SECONDS });
             io.to(payload.roomId).emit('video_played', snapshot(room));
         });
 
-        socket.on('pause_video', (payload = {}) => {
+        on('pause_video', (payload = {}) => {
             const access = authorize(payload.roomId, 'canControlPlayback');
             if (!access || !mediaEventIsCurrent(access.room, payload)) return;
             const { room } = access;
             claimCoordinator(payload.roomId, room, access.user);
-            advancePlayback(room);
-            if (isFiniteNumber(payload.playedSeconds)) {
-                room.videoState.playedSeconds = clampSeconds(payload.playedSeconds);
-            }
-            room.videoState.isPlaying = false;
-            room.videoState.updatedAt = Date.now();
-            room.videoState.stateVersion += 1;
+            room.videoState = transitionRemote(room.videoState, { action: 'PAUSE', positionSec: isFiniteNumber(payload.playedSeconds) ? clampSeconds(payload.playedSeconds) : undefined, durationSec: MAX_MEDIA_SECONDS });
             io.to(payload.roomId).emit('video_paused', snapshot(room));
         });
 
-        socket.on('seek_video', (payload = {}) => {
+        on('seek_video', (payload = {}) => {
             const access = authorize(payload.roomId, 'canSeek');
             if (
                 !access ||
@@ -1108,16 +1186,14 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             ) return;
             const { room } = access;
             claimCoordinator(payload.roomId, room, access.user);
-            room.videoState.playedSeconds = clampSeconds(payload.playedSeconds);
-            room.videoState.updatedAt = Date.now();
-            room.videoState.seekVersion += 1;
-            room.videoState.stateVersion += 1;
+            room.videoState = transitionRemote(room.videoState, { action: 'SEEK', positionSec: clampSeconds(payload.playedSeconds), durationSec: MAX_MEDIA_SECONDS });
             io.to(payload.roomId).emit('video_seeked', snapshot(room));
         });
 
-        socket.on('add_to_queue', ({ roomId, url, magnetURI = '', label } = {}) => {
+        on('add_to_queue', ({ roomId, url, magnetURI = '', label } = {}) => {
             const access = authorize(roomId, 'canAddToQueue');
             if (!access || (!url && !magnetURI) || (url && !isHttpUrl(url)) || !validMagnet(magnetURI) || playlistSource(url)?.invalid) return;
+            if (access.room.queue.length >= 500) return socket.emit('error_message', { message: 'The room queue is full (500 items).' });
             const item = {
                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 url: url || '',
@@ -1125,32 +1201,33 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 label: cleanText(label, 300) || url || 'Unnamed'
             };
             access.room.queue.push(item);
-            io.to(roomId).emit('queue_updated', access.room.queue);
+            publishQueue(roomId, access.room, { op: 'add', item, index: access.room.queue.length - 1 });
         });
 
-        socket.on('remove_from_queue', ({ roomId, itemId } = {}) => {
+        on('remove_from_queue', ({ roomId, itemId } = {}) => {
             const access = authorize(roomId, 'canManageQueue');
             if (!access || typeof itemId !== 'string') return;
+            if (!access.room.queue.some(item => item.id === itemId)) return;
             access.room.queue = access.room.queue.filter(item => item.id !== itemId);
-            io.to(roomId).emit('queue_updated', access.room.queue);
+            publishQueue(roomId, access.room, { op: 'remove', itemId });
         });
 
-        socket.on('play_next', ({ roomId } = {}) => {
+        on('play_next', ({ roomId } = {}) => {
             const access = authorize(roomId, 'canManageQueue');
             if (access) { claimCoordinator(roomId, access.room, access.user); startNextQueuedVideo(roomId, access.room); }
         });
 
-        socket.on('reorder_queue', ({ roomId, itemId, direction } = {}) => {
+        on('reorder_queue', ({ roomId, itemId, direction } = {}) => {
             const access = authorize(roomId, 'canManageQueue');
             if (!access || !['up', 'down'].includes(direction)) return;
             const queue = access.room.queue, index = queue.findIndex(item => item.id === itemId);
             const next = index + (direction === 'up' ? -1 : 1);
             if (index < 0 || next < 0 || next >= queue.length) return;
             [queue[index], queue[next]] = [queue[next], queue[index]];
-            io.to(roomId).emit('queue_updated', queue);
+            publishQueue(roomId, access.room, { op: 'move', itemId, index: next });
         });
 
-        socket.on('video_ended', (payload = {}) => {
+        on('video_ended', (payload = {}) => {
             const access = coordinator(payload.roomId);
             if (!access || access.room.media) return;
             const { room } = access;
@@ -1172,11 +1249,11 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             io.to(payload.roomId).emit('video_paused', snapshot(room));
         });
 
-        socket.on('network_ping', (_payload, callback) => {
+        on('network_ping', (_payload, callback) => {
             if (typeof callback === 'function') callback({ serverTime: Date.now() });
         });
 
-        socket.on('join_voice', ({ roomId, isMuted = false } = {}, callback) => {
+        on('join_voice', ({ roomId, isMuted = false } = {}, callback) => {
             const room = getBoundRoom(socket, roomId);
             const user = getUserBySocket(room, socket.id);
             if (!room || !user) {
@@ -1211,12 +1288,12 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             callback?.({ ok: true, peers, maxParticipants: MAX_VOICE_PARTICIPANTS });
         });
 
-        socket.on('leave_voice', ({ roomId } = {}) => {
+        on('leave_voice', ({ roomId } = {}) => {
             const room = getBoundRoom(socket, roomId);
             removeVoice(socket, room);
         });
 
-        socket.on('update_voice_mute', ({ roomId, isMuted } = {}) => {
+        on('update_voice_mute', ({ roomId, isMuted } = {}) => {
             const room = getBoundRoom(socket, roomId);
             const user = getUserBySocket(room, socket.id);
             if (!user || !room.voiceSocketIds.has(socket.id) || typeof isMuted !== 'boolean') return;
@@ -1224,17 +1301,17 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             voicePresence(roomId, user);
         });
 
-        socket.on('webrtc_offer', ({ targetSocketId, offer } = {}) => {
+        on('webrtc_offer', ({ targetSocketId, offer } = {}) => {
             if (!signalingPeers(socket, targetSocketId) || !validDescription(offer, 'offer')) return;
             io.to(targetSocketId).emit('webrtc_offer', { senderSocketId: socket.id, offer });
         });
 
-        socket.on('webrtc_answer', ({ targetSocketId, answer } = {}) => {
+        on('webrtc_answer', ({ targetSocketId, answer } = {}) => {
             if (!signalingPeers(socket, targetSocketId) || !validDescription(answer, 'answer')) return;
             io.to(targetSocketId).emit('webrtc_answer', { senderSocketId: socket.id, answer });
         });
 
-        socket.on('webrtc_ice_candidate', ({ targetSocketId, candidate } = {}) => {
+        on('webrtc_ice_candidate', ({ targetSocketId, candidate } = {}) => {
             if (!signalingPeers(socket, targetSocketId) || !validCandidate(candidate)) return;
             io.to(targetSocketId).emit('webrtc_ice_candidate', {
                 senderSocketId: socket.id,
@@ -1256,19 +1333,19 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (direction === 'ice' && !((senderIsSharer && targetIsViewer) || (senderIsViewer && targetIsSharer))) return null;
             return target;
         };
-        socket.on('screen:offer', ({ targetSocketId, offer } = {}) => {
+        on('screen:offer', ({ targetSocketId, offer } = {}) => {
             if (!screenPeers(targetSocketId, 'offer') || !validDescription(offer, 'offer')) return;
             io.to(targetSocketId).emit('screen:offer', { senderSocketId: socket.id, offer });
         });
-        socket.on('screen:answer', ({ targetSocketId, answer } = {}) => {
+        on('screen:answer', ({ targetSocketId, answer } = {}) => {
             if (!screenPeers(targetSocketId, 'answer') || !validDescription(answer, 'answer')) return;
             io.to(targetSocketId).emit('screen:answer', { senderSocketId: socket.id, answer });
         });
-        socket.on('screen:ice', ({ targetSocketId, candidate } = {}) => {
+        on('screen:ice', ({ targetSocketId, candidate } = {}) => {
             if (!screenPeers(targetSocketId, 'ice') || !validCandidate(candidate)) return;
             io.to(targetSocketId).emit('screen:ice', { senderSocketId: socket.id, candidate });
         });
-        socket.on('screen:started', (_payload = {}, callback) => {
+        on('screen:started', (_payload = {}, callback) => {
             const room = rooms.get(socket.data.roomId);
             const user = getUserBySocket(room, socket.id);
             if (!room || !user || room.controllerMemberId !== user.userId) return callback?.(protocolError('NOT_CONTROLLER', 'Only the controller can share a screen.'));
@@ -1282,7 +1359,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             io.to(socket.data.roomId).emit('screen:started', { sharerSocketId: socket.id, sharerMemberId: user.userId });
             callback?.({ ok: true, viewers: viewers.map(item => ({ socketId: item.id, memberId: item.userId })), excludedCount: Math.max(0, candidates.length - 3) });
         });
-        socket.on('screen:stopped', () => {
+        on('screen:stopped', () => {
             const room = rooms.get(socket.data.roomId);
             if (!room || room.screenSharerMemberId !== socket.data.memberId) return;
             room.screenSharerMemberId = null;
@@ -1298,8 +1375,11 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
 
             const user = room.users.find(item => item.id === socket.id && item.connected);
             if (!user) return;
+            room.lastActiveAt = Date.now();
             user.connected = false;
             room.screenViewerSocketIds.delete(socket.id);
+            const sharer = room.users.find(item => item.userId === room.screenSharerMemberId && item.connected);
+            if (sharer && sharer !== user) io.to(sharer.id).emit('screen:viewer-left', { socketId: socket.id });
             room.localReadyUserIds.delete(user.userId);
             if (room.screenSharerMemberId === user.userId) {
                 room.screenSharerMemberId = null;
@@ -1330,23 +1410,12 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                     reason: 'HOST_RECONNECT_GRACE',
                     leaseUntil: room.controllerLeaseUntil
                 });
-                const timer = setTimeout(() => {
-                    hostLeaseTimers.delete(roomId);
-                    if (user.connected || rooms.get(roomId) !== room || room.controllerMemberId !== user.userId) return;
-                    const candidates = room.users.filter(item => item.connected).sort((a, b) => a.joinedAt - b.joinedAt);
-                    const nextHost = candidates.find(item => item.role === 'Moderator') || candidates[0];
-                    if (!nextHost) return;
-                    room.controllerMemberId = nextHost.userId;
-                    room.controllerLeaseUntil = null;
-                    publishControl(roomId, room, { reason: 'HOST_LEASE_EXPIRED' });
-                }, CONTROLLER_LEASE_MS);
-                timer.unref?.();
-                hostLeaseTimers.set(roomId, timer);
+                scheduleHostLease(roomId, room, user);
             }
             if (room.media || room.videoState.sourceType === 'local') emitReadiness(roomId, room);
         };
 
-        socket.on('leave_room', () => {
+        on('leave_room', () => {
             const roomId = socket.data.roomId;
             handleDisconnect('left');
             if (roomId) socket.leave(roomId);
@@ -1356,7 +1425,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             socket.data.memberId = null;
             presence.changed();
         });
-        socket.on('disconnect', () => {
+        on('disconnect', () => {
             authGeneration++; clearTimeout(expiryTimer); clearTimeout(socialRefreshTimer); presence.changed();
             handleDisconnect();
             messageRateLimitMap.delete(socket.data.memberId || socket.id);
@@ -1364,4 +1433,14 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             signalRateLimitMap.delete(socket.id);
         });
     });
+    return {
+        restore() {
+            accessControl.restore();
+            for (const [roomId, room] of rooms) {
+                if (!room.users.some(user => user.connected)) scheduleRoomCleanup(roomId, room);
+                const controller = room.users.find(user => user.userId === room.controllerMemberId);
+                if (room.controllerLeaseUntil && controller && !controller.connected) scheduleHostLease(roomId, room, controller);
+            }
+        }
+    };
 };

@@ -1,0 +1,34 @@
+{
+  "recordedAt": "2026-11-26T06:19:45.062Z",
+  "simulationOnly": true,
+  "results": [
+    {
+      "population": 50,
+      "friendsPerAccount": 10,
+      "rooms": 1,
+      "elapsedMs": 21.47,
+      "statements": 1084,
+      "returnedRows": 766,
+      "targetedNotifications": 1
+    },
+    {
+      "population": 250,
+      "friendsPerAccount": 10,
+      "rooms": 5,
+      "elapsedMs": 59.16,
+      "statements": 4655,
+      "returnedRows": 3472,
+      "targetedNotifications": 5
+    },
+    {
+      "population": 500,
+      "friendsPerAccount": 10,
+      "rooms": 10,
+      "elapsedMs": 104.23,
+      "statements": 9085,
+      "returnedRows": 6832,
+      "targetedNotifications": 10
+    }
+  ],
+  "limitations": "Node SQLite, mocked room notification transport, ten friends/account. Statement/returned-row counts are instrumentation, not Cloudflare billing. No network concurrency/throughput or 10000-user capacity claim."
+}

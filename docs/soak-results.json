@@ -1,0 +1,13 @@
+{
+  "recordedAt": "2026-11-26T06:15:43.845Z",
+  "simulationOnly": true,
+  "acceleratedHours": 8,
+  "participants": 10,
+  "reconstructions": 32,
+  "readOnlyEvents": 10560,
+  "readOnlyLogicalRowsWritten": 0,
+  "realTimeSeconds": 60,
+  "realTimeSamples": 30,
+  "totalWallMs": 61207,
+  "limitations": "In-process Node/SQLite only. Accelerated clock is not an eight-hour wall-clock soak. No network, workerd, live video, provider billing or NAT coverage."
+}

@@ -1,0 +1,1653 @@
+{
+  "files": [
+    {
+      "path": ".dev.vars.example",
+      "bytes": 819,
+      "sha256": "d585a7bb6b8983da477d6f7e36f2c5fed0484133f97db8ab83280a4aff7bc779"
+    },
+    {
+      "path": ".env.example",
+      "bytes": 386,
+      "sha256": "e692d8c8952086cbea6ad7b6bafcf7721e82e8607a982eea52b6107799bf2ee4"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "bytes": 1468,
+      "sha256": "fee9f7153d15cd23763396b9df86ae8f4a852fc67620fb7da3da4f27ea78ad3a"
+    },
+    {
+      "path": ".github/workflows/cloudflare.yml",
+      "bytes": 1692,
+      "sha256": "72c8605ed81a18113aa2167419eea7e1749315e40c49e48b024c3bec4433d472"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 407,
+      "sha256": "daa7ee0044880dd58e494a04474705a4ebf0d2db8ebc0289a773958130b408d0"
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "bytes": 3434,
+      "sha256": "975a81954218fed0b8f8b447f77f42d8c1bb303da08a392655a870730511f7d4"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "bytes": 1963,
+      "sha256": "ee228e7d64e2ebfc6867107dcc3703b3e12152323da12554ddc52664d6f3e5b4"
+    },
+    {
+      "path": "CLOUDFLARE_AUDIT.md",
+      "bytes": 4966,
+      "sha256": "873fd08aef87ec0676e14b8b9cb30d353e1417c21e8c96ea6e051744e97fd1ed"
+    },
+    {
+      "path": "CLOUDFLARE_DEPLOYMENT.md",
+      "bytes": 12897,
+      "sha256": "b383c8c3ad2f26c7665df3d663e69e9430198dfc0c52dc47a4a1830a20bc0488"
+    },
+    {
+      "path": "COST_ANALYSIS.md",
+      "bytes": 6806,
+      "sha256": "bb7e1f6d09cf9d4416f164c2d049c8103c600c16e89281b3df41dd45709e8d2b"
+    },
+    {
+      "path": "DEPLOYMENT.md",
+      "bytes": 4365,
+      "sha256": "4677ff8e1adc8037481cb0578ce7da3be4a411d899dff4476029b7da7e75f4f7"
+    },
+    {
+      "path": "FEATURE_PARITY.md",
+      "bytes": 11822,
+      "sha256": "1344ef5453509963eb83f695787d92a84498b3056729aeb441cb484c77cc0d7e"
+    },
+    {
+      "path": "IMPLEMENTATION_CHECKLIST.md",
+      "bytes": 4313,
+      "sha256": "182c36dd05909e659546cd79dcaa7ecf3356047936ca85c570e9bc3073e2e63f"
+    },
+    {
+      "path": "KNOWN_LIMITATIONS.md",
+      "bytes": 4036,
+      "sha256": "31fa46b7ff7d8e92373359b5ceba8a84bb2c1a282d3643453d2dc7541ef9e6aa"
+    },
+    {
+      "path": "MIGRATION_REPORT.md",
+      "bytes": 13423,
+      "sha256": "4f305f0ca2fba6cce2f1424a309ea33613ef86ea7567979f9359df0a3b393e67"
+    },
+    {
+      "path": "PERFORMANCE_REPORT.md",
+      "bytes": 3260,
+      "sha256": "21aba86a80337846b17c1cdbcecead04b612ba9b5e24e1de637b26e3f4bf3cfe"
+    },
+    {
+      "path": "PRODUCTION_READINESS.md",
+      "bytes": 2116,
+      "sha256": "de03e8ce867e3b73c9da85c11a58552852c8f3f2cc26581fe9d04683ddd8ea3c"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2373,
+      "sha256": "490a2d04e77a24b775137dea1d3dd26ef4fa3389781a726e3ff5704aa861730c"
+    },
+    {
+      "path": "REMEDIATION_CHECKLIST.md",
+      "bytes": 2561,
+      "sha256": "e7128a0790cc4bd363684d41972086099239d7d19e49357f8c8adaa398f3d35a"
+    },
+    {
+      "path": "REMEDIATION_REPORT.md",
+      "bytes": 5999,
+      "sha256": "d20dfe29142e06ac759bff7acb6b7c1e02c6f20778771bd967c47f18a2554a03"
+    },
+    {
+      "path": "ROLLBACK.md",
+      "bytes": 2527,
+      "sha256": "8c8fd73640c3deb0fc2f3d5bcb2ff8a5bf30fc0c549e95e175b6b5fabb8eba9f"
+    },
+    {
+      "path": "SECURITY_REVIEW.md",
+      "bytes": 5438,
+      "sha256": "6f823339e9310485260450c8ade55da5c65acf3d758a4fc033a12a91a5ac95cf"
+    },
+    {
+      "path": "TEST_REPORT.md",
+      "bytes": 3935,
+      "sha256": "c84b1aa0f973b75a99dc296eba23dab239897ed602b98639eb9cdde9d1b6c9f0"
+    },
+    {
+      "path": "Watchly_Local_File_Sync_Blueprint.md",
+      "bytes": 35020,
+      "sha256": "7c682dd93942a9ec07c05218e524fcc0422d01ac2460131a97c1ed4021326a90"
+    },
+    {
+      "path": "backend/.env.example",
+      "bytes": 1093,
+      "sha256": "d53008d252c54e7a4651e49866087cd0fb3a24b925c336e7dc44254f4c8e705f"
+    },
+    {
+      "path": "backend/accounts.js",
+      "bytes": 5709,
+      "sha256": "62e13cbf58a372e1141bccf3103f9b8b124fa17468aa537f12dd9ed3575a78e5"
+    },
+    {
+      "path": "backend/driveAccess.js",
+      "bytes": 3515,
+      "sha256": "32feeb43b0da3ffe55ccb99d98f2f3e3a357b512a8eca8f1f8300beb478685ca"
+    },
+    {
+      "path": "backend/livekitIdentity.js",
+      "bytes": 2375,
+      "sha256": "6cc270580181d21cea9e991c8393df9a08151c40c872d37012c4b61fe6383797"
+    },
+    {
+      "path": "backend/livekitVoice.js",
+      "bytes": 5178,
+      "sha256": "7b5723eec1cb7d389fd1237b1ed845500c567cd50f2a7f53a370ebf5b855b583"
+    },
+    {
+      "path": "backend/package-lock.json",
+      "bytes": 50005,
+      "sha256": "bc6306f4a3de0110ac6dd29cdbe17d44f89d7a102ec5a8f76a0efa8e81f3887a"
+    },
+    {
+      "path": "backend/package.json",
+      "bytes": 578,
+      "sha256": "eac4b0aa0533bb5e9641977d5737f8a55024dd1252c78a7b53b9733c2c76a784"
+    },
+    {
+      "path": "backend/permissions.js",
+      "bytes": 1532,
+      "sha256": "299f71af98f31030bf73fb7a75b48ff3b68fb468068d6f1816f9e163e8ac1092"
+    },
+    {
+      "path": "backend/playback/canonicalState.js",
+      "bytes": 148,
+      "sha256": "b20dff5c6924454e0c409c8acceb629fc3ee14af41c17893316959afed4855ae"
+    },
+    {
+      "path": "backend/rateLimit.js",
+      "bytes": 1080,
+      "sha256": "103580abc67a4e9a7e9de534ddfb2ad32d306618bfccfe4ef2606a8e29fc4c8e"
+    },
+    {
+      "path": "backend/realtime.js",
+      "bytes": 81087,
+      "sha256": "a381be81954cebbd4dd66ea5ea2435b1df3403073f9708f85bfe2c7b5de39350"
+    },
+    {
+      "path": "backend/roomAccess.js",
+      "bytes": 15088,
+      "sha256": "a1560a11f6dcc94a9f34e203ff9cfd5e9eb6c2385e866fb6bfa3ebfb609e512a"
+    },
+    {
+      "path": "backend/safeEvents.js",
+      "bytes": 2468,
+      "sha256": "79ede0da1215541c9f59e6fda07b9f273e6bc0c033e367b6ad052487726499cf"
+    },
+    {
+      "path": "backend/scripts/preflight.js",
+      "bytes": 1951,
+      "sha256": "f22db70d2934e5ce30ecaa44c5df569bb5ca490ba87e90189f3afb45f05e6beb"
+    },
+    {
+      "path": "backend/server.js",
+      "bytes": 20837,
+      "sha256": "75c5c3a8f5247e27fbbf38901763030ef4e82f6f307ed86b4a46beb479709efd"
+    },
+    {
+      "path": "backend/test/accountRooms.integration.test.js",
+      "bytes": 11185,
+      "sha256": "cf94726d475dbe9f772007d4bb70316dc8f05e2231ce9f32bc423ce8a95853a3"
+    },
+    {
+      "path": "backend/test/accounts.test.js",
+      "bytes": 2113,
+      "sha256": "895dd28a88635661aaa570c1bd23799d28f89039e272535a6d2ea8b44f243f49"
+    },
+    {
+      "path": "backend/test/driveAccess.test.js",
+      "bytes": 3556,
+      "sha256": "742cd363efe23044e7358bb1499fcea2698732a131380afa43ef40afaf38bbc8"
+    },
+    {
+      "path": "backend/test/livekitVoice.integration.test.js",
+      "bytes": 8642,
+      "sha256": "7898064b63d3d4a8dc56ce9a2a1aa594ce6f8dc672aabce14c5f34ec46ff7e1e"
+    },
+    {
+      "path": "backend/test/load.test.js",
+      "bytes": 2559,
+      "sha256": "704e7fa1c22ffe5dd779fa7b70951cb81b1c4f4912a688ed09a8fb2c8449cdcd"
+    },
+    {
+      "path": "backend/test/playback.test.js",
+      "bytes": 3588,
+      "sha256": "877e27252e74381c8f9c25a5567ffa239c57c091c9f808c1d5867f575898e026"
+    },
+    {
+      "path": "backend/test/rateLimit.test.js",
+      "bytes": 806,
+      "sha256": "874dfc42b9401e7b5ab4c119f761e7699af2ae20ca9e51bc79f9aec7f8cfb37c"
+    },
+    {
+      "path": "backend/test/realtime.integration.test.js",
+      "bytes": 34622,
+      "sha256": "58c7d029dd1013d312f9426aec7160283cdba5331fc2ac758c2b263b6e983e8e"
+    },
+    {
+      "path": "backend/test/restart.integration.test.js",
+      "bytes": 1976,
+      "sha256": "1a344ff189dd6a8cc49a4d6b2c7becf762980e73a6906a1f2a092439a9af447d"
+    },
+    {
+      "path": "backend/test/safeEvents.test.js",
+      "bytes": 1928,
+      "sha256": "7a6dc633e3f3e676f662d084f62b25498d9d0d9c4d6c47e349bae0c7cf7b1dbd"
+    },
+    {
+      "path": "backend/test/sessionDatabase.test.js",
+      "bytes": 2140,
+      "sha256": "456e18cfffb8e455a9a5f9b3dc2b5ea5e69ea812dadc1fb27aed5a81f319f628"
+    },
+    {
+      "path": "backend/test/socialDatabase.test.js",
+      "bytes": 7221,
+      "sha256": "d1c3253d357c07b195dfff44b51c92e57b25292dd0c4f7adca399e070bc41a39"
+    },
+    {
+      "path": "backend/test/socialRealtime.test.js",
+      "bytes": 4197,
+      "sha256": "0b4c8b616a96724861d7ce43a357ce3c680cc92e7de8b7b5efea3cb71717610e"
+    },
+    {
+      "path": "backend/test/validators.test.js",
+      "bytes": 840,
+      "sha256": "94998df093acaeb283bbb2e6095806b74304a6ee4b075ca57ecf0daf76f8b700"
+    },
+    {
+      "path": "backend/test/youtubePlaylist.integration.test.js",
+      "bytes": 13120,
+      "sha256": "dac5f24790f4e535feca20930ab911f087d765f82104f3cbdad94e9235912066"
+    },
+    {
+      "path": "backend/testing/socialRealtime.cjs",
+      "bytes": 7826,
+      "sha256": "009af7417f7f56dede76742e7ddee95e137a3b166bdc2922d9d70c1b7e4253ee"
+    },
+    {
+      "path": "backend/testing/supabaseHarness.cjs",
+      "bytes": 9014,
+      "sha256": "31cad70e1a834f4c94872936eb37ce38ac14034d922d9f9d0af25c857e6a059c"
+    },
+    {
+      "path": "backend/validators.js",
+      "bytes": 802,
+      "sha256": "d27ef31e4c2b751c55a8a0bf17ca6410ba1c01eac02c8d785bf5950980f6eba8"
+    },
+    {
+      "path": "backend/youtubePlaylist.js",
+      "bytes": 3343,
+      "sha256": "a96a27e91ee1844157990a0a753a5f020022d5167b41ed04ce849ac2d5ff7d71"
+    },
+    {
+      "path": "docs/accounts-and-my-watchly.md",
+      "bytes": 27470,
+      "sha256": "29ce358b809da59eb0e93fa63d4a8f3aee3b9d0f9b5ee181ecc42b23a5b8e841"
+    },
+    {
+      "path": "docs/automatic-room-recovery.md",
+      "bytes": 9127,
+      "sha256": "8200476545d0a9b9e02e890a2b09997581989eaa94e6993ed706b29581ba2954"
+    },
+    {
+      "path": "docs/background-optimization.json",
+      "bytes": 412,
+      "sha256": "d4b831c04dd23bbabbdee984922010ba5de0daa8c2c5fc9b034103ab105352bc"
+    },
+    {
+      "path": "docs/background-webm-optimization.json",
+      "bytes": 414,
+      "sha256": "a927c1a3c350b29094ce47310ef283aef73ff5e8444499ec4fef496f52d7795f"
+    },
+    {
+      "path": "docs/capacity-estimates.csv",
+      "bytes": 27188,
+      "sha256": "3df6101d07944e2363ec6654685b37a73786ff8a2f44edc9de6937a262612a69"
+    },
+    {
+      "path": "docs/floating-video-call.md",
+      "bytes": 5151,
+      "sha256": "76330bec1c963ffc52e8e960aa58bc6f4da371196597a155cd7e646edc4a5fb0"
+    },
+    {
+      "path": "docs/livekit-voice-migration.md",
+      "bytes": 8204,
+      "sha256": "6645af8a2fadb32615a2686622110599e2a6a833026b70391b7e86f7822ccb74"
+    },
+    {
+      "path": "docs/local-benchmark.json",
+      "bytes": 2942,
+      "sha256": "54a199a92b1766207328d402cd9de59c420bd1f57fcbdde08706e6519f6a8d34"
+    },
+    {
+      "path": "docs/local-playback-seeking-fix.md",
+      "bytes": 6672,
+      "sha256": "f42d72e8112fecf33653baa54b4d71bfe3062897822e6af0808c7a7b23c9cddb"
+    },
+    {
+      "path": "docs/notification-sounds.md",
+      "bytes": 6737,
+      "sha256": "4b28d385ac0432492321675a0954e3c5f99a7bbe7e929b88ec501ad4cab7954b"
+    },
+    {
+      "path": "docs/presence-benchmark.json",
+      "bytes": 922,
+      "sha256": "14cadc689a0336c23d0fc4a43d53163c10bd3b1df4cd065a4108f3d034754029"
+    },
+    {
+      "path": "docs/role-playback-authorization.md",
+      "bytes": 9905,
+      "sha256": "3c31ecf297116dfc7b7d1ad89f4a25185b1b2cecb854216e54a0cbaa5b76f4cf"
+    },
+    {
+      "path": "docs/room-panel-fixes.md",
+      "bytes": 5177,
+      "sha256": "4472d9d00746e49c6652d73d0f9bae7f1fa86c443547ce838fc9573e263d08be"
+    },
+    {
+      "path": "docs/room-session-lifecycle.md",
+      "bytes": 8695,
+      "sha256": "a752cfa800187aeb7c2db6f4cd71e44fa8535eb041527ea4d07e8fee399a359f"
+    },
+    {
+      "path": "docs/soak-results.json",
+      "bytes": 453,
+      "sha256": "0b572f785e1c8d4fdb51cac59017863c40ce4a765b740ae55e7491e56e915cfc"
+    },
+    {
+      "path": "docs/social-realtime.md",
+      "bytes": 10361,
+      "sha256": "132d62d9aff031b45df3a8a65bdf7a0d2f2e7f3a9669199eeeace39f8ef9d71a"
+    },
+    {
+      "path": "docs/source-selection-recovery.md",
+      "bytes": 2804,
+      "sha256": "775d4ff4d6a62ff3403f57ffb430d81d095f0c96a71acd61a0ab03f432864f07"
+    },
+    {
+      "path": "docs/verification.json",
+      "bytes": 1639,
+      "sha256": "33f67de02fea25817af7d49c6f0ccf1821b1a5f1809387afe9ae7196e5d36271"
+    },
+    {
+      "path": "docs/video-calling.md",
+      "bytes": 13368,
+      "sha256": "ff16490487a7b831dd649eb1b0356a3b40f49679335715a831e9cd5b251e5442"
+    },
+    {
+      "path": "docs/youtube-playlists.md",
+      "bytes": 7168,
+      "sha256": "87fec24020c20e032f2487bf26a4d85639e3c284c0c44608447efa71ccb71b76"
+    },
+    {
+      "path": "frontend/.env.example",
+      "bytes": 865,
+      "sha256": "1a6c4e3588aff5e1f845d44276709b062e6abe2284024d59c348c953a0d31bc9"
+    },
+    {
+      "path": "frontend/.gitignore",
+      "bytes": 277,
+      "sha256": "d50ab07e11fa4bf3b1c7c3312e1d7baeab56cca756832ccf40476823ad2a38b7"
+    },
+    {
+      "path": "frontend/README.md",
+      "bytes": 2451,
+      "sha256": "be593c5d8a85bcb869a10513837845a6a1d62324323c5d65f4372ec2948c4fe9"
+    },
+    {
+      "path": "frontend/components.json",
+      "bytes": 621,
+      "sha256": "030262ff1a977df53048313623a0ed518275d111a7c110ce290f7c18f2c43483"
+    },
+    {
+      "path": "frontend/eslint.config.js",
+      "bytes": 787,
+      "sha256": "f6477b521c0d4c5ab0ac73d8cc8ce484795d23bece7cbbd0cd2a9f4301337532"
+    },
+    {
+      "path": "frontend/index.html",
+      "bytes": 2642,
+      "sha256": "e16d9948ffce95bd9d5e5fab528b21ee2a5d614e5998d216da61e6ba53b62d81"
+    },
+    {
+      "path": "frontend/jsconfig.json",
+      "bytes": 128,
+      "sha256": "1909b20acc753f86d4cd378c2a3edd1f12a17772977d31dd9c71c906c4b28cbc"
+    },
+    {
+      "path": "frontend/middleware.js",
+      "bytes": 1509,
+      "sha256": "e6956e9afb5ec4c63b984889385fdf218a2b5eda7c8793b474542986852f632d"
+    },
+    {
+      "path": "frontend/package-lock.json",
+      "bytes": 318912,
+      "sha256": "3e78797c745b1c1985820f56181f07ec591e09dfdae97d96b0ecf80d3e593516"
+    },
+    {
+      "path": "frontend/package.json",
+      "bytes": 1272,
+      "sha256": "5948c3834629d0a358070fe77f9aca2d56c08d69231ef93de699c546168351ba"
+    },
+    {
+      "path": "frontend/postcss.config.js",
+      "bytes": 98,
+      "sha256": "24ca546ca8918b28c796f2a06e417be70c0877e8de147ba87bc4e88f2ef71136"
+    },
+    {
+      "path": "frontend/public/_headers",
+      "bytes": 503,
+      "sha256": "a6a73225beeae4d7aa684bc26d4828629277e92eb7500177692b0603f4962fe3"
+    },
+    {
+      "path": "frontend/public/assets/sofa-couple-mobile.webp",
+      "bytes": 317536,
+      "sha256": "97d84027f38770c64fb32b5b7c45dd77ff462b2443bcffe6650f928b2f599bbc"
+    },
+    {
+      "path": "frontend/public/assets/sofa-couple.png",
+      "bytes": 1203093,
+      "sha256": "ada21de4ebd765121ff48be76d50cf58dc49c19fc9fb5657d1e901a7e3c8fb03"
+    },
+    {
+      "path": "frontend/public/assets/sofa-couple.webp",
+      "bytes": 801178,
+      "sha256": "aa067fef0dce9d540ad39ca11c6684d1b72b9e143343d10f71a6f7dfcd4b0dd5"
+    },
+    {
+      "path": "frontend/public/bg-video-mobile-poster.jpg",
+      "bytes": 23902,
+      "sha256": "9689e43ae4988206345186fc77cfba21f22c848506dc1808b1bf8c14f5694d61"
+    },
+    {
+      "path": "frontend/public/bg-video-mobile.mp4",
+      "bytes": 1827854,
+      "sha256": "e1f24ff4e2c490e58cb6d6a4238d32673f44ebd2e7404769ea89731d019d2cad"
+    },
+    {
+      "path": "frontend/public/bg-video-mobile.webm",
+      "bytes": 1885121,
+      "sha256": "4c382d5fc11c690f574a1f0f1b29de06e39adf58b0519fcdc8720b748d10de84"
+    },
+    {
+      "path": "frontend/public/bg-video-poster.jpg",
+      "bytes": 41101,
+      "sha256": "a2da4613f51b07e793f911d18d142763c1eca281bdb4ae944e0a544bc8295c3a"
+    },
+    {
+      "path": "frontend/public/bg-video.mp4",
+      "bytes": 4591931,
+      "sha256": "74c60cb25477c2ec92f34ae3d886267a053326d97ef0a12b757bc30191882235"
+    },
+    {
+      "path": "frontend/public/bg-video.webm",
+      "bytes": 4711520,
+      "sha256": "578f417a3d662cca4a85846d2ba107ad83473ece043760f866c726792c9ed05e"
+    },
+    {
+      "path": "frontend/public/google2fd6608b68053b8d.html",
+      "bytes": 55,
+      "sha256": "fa84d937291f857e45eb60f2c10ae19cb1141d07cb96e094abc90f2a247ad725"
+    },
+    {
+      "path": "frontend/public/logo.png",
+      "bytes": 44072,
+      "sha256": "aa778aafec8afb6143a9378a86c30e584912adee4e11a40c090954200ee13193"
+    },
+    {
+      "path": "frontend/public/og-image-watchly.png",
+      "bytes": 272589,
+      "sha256": "fa2f56c394f45364e70070b0c60bd87c15eebc387d2e4674f7642b0625fe81da"
+    },
+    {
+      "path": "frontend/public/og-image.png",
+      "bytes": 914066,
+      "sha256": "a5c9843f287a67feda0d2d88a43326cfed3aa72bf55bc5f7db2800d5e6959541"
+    },
+    {
+      "path": "frontend/public/og/watchly-room-v2.png",
+      "bytes": 263510,
+      "sha256": "8e86b4b17faca284a5b45f3e2832258933378a135eb3456fb0423350265575b0"
+    },
+    {
+      "path": "frontend/public/robots.txt",
+      "bytes": 74,
+      "sha256": "918f06762771ed1baf3b2228b7b045e98082ca363f9644dbc74086e112354f44"
+    },
+    {
+      "path": "frontend/public/sitemap.xml",
+      "bytes": 276,
+      "sha256": "4d60bef138156f6d411cbc3ba0204182485109390bb7ac35c55a1b4c39bdb62f"
+    },
+    {
+      "path": "frontend/social-preview/README.md",
+      "bytes": 4639,
+      "sha256": "d2727cb5b28f878a79205030d2c3e456fb6a5a8e0ffd417675ddf4c5566cee8a"
+    },
+    {
+      "path": "frontend/social-preview/assets/watchly-room.png",
+      "bytes": 1503764,
+      "sha256": "1b0a4ae0227958640a5936b7647dfe0deeb35eedebe18d1d577f4ce1c2e3fc5a"
+    },
+    {
+      "path": "frontend/social-preview/metadata.js",
+      "bytes": 1298,
+      "sha256": "ee103e4746882626673f1c0a9537eff99bd228aa4cb8d20152976053dc03ec60"
+    },
+    {
+      "path": "frontend/social-preview/render.cjs",
+      "bytes": 2869,
+      "sha256": "1037bdd18feeb72d50ff998ebf4f2f5349f4c99ba6e77e88b3b4e46e65becb1f"
+    },
+    {
+      "path": "frontend/social-preview/watchly.html",
+      "bytes": 2965,
+      "sha256": "a765955680984e1608e33e70341dd2b9d552ac2d21909df4a2913336a5b2e255"
+    },
+    {
+      "path": "frontend/src/App.jsx",
+      "bytes": 6366,
+      "sha256": "ff1020c09df3ccb5c637fa7c503de04fe9d694c6f31c527124863f428bd18169"
+    },
+    {
+      "path": "frontend/src/components/AppearancePanel.jsx",
+      "bytes": 7346,
+      "sha256": "499c7b2551249f2d97d59822e075fcbf1d8b9840945f0f5277a18d89617c8502"
+    },
+    {
+      "path": "frontend/src/components/BackgroundLayers.jsx",
+      "bytes": 883,
+      "sha256": "61cc503c85862952fcf1bba9f4f1f8449ed83e853a7fc21fb6c10e8ff6b35fbb"
+    },
+    {
+      "path": "frontend/src/components/ChatUI.jsx",
+      "bytes": 9742,
+      "sha256": "992b4da9a841a920a6f9d99d12d66ad6e983c7683641ace448a1474f8d33b7af"
+    },
+    {
+      "path": "frontend/src/components/CinemaLuxeScene.jsx",
+      "bytes": 1263,
+      "sha256": "0f339511922e14ef481b9d61024468ed7fc9ba0b7a1548e9baac13803135da7d"
+    },
+    {
+      "path": "frontend/src/components/FloatingVideoCall.jsx",
+      "bytes": 9108,
+      "sha256": "e96d08b9b13dbab3efa9f78b512b4062bf16461830e8c5d3a499a6750d1032f7"
+    },
+    {
+      "path": "frontend/src/components/LandingBackgroundVideo.jsx",
+      "bytes": 2207,
+      "sha256": "15f9b8b8f882db717e5706f10299f5f498f89eb358eadf5c9382fc7801a4a522"
+    },
+    {
+      "path": "frontend/src/components/LandingPage.jsx",
+      "bytes": 17777,
+      "sha256": "757ffa3af43049d5464b2ea9a955b0a48f44961e57d0b280c0741bdbbe21ec0c"
+    },
+    {
+      "path": "frontend/src/components/LiveKitMediaProvider.jsx",
+      "bytes": 5981,
+      "sha256": "4c1cd775d44d5027f700c86e64edfd6cf7cd0ca4ee2f9d2ec85bc7e3c5a97664"
+    },
+    {
+      "path": "frontend/src/components/LiveKitVoiceRoom.jsx",
+      "bytes": 4026,
+      "sha256": "6a2e3ac1f8a608f37ffd4be0bfc67fb3ad730150195e68ee4155b07a591e1fda"
+    },
+    {
+      "path": "frontend/src/components/PwaUpdateNotice.jsx",
+      "bytes": 444,
+      "sha256": "b9ec07e4d071dc48dbd1cf41fad18809804200e4dd6858608397ae8083bbcf57"
+    },
+    {
+      "path": "frontend/src/components/RoomAccessPanel.jsx",
+      "bytes": 5715,
+      "sha256": "a6e07132a209912d4da879f29251a88bd81b6ff5b5c034e10ed302ade055f218"
+    },
+    {
+      "path": "frontend/src/components/RoomLayout.jsx",
+      "bytes": 41440,
+      "sha256": "125172ef1ec24c8e07ab8cc7a00bc2f7a6609b3acccedbacd5a7c5fcffc2e997"
+    },
+    {
+      "path": "frontend/src/components/RoomMediaCall.jsx",
+      "bytes": 902,
+      "sha256": "56433f57112a4cd373b54bc21d136cd1e4f1940a061d7a65da727855580a5dab"
+    },
+    {
+      "path": "frontend/src/components/SoundSettings.jsx",
+      "bytes": 1753,
+      "sha256": "db9a29d38cf760963ee471779cb790485263c0f7b057f23bab9563038e832a12"
+    },
+    {
+      "path": "frontend/src/components/TheaterIconButton.jsx",
+      "bytes": 430,
+      "sha256": "b7594024efd90f6dd95c8610e94add9509c701e56ebe9124b8d9797a1365d70f"
+    },
+    {
+      "path": "frontend/src/components/UserQueueSidebar.jsx",
+      "bytes": 14887,
+      "sha256": "c6ba0104168a187cc6e2c6598b308a3178dfd61a97908d07888a7b07b42e08cd"
+    },
+    {
+      "path": "frontend/src/components/VideoCallPanel.jsx",
+      "bytes": 9299,
+      "sha256": "343788b5425b57aa2dda55dbda60b6a0bbaaec66a78d5c2611bab35a2e2449cb"
+    },
+    {
+      "path": "frontend/src/components/VideoPlayer.jsx",
+      "bytes": 126489,
+      "sha256": "976961615812346a01adcb60c2cf12b3b82977a6ab1b43b96388451b717dfcfc"
+    },
+    {
+      "path": "frontend/src/components/VoiceRoom.jsx",
+      "bytes": 709,
+      "sha256": "aea3a87e6a2d19af236c39ee19515b9490241b433040bee9eb17ef29ca584aee"
+    },
+    {
+      "path": "frontend/src/components/VoiceRoomLegacy.jsx",
+      "bytes": 38668,
+      "sha256": "46673b856f20b49cc11587916a3e97775a8121d0d69559ef29bc90bdeb9d4771"
+    },
+    {
+      "path": "frontend/src/components/account/AccountActions.jsx",
+      "bytes": 2933,
+      "sha256": "0e2767c3044fc8aacbdee0973efb3c713921eed1be4c22f12fa452879afd4dd7"
+    },
+    {
+      "path": "frontend/src/components/account/AccountDialog.jsx",
+      "bytes": 1702,
+      "sha256": "2a3b2a5a45688be8abe0e7ee41b008e06338c139b812dced109cc89b784b3337"
+    },
+    {
+      "path": "frontend/src/components/account/AccountShell.jsx",
+      "bytes": 440,
+      "sha256": "6dfb437dbcfdf508c1df2f4fc048ff182245c332d8eea55b7fdfbc9cd6d03169"
+    },
+    {
+      "path": "frontend/src/components/account/AuthPages.jsx",
+      "bytes": 10365,
+      "sha256": "626a885b63763c6c40aef5e7dfc5a72a06f5d0d9d6234a07e597d704ec7d099c"
+    },
+    {
+      "path": "frontend/src/components/account/Avatar.jsx",
+      "bytes": 482,
+      "sha256": "460087ffa74958aaa3619a260c01820c9f24c3730cf6e74449ebd336cd9f137b"
+    },
+    {
+      "path": "frontend/src/components/account/InviteFriends.jsx",
+      "bytes": 2720,
+      "sha256": "100efcabe9ee88d01c00e7fa9b4a12f52a7d153e636b90f6d057ea5ce9a0beee"
+    },
+    {
+      "path": "frontend/src/components/account/LegalPage.jsx",
+      "bytes": 1736,
+      "sha256": "411ed207e3c6f78b9904102bdee602157813c7e31b40c31034c6cf3bb27ee7d0"
+    },
+    {
+      "path": "frontend/src/components/account/MyWatchly.jsx",
+      "bytes": 11260,
+      "sha256": "f9379a091a88dcf7d20dfcd18f6e14d56b19f285f9a1c909064208d800d3d165"
+    },
+    {
+      "path": "frontend/src/components/account/account.css",
+      "bytes": 16926,
+      "sha256": "48a1986bc02c0e657dddca9c38ba0c710e2bac0e646cc22c5355d9a8a3364468"
+    },
+    {
+      "path": "frontend/src/components/appearance-panel.css",
+      "bytes": 7470,
+      "sha256": "447cd2d5628450b06a9d5f09f34f1e37e1c5bb178bf815e63ea14ac6f989f796"
+    },
+    {
+      "path": "frontend/src/components/cinema-hero.css",
+      "bytes": 27499,
+      "sha256": "1b1d0f38e9298134d8887a0bd186555b384b2730bc4991aef33ce0b18872bc63"
+    },
+    {
+      "path": "frontend/src/components/cinema-luxe.css",
+      "bytes": 19165,
+      "sha256": "2222aa75725a41427c5bd12ded98132681ea4504229851bfb6eaa9dbf4471a28"
+    },
+    {
+      "path": "frontend/src/components/classic-desktop.css",
+      "bytes": 10482,
+      "sha256": "560057048c75b980d3779a1e1baae8569f6cae4a1571428f19bdf0ac11d20748"
+    },
+    {
+      "path": "frontend/src/components/livekit-voice.css",
+      "bytes": 3102,
+      "sha256": "0857bdb3aaea0799dde906ea762a320b77fda51a163b3b3e0ab03c1b86bb0836"
+    },
+    {
+      "path": "frontend/src/components/player/MediaInfoPanel.jsx",
+      "bytes": 4371,
+      "sha256": "b336ec12ab68b7d840867948c5d85345ff230f41f70cd10f84a42aaa0e062405"
+    },
+    {
+      "path": "frontend/src/components/player/MediaTrackControls.jsx",
+      "bytes": 9503,
+      "sha256": "a40f0009ff6113b2861f8b4f99405d68a6bd344a838ccb2234d56a653258a144"
+    },
+    {
+      "path": "frontend/src/components/player/PlaylistControls.jsx",
+      "bytes": 2657,
+      "sha256": "26f0f674fb49ac3ce80282e154750e929388bb90e4a34722c3461d96fd18cf66"
+    },
+    {
+      "path": "frontend/src/components/player/ReadinessPanel.jsx",
+      "bytes": 2187,
+      "sha256": "57154e2dd11b550faccc691a9a23b9366647040902c61bcd29f7360cf75a4e45"
+    },
+    {
+      "path": "frontend/src/components/player/ScreenShareAdapter.jsx",
+      "bytes": 3239,
+      "sha256": "92930c3394eeb5654619936e75bfe3be44161eb36f401505030221510e0308c5"
+    },
+    {
+      "path": "frontend/src/components/player/ViewerPlayerControls.jsx",
+      "bytes": 4030,
+      "sha256": "92e7a28f50183c29eaee807539e2b718379504ebdb20b95608c55430a93855c1"
+    },
+    {
+      "path": "frontend/src/components/player/media-track-controls.css",
+      "bytes": 8638,
+      "sha256": "1af6ca662cf7ee6b54357bbbe877133f21cbff8c80fdbad1171eca009e122335"
+    },
+    {
+      "path": "frontend/src/components/room-panels.css",
+      "bytes": 4185,
+      "sha256": "5ffde2d0e78e14a1c860e8cf2ac899b9e4aeb3cf47ed8b63a0848436e1d8ccda"
+    },
+    {
+      "path": "frontend/src/components/room-theater.css",
+      "bytes": 33115,
+      "sha256": "573e4e735ec488007f4742bbfdcce705f022e11a300a4874e6f888bed9d831eb"
+    },
+    {
+      "path": "frontend/src/components/video-call.css",
+      "bytes": 7771,
+      "sha256": "9b4a22cba73537d194c806e57c30b82ebe126c6a7c97c8c6d9514ae983c14e9d"
+    },
+    {
+      "path": "frontend/src/config.js",
+      "bytes": 368,
+      "sha256": "f3c360ca31f7bc3d86fe726b0792603aaf4764d5fb26ce3eb85e1f31fdf59bb8"
+    },
+    {
+      "path": "frontend/src/context/AuthContext.jsx",
+      "bytes": 8051,
+      "sha256": "4fae12af34bc6dd2df8afda4d071757d91858339eb0dc50d297fee29d21703fb"
+    },
+    {
+      "path": "frontend/src/context/RoomContext.jsx",
+      "bytes": 45180,
+      "sha256": "27653e2903c745b2e12db93edf8140f2a42a7ff11eb8bf0c023501893895fe35"
+    },
+    {
+      "path": "frontend/src/context/RoomSessionContext.jsx",
+      "bytes": 2832,
+      "sha256": "40976c62362058a9cb9897b13bfe3188ea334e4d9bcb29ceed304fb330f91f18"
+    },
+    {
+      "path": "frontend/src/context/SocialContext.jsx",
+      "bytes": 1493,
+      "sha256": "40e67ed8c1412f154f482ad41ffb025405ddc8e7ab3083851f3b8fdc727c7039"
+    },
+    {
+      "path": "frontend/src/context/SoundEffectsContext.jsx",
+      "bytes": 2038,
+      "sha256": "6a3139279b6359cac2db20ab1709300bdec8eec77d441e80ad1ad4d93405c234"
+    },
+    {
+      "path": "frontend/src/context/ThemeContext.jsx",
+      "bytes": 2709,
+      "sha256": "be16d69e35c92554dded0a5ed51a3b06f79f12465292e2ffeb25e67e558088ba"
+    },
+    {
+      "path": "frontend/src/hooks/useCinemaLuxeEffects.js",
+      "bytes": 8615,
+      "sha256": "23210b87993879a87e9a85e8b1bba044e40f33fcbae6dba723e24f15562028ca"
+    },
+    {
+      "path": "frontend/src/hooks/useDriveSession.js",
+      "bytes": 2342,
+      "sha256": "940a986192633c328cf95bcc0b480ae9c21b634bb494f318af29887257811ede"
+    },
+    {
+      "path": "frontend/src/hooks/useRoomPanelDismiss.js",
+      "bytes": 2405,
+      "sha256": "49f3655dd0f110b21900ea794dd1bbd33c0350667a4f165d709772029e9a77eb"
+    },
+    {
+      "path": "frontend/src/hooks/useScreenShare.js",
+      "bytes": 10199,
+      "sha256": "8d14123e08482e2993b2853f49d330c54559abe555065e2d2f57dfa7533d7f9b"
+    },
+    {
+      "path": "frontend/src/hooks/useServerClock.js",
+      "bytes": 1956,
+      "sha256": "74b8791f7abd56671d439a0df6b7dc007abe5f1cc9059d37ea32237274002840"
+    },
+    {
+      "path": "frontend/src/hooks/useSocial.js",
+      "bytes": 151,
+      "sha256": "5eedc467b5b2a76232e8b074eac868ac833176277f9218d50569a0dc54bae1f0"
+    },
+    {
+      "path": "frontend/src/hooks/useStageNavigation.js",
+      "bytes": 10843,
+      "sha256": "10650d414c75d3c65ac80c88c3e33a6706f6e264773f3a48b5c5855d48ddd4ff"
+    },
+    {
+      "path": "frontend/src/hooks/useSynchronizedMedia.js",
+      "bytes": 661,
+      "sha256": "8d52f80d9c8f21ab9aea60bdd0a798f9488e461ad0c53c54b25124ef60b52fd0"
+    },
+    {
+      "path": "frontend/src/hooks/useVideoAmbientLight.js",
+      "bytes": 5501,
+      "sha256": "4b93ddf790327363b916162619e7fc3b771c0d019604fa9f76f3dc6819e11916"
+    },
+    {
+      "path": "frontend/src/hooks/useYouTubePlaylist.js",
+      "bytes": 1994,
+      "sha256": "505618a09d7d977a3b57175ebc878a662d6126f0f50f1a15e13cdf32de7d3f55"
+    },
+    {
+      "path": "frontend/src/index.css",
+      "bytes": 3216,
+      "sha256": "7ed88f7dc106e528d2c88a53ad52eeec5dbc9dffb27ba918535089079913b4a7"
+    },
+    {
+      "path": "frontend/src/main.jsx",
+      "bytes": 239,
+      "sha256": "ae81f1c01f2c8018a1ba5cf73171921c8982d90b049bb6b039ea82f8e1dec958"
+    },
+    {
+      "path": "frontend/src/media/livekitAdapter.js",
+      "bytes": 469,
+      "sha256": "e4e062df8731fffec2145dc5ecd4c3ff252c0846e46b377d115e1670f316cffc"
+    },
+    {
+      "path": "frontend/src/media/provider.js",
+      "bytes": 867,
+      "sha256": "3bde7c1b7bfc0d54abf409ac15fe19fca25281778765de3b19404ce9338dd2fd"
+    },
+    {
+      "path": "frontend/src/roomRoute.js",
+      "bytes": 71,
+      "sha256": "538c61c90f377c5c82cb3cca173427420a2b045a87ac51780045a666c331d650"
+    },
+    {
+      "path": "frontend/src/socket.js",
+      "bytes": 1126,
+      "sha256": "889c935936a2b1bb5532ba57efd04d0081199a2f167c9944f4b36be296d40518"
+    },
+    {
+      "path": "frontend/src/supabase.js",
+      "bytes": 634,
+      "sha256": "0ca278de4338d083056c5449ba264b054e955142af94bdc126b1b39a9c9c7d10"
+    },
+    {
+      "path": "frontend/src/utils/account.js",
+      "bytes": 2147,
+      "sha256": "1477e351eefa630ce5c6c837ea3545f7fb287c3a9a1f37bee7a83ceb73a1fac8"
+    },
+    {
+      "path": "frontend/src/utils/accountRecovery.js",
+      "bytes": 2439,
+      "sha256": "91af7c47f400168ddb33ec8b5fe49af6027d2e1f789da0266abc7ea57e6d9e57"
+    },
+    {
+      "path": "frontend/src/utils/appearanceSettings.js",
+      "bytes": 2843,
+      "sha256": "d1b32d4883c208acde2f749a5260102cd2199a4373a2db5f53b586fc20711fc8"
+    },
+    {
+      "path": "frontend/src/utils/clockSampler.js",
+      "bytes": 1684,
+      "sha256": "977755ba81ec0bafb5f8502f2cbce27cd8a0cca6fbac600904497e2505ddac49"
+    },
+    {
+      "path": "frontend/src/utils/floatingCall.js",
+      "bytes": 2096,
+      "sha256": "e8a22ed59135a0fdf118fd84b7f40a33ea4e8dcebe1ea441133807f989fcd0b0"
+    },
+    {
+      "path": "frontend/src/utils/frameReceiver.js",
+      "bytes": 1707,
+      "sha256": "b7b5202e4d437c0a6506e7f8d9d211ff952f573944ef92bfd6ed08ce488c3812"
+    },
+    {
+      "path": "frontend/src/utils/guestCredential.js",
+      "bytes": 448,
+      "sha256": "25359a99b143284525a9337a3d5042e7c7b89535b915c5354a928f3e11a37f5b"
+    },
+    {
+      "path": "frontend/src/utils/livekitMedia.js",
+      "bytes": 7578,
+      "sha256": "509a59b1a59a76ef911a3439afe50cc02c7620c161ef0ac7bd91dc5f9f65e585"
+    },
+    {
+      "path": "frontend/src/utils/livekitVoice.js",
+      "bytes": 3643,
+      "sha256": "d3390b7acfbeb8276a762dc6eb9f1ff6860273507dac4edbc6f91f32e16bdd56"
+    },
+    {
+      "path": "frontend/src/utils/localMedia.js",
+      "bytes": 2319,
+      "sha256": "531cf69b9b57d8c2a103dd2e3481e2f488019803a617b7e65a0a55e9af5bee2c"
+    },
+    {
+      "path": "frontend/src/utils/localMediaRemux.js",
+      "bytes": 16736,
+      "sha256": "5cfa4c5d241dbee4a4644f639b6a2359d11f52d597f1cd8f6c4fda96d9411039"
+    },
+    {
+      "path": "frontend/src/utils/matroskaSubtitles.js",
+      "bytes": 20894,
+      "sha256": "7cbbf21c4cffa3118dd1e28f275ab4393bf2b1441810cc4a067888beda22df2d"
+    },
+    {
+      "path": "frontend/src/utils/mediaFingerprint.js",
+      "bytes": 1644,
+      "sha256": "08cae964429ee68b3c4f97674b98f6c573f2d4a23a18e89d61e10aaecd71eed0"
+    },
+    {
+      "path": "frontend/src/utils/mediaInspector.js",
+      "bytes": 10883,
+      "sha256": "c8f658278da70131b97e53aae94514ee09b0ceb353514de907164c356097285f"
+    },
+    {
+      "path": "frontend/src/utils/mediaProvider.js",
+      "bytes": 630,
+      "sha256": "252734d8b5bec449609f5e56f1724d42d6df360566edde92df83efe44bd4d330"
+    },
+    {
+      "path": "frontend/src/utils/mediaSynchronizer.js",
+      "bytes": 3150,
+      "sha256": "3ee630bfe5e2a7b10f88a29d2868bddaa0d62b45545eb7cf5c86d8d22195f4d3"
+    },
+    {
+      "path": "frontend/src/utils/mediaTracks.js",
+      "bytes": 7062,
+      "sha256": "f186f0d40e7010bc63ba278dbc9463375362e2116f47ff6c68f285e59a9b0cd8"
+    },
+    {
+      "path": "frontend/src/utils/mediaUsage.js",
+      "bytes": 1201,
+      "sha256": "7bb7bf342aa5133f74af441395c5637054e00c7f947d5164a8766ffd057a13ee"
+    },
+    {
+      "path": "frontend/src/utils/nativeTransport.js",
+      "bytes": 10719,
+      "sha256": "3e0fb18bea83d1395602e363717f56eecca219bb2f249757ef38eefab0725aeb"
+    },
+    {
+      "path": "frontend/src/utils/networkQuality.js",
+      "bytes": 1092,
+      "sha256": "149cdc11944847835c0778f7b8acc526f46b8ce3b75da70ec110483c58f15dbf"
+    },
+    {
+      "path": "frontend/src/utils/playbackAdapters.js",
+      "bytes": 2343,
+      "sha256": "fe452e43406b89ea3830d7c93a2ea8d71af99db0e96edbc35dfbaefbeddf302e"
+    },
+    {
+      "path": "frontend/src/utils/playbackCommands.js",
+      "bytes": 1052,
+      "sha256": "9a97ddb92a7bddff00e64b9a3fead50bce795e0c6dae25cbf15cf93ef98955fe"
+    },
+    {
+      "path": "frontend/src/utils/playbackMath.js",
+      "bytes": 121,
+      "sha256": "3d81eaac7b06886ce1b5ef9d3415199528120430f46c2cbc6c40a71496be1ba5"
+    },
+    {
+      "path": "frontend/src/utils/playerInteraction.js",
+      "bytes": 718,
+      "sha256": "eb468d4a1794a4c4724544348566f403fc5e41c17e761a5073fce01a0392f73a"
+    },
+    {
+      "path": "frontend/src/utils/playerResync.js",
+      "bytes": 4601,
+      "sha256": "8013730005815ae18fdc62958acd43d1a9f9dbbae814a8afaf08958aef8b9d79"
+    },
+    {
+      "path": "frontend/src/utils/protocol.js",
+      "bytes": 254,
+      "sha256": "553acb96897f2962de55b62cfab58dc395a651040720dba482ca747a0dab8923"
+    },
+    {
+      "path": "frontend/src/utils/pwaUpdate.js",
+      "bytes": 895,
+      "sha256": "4ccd902ba1e2aa4f91a28b7202228fa1506da287f1d8a6a712afbf7f4b899538"
+    },
+    {
+      "path": "frontend/src/utils/queueState.js",
+      "bytes": 1320,
+      "sha256": "a0a231774f39b66725e1f9a6afc7ae6567ca899b558e2c8d321146fe739cf4f0"
+    },
+    {
+      "path": "frontend/src/utils/recentRooms.js",
+      "bytes": 617,
+      "sha256": "f2d4c344bfdcc1ecb289ab84da934cc65fc2fb8d6a6ff1a6bf3e3b75e5c0167a"
+    },
+    {
+      "path": "frontend/src/utils/roomPermissions.js",
+      "bytes": 1494,
+      "sha256": "dc235495078aa98d6b52c2e8a43a057dfbe52c2d0d15766d053d7b067a0d3ff2"
+    },
+    {
+      "path": "frontend/src/utils/roomRecovery.js",
+      "bytes": 7773,
+      "sha256": "ce6f7fdec80bc0c20728dfc42fff7fa66e2bcdc40f0c9f13c3cbb28d4969926e"
+    },
+    {
+      "path": "frontend/src/utils/roomRequest.js",
+      "bytes": 2406,
+      "sha256": "fe8f166129499fa27b5752864f794de00d990afc285c65d528846ffbe09c3ab5"
+    },
+    {
+      "path": "frontend/src/utils/roomState.js",
+      "bytes": 813,
+      "sha256": "f2f5201bf522a6a6a0bf9666f5f463ff8c9dd7819c109ca7bc0c164e7e9b3e4a"
+    },
+    {
+      "path": "frontend/src/utils/seekCommandScheduler.js",
+      "bytes": 1178,
+      "sha256": "f014d83d37a26752e60bfef919013db4bba8fc35072d5b9d87d7a889f941bf85"
+    },
+    {
+      "path": "frontend/src/utils/socialStore.js",
+      "bytes": 9611,
+      "sha256": "79005bc07cad4a2645a38f01c2f7104bbfd7fda642c3c910afdeaffae4c8990b"
+    },
+    {
+      "path": "frontend/src/utils/soundEffects.js",
+      "bytes": 5001,
+      "sha256": "d98bd5e58dfcb891c07fe1b9df4fb6e7916873fb6b0cfe8c61788f43083b581c"
+    },
+    {
+      "path": "frontend/src/utils/soundNotifications.js",
+      "bytes": 2539,
+      "sha256": "f475f71e861d2c30ce27598814a1d0c9183ec639ab99281fd348e4de48d8ecc9"
+    },
+    {
+      "path": "frontend/src/utils/sourceResolvers.js",
+      "bytes": 1990,
+      "sha256": "ed7ae8bc35ab8f77ed9871d345bb11347a377d92c19198902d3bc2769fa5c69b"
+    },
+    {
+      "path": "frontend/src/utils/subtitleParser.js",
+      "bytes": 9538,
+      "sha256": "8bbdff8082d0914a11b6dc5612d232a74d952be9bdeadce0d352c98ab1bfa5f2"
+    },
+    {
+      "path": "frontend/src/utils/subtitleWorker.js",
+      "bytes": 1011,
+      "sha256": "90ef02495aae2a3361369208cee51647a487776aa337060bef9dd0df43aff972"
+    },
+    {
+      "path": "frontend/src/utils/videoSources.js",
+      "bytes": 1606,
+      "sha256": "7b9ff6a8d6644e770159272fe5b93cdba3cfba5253bf30db7c5416ea522f5a04"
+    },
+    {
+      "path": "frontend/src/utils/youtubePlaylistSession.js",
+      "bytes": 5544,
+      "sha256": "847c2cd50875a5a3d74d2e49f19a59f9eecb1dd49c95b7a0ed7d8fb1f00d15d2"
+    },
+    {
+      "path": "frontend/src/utils/youtubeUrl.js",
+      "bytes": 2011,
+      "sha256": "e22468b12780aa1e185c687867ecdf92d3b23091560693f05acb589ab0fab976"
+    },
+    {
+      "path": "frontend/src/workers/fileFingerprint.worker.js",
+      "bytes": 699,
+      "sha256": "e81313d2ef612830ff69832d7c421dbcd1400fc014bda6f1412fa12b68f660b1"
+    },
+    {
+      "path": "frontend/src/workers/subtitleParser.worker.js",
+      "bytes": 348,
+      "sha256": "e9f99c2898ce875fd435d8fcbedecfb3f489d41b82eed14153839d9e96cc67d0"
+    },
+    {
+      "path": "frontend/tailwind.config.js",
+      "bytes": 432,
+      "sha256": "f28be78a8fbf732357b89e8c821e706ccbf3b2e3643f116e36ff2fa4889acd03"
+    },
+    {
+      "path": "frontend/test/account.test.js",
+      "bytes": 2182,
+      "sha256": "353a27eaa1b0dd2837b9bc26d678d2b5364df6f5e47dd7678c693e21a755f1a1"
+    },
+    {
+      "path": "frontend/test/accountRecovery.test.js",
+      "bytes": 4563,
+      "sha256": "96a98476f0e1f45c8e550d531d84fd98d68a2fd20f2de481707a7e64a1b25fd4"
+    },
+    {
+      "path": "frontend/test/appearanceChecks.cjs",
+      "bytes": 13911,
+      "sha256": "8f739e771c8b63a20ed0f3b25725cecab9726dcdb63c32f90af7477b296d6a27"
+    },
+    {
+      "path": "frontend/test/appearanceSettings.test.js",
+      "bytes": 3151,
+      "sha256": "40119d57f586a20c49c734b4c4751256fdaf404c2dcf506c5a1e40d51e422fd6"
+    },
+    {
+      "path": "frontend/test/browserAccounts.cjs",
+      "bytes": 14642,
+      "sha256": "488a6721d73262801bdda671b64cee09cc361bca98d8b6f3c0d58c0a12fe0040"
+    },
+    {
+      "path": "frontend/test/browserLiveKit.cjs",
+      "bytes": 12534,
+      "sha256": "3243987b6bafc2fc3bda02d936ce96f64f892ce08457aa61189681cfa088aba9"
+    },
+    {
+      "path": "frontend/test/browserMyWatchly.cjs",
+      "bytes": 14039,
+      "sha256": "f7151c63cb3ce7478850430f271f721456ddd01bf4402f488044971262e6712c"
+    },
+    {
+      "path": "frontend/test/browserPlayback.cjs",
+      "bytes": 28802,
+      "sha256": "879fe3399161a885456d7ef5f86c0fad1e20fa137fdbc716b5fa1e4e95bc3345"
+    },
+    {
+      "path": "frontend/test/browserPlaylist.cjs",
+      "bytes": 19226,
+      "sha256": "61ce90728837cc8eeee54a661051edca604a1d1e701eb4910b439003673d30bd"
+    },
+    {
+      "path": "frontend/test/browserRecovery.cjs",
+      "bytes": 15380,
+      "sha256": "ecc23b68ace1e3e12e5b93b4bf04f11dbc71658d143082d0841a1000e63c3b68"
+    },
+    {
+      "path": "frontend/test/browserRecoveryMedia.cjs",
+      "bytes": 4032,
+      "sha256": "a365335ffd2f0216ba1c1a9658ec6c9629ab47fdf36983276a236332da57544c"
+    },
+    {
+      "path": "frontend/test/browserRoles.cjs",
+      "bytes": 22108,
+      "sha256": "8ad508909b7ed68c7f1e535cebeea62a91b4f878c514d06b03b0e5087d5e480d"
+    },
+    {
+      "path": "frontend/test/browserRoomPanels.cjs",
+      "bytes": 17917,
+      "sha256": "8aef09692d102a133c81ff6f87e615ad0f6fad1a9f39600bb097746001b649da"
+    },
+    {
+      "path": "frontend/test/browserSocialRealtime.cjs",
+      "bytes": 12435,
+      "sha256": "71c4d097eb0445edaf35f125d289e2df859eda09c285873388e1b8231ebf063d"
+    },
+    {
+      "path": "frontend/test/browserSourceSelection.cjs",
+      "bytes": 10276,
+      "sha256": "30bc4120ca42caeb70d97af079bdafb88625bc5a7f665acbfcf608d5f9cb5f70"
+    },
+    {
+      "path": "frontend/test/browserVideoCall.cjs",
+      "bytes": 25860,
+      "sha256": "46793fd53bb95d1b04b3dd9de71d2f2196c78176b089f533f0bdb6f4662eed39"
+    },
+    {
+      "path": "frontend/test/cinemaLuxeChecks.cjs",
+      "bytes": 13734,
+      "sha256": "f7d89cee2287c13972e6ee8c774eab6e5977ef0dd1c44c29e7bb6ee439404b6e"
+    },
+    {
+      "path": "frontend/test/classicDesktopChecks.cjs",
+      "bytes": 13734,
+      "sha256": "31de544eb25b2f59c8f88f63c0073d15e7c2cbc349c8e5ef10cd3989bde8b461"
+    },
+    {
+      "path": "frontend/test/clockSampler.test.js",
+      "bytes": 1268,
+      "sha256": "66a1cb578f5d8d83ee78ed275b4e6bb340038d4948cfeefe32d5b12518a9a084"
+    },
+    {
+      "path": "frontend/test/fixtures/English.test.srt",
+      "bytes": 106,
+      "sha256": "7c4970d660156ec3834778e91523398f2780e4d2ad23b5f3285d94f34b388a1f"
+    },
+    {
+      "path": "frontend/test/fixtures/Malayalam.test.ass",
+      "bytes": 261,
+      "sha256": "25a968234d1128c165ebe58e0e7bceaa4e32d94440c05bdc7e6c09f91a1f2977"
+    },
+    {
+      "path": "frontend/test/floatingCallChecks.cjs",
+      "bytes": 7594,
+      "sha256": "86a08c93b621566e200ba7512385e1b74197e38af01a8438f25915d5af9279ed"
+    },
+    {
+      "path": "frontend/test/frameReceiver.test.js",
+      "bytes": 1128,
+      "sha256": "7b52188e7e81cd369f0748343470a126149bf5e953edb8c60b2ee4b3dd45e7bf"
+    },
+    {
+      "path": "frontend/test/livekitMedia.test.js",
+      "bytes": 9337,
+      "sha256": "accd16c4ec42cabe732dfd79963b7ea8ff0eab27798b9a8d770165d14c88e5d7"
+    },
+    {
+      "path": "frontend/test/livekitVoice.test.js",
+      "bytes": 5123,
+      "sha256": "ce40e798909bebaa02376cc36cc088772f4e5f201196486f5b942a47381afc3b"
+    },
+    {
+      "path": "frontend/test/localMediaRemux.test.js",
+      "bytes": 1374,
+      "sha256": "ff172e86b33f82f833873d5fe4fcb4db4c8d9990513a3ccd07f2a529b331e37a"
+    },
+    {
+      "path": "frontend/test/localSeekBrowser.cjs",
+      "bytes": 4834,
+      "sha256": "19409b9265be9178caf7f372cf2f415c19309025ab77d88e706aed2fbd875583"
+    },
+    {
+      "path": "frontend/test/localSeekChecks.cjs",
+      "bytes": 9700,
+      "sha256": "54cac81b03aabb3a637f0b81648e4e348609e62dd4a4effb8ba2e080822bd700"
+    },
+    {
+      "path": "frontend/test/matroskaSubtitles.test.js",
+      "bytes": 4067,
+      "sha256": "ec0993ae56151ee161f67821dac244e931e0192f386c4140154590f59601eb86"
+    },
+    {
+      "path": "frontend/test/mediaFingerprint.test.js",
+      "bytes": 1207,
+      "sha256": "f798da7cfa07a2bc923553e9b7f364d14dbd4cc6bf55c096f4e84f4c38c0c5bf"
+    },
+    {
+      "path": "frontend/test/mediaInspector.test.js",
+      "bytes": 5142,
+      "sha256": "7c3c0a4aafdb10594ac04c44b8a09584808eb115feccbdf437cb324c8237ae80"
+    },
+    {
+      "path": "frontend/test/mediaSynchronizer.test.js",
+      "bytes": 5345,
+      "sha256": "39b1a1ade89e904927cd3d966bf4f9f1bc6690919f69260ff1592742e0f8013a"
+    },
+    {
+      "path": "frontend/test/mediaUsage.test.js",
+      "bytes": 666,
+      "sha256": "9cc24886d5864b4f4abb926e6960de87b9554efb84f8f869efa0e307ef542a57"
+    },
+    {
+      "path": "frontend/test/nativeTransport.test.js",
+      "bytes": 5796,
+      "sha256": "213bce71e6584c954d9bd1d0dd17169bd9942d5d4bc5925cf992890541b94234"
+    },
+    {
+      "path": "frontend/test/playbackAdapters.test.js",
+      "bytes": 3288,
+      "sha256": "c13292383eaadba3a5455d106d4715f09679bf75f62770e36c1d49ae5031ef6b"
+    },
+    {
+      "path": "frontend/test/playbackMath.test.js",
+      "bytes": 1553,
+      "sha256": "621cb8773e0b83bccdf6d918d358de13627d2109d15c773b63d70ed9c36b04c4"
+    },
+    {
+      "path": "frontend/test/playerInteraction.test.js",
+      "bytes": 3241,
+      "sha256": "149d60f39c02c1fa43a9925b008ba5133b224bae727a1132f4afa4c434037295"
+    },
+    {
+      "path": "frontend/test/playerResync.test.js",
+      "bytes": 4589,
+      "sha256": "c2abe878645ede406ab072afd036a8b43daa903b533716c4ad3a8665c9940678"
+    },
+    {
+      "path": "frontend/test/queueState.test.js",
+      "bytes": 1160,
+      "sha256": "015ab05a57ba39cf8d4f8bac65daa6da7d288f140cf9507baf7f974f66e4deab"
+    },
+    {
+      "path": "frontend/test/roleAutoHideChecks.cjs",
+      "bytes": 4748,
+      "sha256": "d8c3e9d26b5477dd4c50d8783b2886ffdc651f1d9d9f84a42f2ad414e77ca714"
+    },
+    {
+      "path": "frontend/test/roomLifecycleChecks.cjs",
+      "bytes": 11918,
+      "sha256": "022c4b0613515a13895c8dbe6b428a88d249bb5d55b9b41842c15f0b1199688d"
+    },
+    {
+      "path": "frontend/test/roomRecovery.test.js",
+      "bytes": 10499,
+      "sha256": "003434969f5db53e91cd965171ac78026dc281b47a7421855bfa71d7d68eaa8f"
+    },
+    {
+      "path": "frontend/test/roomRequest.test.js",
+      "bytes": 2985,
+      "sha256": "50ea9038538893dbad4f98aa1f79fa930453650c0e6175cf40a7a3530ab6cbb3"
+    },
+    {
+      "path": "frontend/test/seekCommandScheduler.test.js",
+      "bytes": 1945,
+      "sha256": "0a98e3dc018eaa66190498f0c9aa89b0b84ba560bbe73fd88f8eab4f02008a93"
+    },
+    {
+      "path": "frontend/test/socialMetadata.test.js",
+      "bytes": 4199,
+      "sha256": "4fe103adad458ae7a83db2b41e8041db32869d09b07576d3385afc7a6ead172c"
+    },
+    {
+      "path": "frontend/test/socialPreview.cjs",
+      "bytes": 6547,
+      "sha256": "7f0061c26fec46b2894a180982a71a41a4e3a7366b6cbee70aa7009068308c67"
+    },
+    {
+      "path": "frontend/test/socialStore.test.js",
+      "bytes": 7222,
+      "sha256": "e64b416e46f60aee21659c5dd5ab77521ad38084421a076718e09b5779c67fc4"
+    },
+    {
+      "path": "frontend/test/soundEffects.test.js",
+      "bytes": 6540,
+      "sha256": "ae8df6a4e8977f7f515f778dc9c5fb5d420160432de0b673a56f9865dc713f6a"
+    },
+    {
+      "path": "frontend/test/soundEffectsChecks.cjs",
+      "bytes": 9365,
+      "sha256": "95fd0e46e5d321bfeb0fdf2225dcb5c4ba99c1d2b3260b5238944aa86b6579bb"
+    },
+    {
+      "path": "frontend/test/subtitleParser.test.js",
+      "bytes": 1830,
+      "sha256": "67b6527459a5bceeae30fe6a7f7746fa808986dcd9d92bdc323dba413d589937"
+    },
+    {
+      "path": "frontend/test/videoSources.test.js",
+      "bytes": 1209,
+      "sha256": "3777a5eb4ce285b7412112dee0f8b825fe12e3839262d9561e27df53bee46936"
+    },
+    {
+      "path": "frontend/test/youtubePlaylist.test.js",
+      "bytes": 8336,
+      "sha256": "de56675e94c5d967ab884482efbd19ce8a139b34d77b639ad5c3136cb58139a3"
+    },
+    {
+      "path": "frontend/vercel.json",
+      "bytes": 578,
+      "sha256": "dd16e951197b35c4e30a247e2e85bcd76a2dcde0b1981bac3a5cb64951c5917c"
+    },
+    {
+      "path": "frontend/vite.config.js",
+      "bytes": 1965,
+      "sha256": "5cc7f22ae20009c57a6dc8203d0ccfc39267394ad51e549bfb21401077eb2943"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 71186,
+      "sha256": "095cf6c3729d75e9d0d14d6b99fcd41e6c22fa4e996cdefd76ef5230649bc50c"
+    },
+    {
+      "path": "package.json",
+      "bytes": 1092,
+      "sha256": "dd15f9dd7bb2f68a2b7b2d998e813f29d4bd5701ce2978fb721aefdd1dae1326"
+    },
+    {
+      "path": "render.yaml",
+      "bytes": 849,
+      "sha256": "3086738cfbbca3d7093fe91436b04ce6df0dea4810158c9cdd56f040e62b2cc6"
+    },
+    {
+      "path": "scripts/build-cloudflare.mjs",
+      "bytes": 366,
+      "sha256": "71e577c12441f8efc3f71408bed916917e49f7594c3b92232a6b6d47b4861ad0"
+    },
+    {
+      "path": "scripts/optimize-backgrounds.py",
+      "bytes": 4053,
+      "sha256": "3a646daa928fa1becff928b4df5ab968c59528db28310a13e38bf6df504ee20f"
+    },
+    {
+      "path": "scripts/package-source.py",
+      "bytes": 3409,
+      "sha256": "0d56be09bde8031e031b130bdd6688c4a36ea8424c4cf5e54f4865afb4c2d06b"
+    },
+    {
+      "path": "scripts/prepare-assets.mjs",
+      "bytes": 2061,
+      "sha256": "a9d5562cf36e1fa4586762cd0de43ad4014b7bc95bdea7450b1edc4c7f6acfed"
+    },
+    {
+      "path": "scripts/verify.mjs",
+      "bytes": 3236,
+      "sha256": "14e2ca1677964161470e23f420c06a161647a4d51da3ab13ae6bfbe02e5d27a2"
+    },
+    {
+      "path": "shared/event-map.json",
+      "bytes": 4144,
+      "sha256": "405435a471b800713e26a17dae7f19363e69519acd34a95f6b447a9c23c8d6c1"
+    },
+    {
+      "path": "shared/playback-core.mjs",
+      "bytes": 3839,
+      "sha256": "dbd1ba56dd66cf29d70b5f04227929343e50c88e60a9e524386531ad5d027c99"
+    },
+    {
+      "path": "shared/protocol.md",
+      "bytes": 2918,
+      "sha256": "9cbfdaf09af4bffa87133d78520bf0656748cbcdced66f6115b903fd471cfcac"
+    },
+    {
+      "path": "supabase/migrations/202610030001_watchly_accounts.sql",
+      "bytes": 17270,
+      "sha256": "df0c9d45532dde7b301246368bbe9398bc23496ace773385f81c59de214126aa"
+    },
+    {
+      "path": "supabase/migrations/202610040001_watchly_social_realtime.sql",
+      "bytes": 7523,
+      "sha256": "7ea4cdc6ef1cd338b4dc640eba9507137b50c53072bf6984b8fef4876c9d873d"
+    },
+    {
+      "path": "supabase/migrations/202611260001_watchly_session_check.sql",
+      "bytes": 767,
+      "sha256": "65460abb17113386263b0655aaa943d89dcca6b6ecda98e04ba59f11e196456d"
+    },
+    {
+      "path": "workers/src/AbuseGuard.mjs",
+      "bytes": 4691,
+      "sha256": "83b94c701d320a675e4f7337ac626a20436ff38866844582f000c06be2a9ad96"
+    },
+    {
+      "path": "workers/src/OutboundFlow.mjs",
+      "bytes": 2915,
+      "sha256": "6feb01b48fdd190a24cdc4ce2d4eae90c4ac3650d959637ee7b551aa86936cf8"
+    },
+    {
+      "path": "workers/src/PresenceDirectory.mjs",
+      "bytes": 9336,
+      "sha256": "e7e002e6d237270c50a1993ecc888d4771da55ee3ff2a0b0da86c035eab02302"
+    },
+    {
+      "path": "workers/src/RoomStorage.mjs",
+      "bytes": 10319,
+      "sha256": "0839553cebfbb944f1877347d64b047754b4ec3124b5f1f29efe2978671e234a"
+    },
+    {
+      "path": "workers/src/WatchRoom.mjs",
+      "bytes": 34966,
+      "sha256": "342fa61043e1b49fdd76e0a4ba980d00ebd18510cd4bafbb0a8982ec1810a091"
+    },
+    {
+      "path": "workers/src/diagnostics.mjs",
+      "bytes": 1359,
+      "sha256": "1e36ec57e514d163a8040ecde1b3510d8cc24290a52c66fe9e171b7b5635f69b"
+    },
+    {
+      "path": "workers/src/drive.mjs",
+      "bytes": 5117,
+      "sha256": "f6235406c3b7531fc677315e84cb4b23507373815efb171ba5db3daeb3cc2fcb"
+    },
+    {
+      "path": "workers/src/eventPolicy.mjs",
+      "bytes": 1428,
+      "sha256": "32c6a17e6c1c5dbef298ecd9d1677bb179770b82b55d0f65ccdeeb978ba2e23b"
+    },
+    {
+      "path": "workers/src/index.mjs",
+      "bytes": 8874,
+      "sha256": "3d30ba77065c61125c414b004d0134d2fd8abdf18b43105f2ddedfbdd6f5c332"
+    },
+    {
+      "path": "workers/src/media.mjs",
+      "bytes": 6363,
+      "sha256": "cdfe0873c222edb22b94bd55238cdcef9974d6373a8786937648763381e3f4af"
+    },
+    {
+      "path": "workers/src/runtime.mjs",
+      "bytes": 4670,
+      "sha256": "5dcfc736527218ffe5c68de8d1cb498f5be975d1a946e57093232f32c23d6577"
+    },
+    {
+      "path": "workers/test/abuse.test.mjs",
+      "bytes": 2760,
+      "sha256": "fc1d9b30d35b9c32611b3787b39eec78778cdba742ddbfaed8fa7d2bad0d889f"
+    },
+    {
+      "path": "workers/test/access.test.mjs",
+      "bytes": 6447,
+      "sha256": "8c14c7a00a590d6cd77eacea04570825dd2e7654632971dea1f8a3cb691bca5c"
+    },
+    {
+      "path": "workers/test/api.test.mjs",
+      "bytes": 2115,
+      "sha256": "eefbccb3dd4fde8dcca8ea255199b6f5e62dd8842e33f1539cf515f281ece494"
+    },
+    {
+      "path": "workers/test/benchmark.mjs",
+      "bytes": 4143,
+      "sha256": "51189aa2ba2f8903f65532b8c37a97a8b8f5c3beeef6dcd01b9c7066509dd75a"
+    },
+    {
+      "path": "workers/test/browser-harness.mjs",
+      "bytes": 13336,
+      "sha256": "8c7698ca96c5111e4cef2b971de705b628b4569427c16a9a8d337bd1e6ebe814"
+    },
+    {
+      "path": "workers/test/browser.cjs",
+      "bytes": 2460,
+      "sha256": "029b21fca287170b30e2f111207d9108981ae176b546fc8d6f6e5702a297704f"
+    },
+    {
+      "path": "workers/test/client.mjs",
+      "bytes": 1700,
+      "sha256": "3c1eb2d653bebf3cd40d5c2773d008ddc1dabf6385f8432ef34d158ff1acf533"
+    },
+    {
+      "path": "workers/test/features.test.mjs",
+      "bytes": 8445,
+      "sha256": "5be42e41c71cfebaab7550920635ff368a5bcdb2280dcda03d3a387364ff92e7"
+    },
+    {
+      "path": "workers/test/harness.mjs",
+      "bytes": 4184,
+      "sha256": "bb3d330a4b92f3f141a4a44ebd5ec286018f3b7428f15073c869dcb9406db575"
+    },
+    {
+      "path": "workers/test/integration.mjs",
+      "bytes": 2289,
+      "sha256": "363cbcca6098266adac9c1847cc94a03f7a8b15277b685863a84f0f3e5b63296"
+    },
+    {
+      "path": "workers/test/load.mjs",
+      "bytes": 1424,
+      "sha256": "7c86ec4c36e1fd34cc0bd3c0d6ee4f23743eab32b4ffea459d2e33f7577927b6"
+    },
+    {
+      "path": "workers/test/local-server.mjs",
+      "bytes": 2687,
+      "sha256": "12b320aff8ad4591ea248ed073bc0c87967de38f4f46c2fa6559deabb5db8b7a"
+    },
+    {
+      "path": "workers/test/media.test.mjs",
+      "bytes": 5572,
+      "sha256": "e2b896e94f7faf4c62cd95c7f1065de71912ef6108df5060d9e500a5cbe3a610"
+    },
+    {
+      "path": "workers/test/presence-benchmark.mjs",
+      "bytes": 2924,
+      "sha256": "e39cf8abc2e489a3119eb926523595b682626ab482a7dbfd57defe2b32461e9e"
+    },
+    {
+      "path": "workers/test/presence.test.mjs",
+      "bytes": 1922,
+      "sha256": "c313298b1b6dfb83b459ba2edd1076b93347a20a205d6d900d4fb431d42d47ee"
+    },
+    {
+      "path": "workers/test/resilience.test.mjs",
+      "bytes": 8604,
+      "sha256": "782e7adba425b297139e8c3ca4ea14862ec1b21d9e64c52469c1ea622c0e20e0"
+    },
+    {
+      "path": "workers/test/room.test.mjs",
+      "bytes": 12980,
+      "sha256": "bbe3f13e95782e95fc28c410cea43979acb3d50cfb1610915d572dc6dbee937a"
+    },
+    {
+      "path": "workers/test/soak.mjs",
+      "bytes": 2948,
+      "sha256": "fcc8ff4a7a8e1b20342862d31acce5662b533154fff7d1900fa9c1686e9f6ca8"
+    },
+    {
+      "path": "workers/test/storage.test.mjs",
+      "bytes": 4701,
+      "sha256": "66a28684307925ff6af042d3a3de507a28c03e690247bc908d4e56b8056c93c2"
+    },
+    {
+      "path": "workers/test/workerd-direct-entry.mjs",
+      "bytes": 5390,
+      "sha256": "5bad49afb3a148bd9e6d11349cb3a239b4ac5dc18711e27e844068ae45e0908b"
+    },
+    {
+      "path": "workers/test/workerd-direct.mjs",
+      "bytes": 1986,
+      "sha256": "dcb2ba013ee969cec694a7a8f05243387e69f8f8af46834c3bd52a17d25fc350"
+    },
+    {
+      "path": "wrangler.jsonc",
+      "bytes": 3093,
+      "sha256": "47b9afd813bb290c344771007e29fa86a4165292764d86c54bad2ae552983915"
+    }
+  ],
+  "excluded": [
+    ".agents",
+    ".aws",
+    ".codex",
+    ".codex-runtime",
+    ".git",
+    ".vercel",
+    ".worker-build",
+    ".wrangler",
+    "__pycache__",
+    "dist",
+    "node_modules"
+  ],
+  "note": "Inventory excludes its own hash. Common-key-pattern checks and path exclusions do not replace a full secret audit."
+}

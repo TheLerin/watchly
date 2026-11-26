@@ -1,19 +1,21 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { createLocalAudioTrack, createLocalVideoTrack, DisconnectReason, Room, RoomEvent, VideoPresets } from 'livekit-client';
-import { RoomContext, RoomAudioRenderer, StartAudio } from '@livekit/components-react';
+import { createLocalAudioTrack, createLocalVideoTrack, DisconnectReason, Room, RoomEvent, VideoPresets } from '../media/provider';
+import { RoomContext, RoomAudioRenderer, StartAudio } from '../media/provider';
 import '@livekit/components-styles';
 import { useRoom } from '../context/RoomContext';
 import { useAuth } from '../context/AuthContext';
 import { socket } from '../socket';
-import { requestVoiceToken } from '../utils/livekitVoice';
+import { getMediaProvider } from '../utils/mediaProvider';
+const { authorize: requestVoiceToken } = getMediaProvider();
 import { createMediaSession } from '../utils/livekitMedia';
+import { createUsageMeter, mediaUsageLimit } from '../utils/mediaUsage';
 import { useSoundEffects } from '../context/SoundEffectsContext';
 import { createCallPresenceSounds, createMediaActionSounds } from '../utils/soundNotifications';
 
 const MediaContext = createContext(null);
 export const useMediaCall = () => useContext(MediaContext);
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+import { BACKEND_URL } from '../config';
 export const mediaStateLabel = connection => ({ disconnected: 'Not connected', connecting: 'Connecting…', connected: 'Connected', reconnecting: 'Reconnecting…', signalReconnecting: 'Reconnecting…' })[connection] || connection;
 
 export default function LiveKitMediaProvider({ children }) {
@@ -21,8 +23,20 @@ export default function LiveKitMediaProvider({ children }) {
     const watchly = useRoom(), { session } = useAuth();
     const [room] = useState(() => new Room({ adaptiveStream: true, dynacast: true,
         videoCaptureDefaults: { resolution: VideoPresets.h720.resolution, frameRate: 24 },
-        publishDefaults: { videoCodec: 'vp8', simulcast: true },
+        publishDefaults: { videoCodec: 'vp8', simulcast: true, videoEncoding: { maxBitrate: 650000, maxFramerate: 24 },
+            videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] },
         audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }));
+    useEffect(() => {
+        const meter = createUsageMeter({ limitBytes: mediaUsageLimit(), onLimit: () => void room.disconnect() });
+        const sample = async () => {
+            if (room.state !== 'connected') return;
+            for (const publication of room.localParticipant.trackPublications.values()) {
+                try { meter.sample(await publication.track?.getRTCStatsReport?.(), publication.trackSid); } catch { /* ended capture */ }
+            }
+        };
+        const timer = setInterval(sample, 30000);
+        return () => clearInterval(timer);
+    }, [room]);
     const [view, setView] = useState({ joining: false, micBusy: false, cameraBusy: false, error: '', cameraError: '' });
     const latest = useRef({ watchly, session }), controllerRef = useRef(null);
     useEffect(() => { latest.current = { watchly, session }; }, [watchly, session]);

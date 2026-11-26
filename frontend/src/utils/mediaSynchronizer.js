@@ -18,7 +18,7 @@ export function createMediaSynchronizer({ serverNow, toLocalDelay, duration = ()
         const target = canonicalPosition(state, serverNow(), duration());
         const drift = target - element.currentTime;
         const correction = force || (state.status !== 'playing' && Math.abs(drift) > 0.01)
-            ? { type: 'seek', rate: 1 } : correctionForDrift(drift);
+            ? { type: 'seek', rate: state.rate || 1 } : correctionForDrift(drift, state.rate || 1);
         if (correction.type === 'seek' && Math.abs(drift) > 0.01) {
             seeking.set(element, target);
             element.currentTime = target;

@@ -19,7 +19,7 @@ const control = async (host, roomId, value, event, options = {}) => { host.emit(
 
 test.before(async () => {
     port = await new Promise(resolve => { const listener = net.createServer(); listener.listen(0, '127.0.0.1', () => { const selected = listener.address().port; listener.close(() => resolve(selected)); }); });
-    server = fork(require.resolve('../server'), [], { env: { ...process.env, PORT: String(port), CORS_ORIGIN: '*' }, stdio: 'ignore' });
+    server = fork(require.resolve('../server'), [], { env: { ...process.env, PORT: String(port), CORS_ORIGIN: 'http://localhost:5173' }, stdio: 'ignore' });
     for (let count = 0; count < 100; count++) { try { await fetch(`http://127.0.0.1:${port}`); return; } catch { await new Promise(resolve => setTimeout(resolve, 100)); } }
     throw new Error('server did not start');
 });

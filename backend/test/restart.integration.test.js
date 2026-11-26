@@ -17,7 +17,7 @@ const emit = (client, event, payload) => new Promise(resolve => client.emit(even
 
 test('a Render-like restart returns typed room expiration instead of recreating it', { timeout: 30000 }, async () => {
     const port = 6400 + Math.floor(Math.random() * 200);
-    const launch = () => fork(require.resolve('../server'), [], { env: { ...process.env, PORT: String(port), CORS_ORIGIN: '*' }, stdio: 'ignore' });
+    const launch = () => fork(require.resolve('../server'), [], { env: { ...process.env, PORT: String(port), CORS_ORIGIN: 'http://localhost:5173' }, stdio: 'ignore' });
     let server = launch(); let client;
     try {
         await waitForServer(port); client = await connect(port);

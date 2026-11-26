@@ -1,0 +1,128 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "watchly-development",
+  "main": "workers/src/index.mjs",
+  "compatibility_date": "2026-11-25",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "assets": {
+    "directory": "frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*",
+      "/ws/*",
+      "/room/*"
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOMS",
+        "class_name": "WatchRoom"
+      },
+      {
+        "name": "PRESENCE",
+        "class_name": "PresenceDirectory"
+      },
+      {
+        "name": "ABUSE",
+        "class_name": "AbuseGuard"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "WatchRoom",
+        "PresenceDirectory"
+      ]
+    },
+    {
+      "tag": "v2-abuse",
+      "new_sqlite_classes": [
+        "AbuseGuard"
+      ]
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "development",
+    "MEDIA_PROVIDER": "livekit",
+    "ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173",
+    "DAILY_NEW_ROOM_BUDGET": "1000",
+    "DAILY_SOCIAL_LOOKUP_BUDGET": "10000",
+    "DAILY_MEDIA_JOIN_BUDGET": "100",
+    "LIVEKIT_MAX_PARTICIPANTS": "6",
+    "ENABLE_DIAGNOSTICS": "false"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.01,
+    "logs": {
+      "invocation_logs": false
+    }
+  },
+  "env": {
+    "staging": {
+      "name": "watchly-staging",
+      "vars": {
+        "NODE_ENV": "production",
+        "MEDIA_PROVIDER": "livekit",
+        "ALLOWED_ORIGINS": "",
+        "DAILY_NEW_ROOM_BUDGET": "1000",
+        "DAILY_SOCIAL_LOOKUP_BUDGET": "10000",
+        "DAILY_MEDIA_JOIN_BUDGET": "100",
+        "LIVEKIT_MAX_PARTICIPANTS": "6",
+        "ENABLE_DIAGNOSTICS": "false"
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "ROOMS",
+            "class_name": "WatchRoom"
+          },
+          {
+            "name": "PRESENCE",
+            "class_name": "PresenceDirectory"
+          },
+          {
+            "name": "ABUSE",
+            "class_name": "AbuseGuard"
+          }
+        ]
+      }
+    },
+    "production": {
+      "name": "watchly-production",
+      "vars": {
+        "NODE_ENV": "production",
+        "MEDIA_PROVIDER": "livekit",
+        "ALLOWED_ORIGINS": "",
+        "DAILY_NEW_ROOM_BUDGET": "1000",
+        "DAILY_SOCIAL_LOOKUP_BUDGET": "10000",
+        "DAILY_MEDIA_JOIN_BUDGET": "100",
+        "LIVEKIT_MAX_PARTICIPANTS": "6",
+        "ENABLE_DIAGNOSTICS": "false"
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "ROOMS",
+            "class_name": "WatchRoom"
+          },
+          {
+            "name": "PRESENCE",
+            "class_name": "PresenceDirectory"
+          },
+          {
+            "name": "ABUSE",
+            "class_name": "AbuseGuard"
+          }
+        ]
+      }
+    }
+  }
+}

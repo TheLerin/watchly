@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { loadRoomLayout } from './roomRoute';
 import { AuthProvider } from './context/AuthContext';
 import { SocialProvider } from './context/SocialContext';
+import PwaUpdateNotice from './components/PwaUpdateNotice';
 import { SoundEffectsProvider } from './context/SoundEffectsContext';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
@@ -107,6 +108,7 @@ function App() {
               <Route path="/privacy" element={<LegalPage kind="privacy" />} />
             </Routes></Suspense></ProtocolGuard>
             {/* ISSUE-26: Toaster must be inside the tree so toasts render */}
+            <PwaUpdateNotice />
             <Toaster
               position="bottom-center"
               containerClassName="watchly-toaster"

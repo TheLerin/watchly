@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import ChatUI from './ChatUI';
 import UserQueueSidebar from './UserQueueSidebar';
+import { socket } from '../socket';
 import VoiceRoom from './VoiceRoom';
 import { VideoCallPanel, FloatingVideoCall } from './RoomMediaCall';
 import { RoomSessionProvider } from '../context/RoomSessionContext';
@@ -340,6 +341,25 @@ const RoomPresentation = () => {
     const [joinError, setJoinError] = useState('');
     const [joinErrorCode, setJoinErrorCode] = useState('');
     const [isJoining, setIsJoining] = useState(false);
+    const [joinPassword, setJoinPassword] = useState('');
+    const [joinInvite] = useState(() => new URLSearchParams(window.location.search).get('invite') || '');
+    const attemptJoin = useCallback(async () => {
+        setJoinError(''); setJoinErrorCode(''); setIsJoining(true);
+        try {
+            await joinRoom(roomId.toUpperCase(), effectiveJoinNickname.trim(), { password: joinPassword || undefined, inviteToken: joinInvite || undefined });
+            setJoinPassword('');
+            const url = new URL(window.location.href); url.searchParams.delete('invite'); window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+        } catch (error) { setJoinError(error.message); setJoinErrorCode(error.code || ''); }
+        finally { setIsJoining(false); }
+    }, [joinRoom, roomId, effectiveJoinNickname, joinPassword, joinInvite]);
+    useEffect(() => {
+        const admission = payload => {
+            if (payload.roomId !== roomId.toUpperCase()) return;
+            if (payload.status === 'approved') void attemptJoin();
+            else { setJoinError('The Host declined this join request.'); setJoinErrorCode('JOIN_DENIED'); }
+        };
+        socket.on('room:admission', admission); return () => socket.off('room:admission', admission);
+    }, [attemptJoin, roomId]);
     const isPortrait = useOrientation();
     const isDesktop = useIsDesktop();
     const supportsTheater = useSupportsTheater();
@@ -374,12 +394,7 @@ const RoomPresentation = () => {
                 onSubmit={async event => {
                     event.preventDefault();
                     if (needsProfile) { navigate(`/setup-profile?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`); return; }
-                    setJoinError('');
-                    setJoinErrorCode('');
-                    setIsJoining(true);
-                    try { await joinRoom(roomId.toUpperCase(), effectiveJoinNickname.trim()); }
-                    catch (error) { setJoinError(error.message); setJoinErrorCode(error.code || ''); }
-                    finally { setIsJoining(false); }
+                    await attemptJoin();
                 }}
             >
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Shared room</p>
@@ -397,6 +412,8 @@ const RoomPresentation = () => {
                     placeholder="Your nickname"
                 />
                 {joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{joinError}</p>}
+                {['PASSWORD_REQUIRED', 'INVALID_PASSWORD'].includes(joinErrorCode) && <label className="mt-3 block text-sm text-zinc-300">Room password<input type="password" autoComplete="current-password" maxLength={128} value={joinPassword} onChange={event => setJoinPassword(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white" /></label>}
+                {joinErrorCode === 'ACCOUNT_REQUIRED' && !accountUser && <button type="button" className="mt-3 text-sm text-white underline" onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`)}>Sign in to join</button>}
                 {connectionError && !joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{connectionError}</p>}
                 {needsProfile && <button type="button" className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white" onClick={() => navigate(`/setup-profile?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`)}>Finish profile to join</button>}
                 {!accountUser && connectionError && <button type="button" className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white" onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`)}>Sign in to your account</button>}

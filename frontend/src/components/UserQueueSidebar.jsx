@@ -21,6 +21,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { canManageMember } from '../utils/roomPermissions';
 import RoomAccountActions from './account/InviteFriends';
 import Avatar from './account/Avatar';
+import RoomAccessPanel from './RoomAccessPanel';
 
 const MotionDiv = motion.div;
 
@@ -84,6 +85,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
             className={`room-members-queue flex flex-col ${compact ? '' : 'h-full gap-3'} ${className}`}
             data-room-variant={variant}
         >
+            <RoomAccessPanel />
             <section className={compact ? '' : 'flex min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/70'}>
                 <div className="room-members-header flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
                     <div className="room-members-heading">

@@ -1,0 +1,61 @@
+name: Cloudflare
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_staging:
+        description: Deploy the verified commit to staging
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  legacy:
+    uses: ./.github/workflows/ci.yml
+
+  verify:
+    needs: legacy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm --prefix backend ci
+      - run: npm --prefix frontend ci
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:deploy
+      - run: node workers/test/workerd-direct.mjs
+      - run: npm --prefix frontend exec -- playwright install --with-deps chromium
+      - run: npm run test:integration
+      - run: npm run test:browser
+      - run: npm run test:browser:harness
+
+  staging:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_staging
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm --prefix backend ci
+      - run: npm --prefix frontend ci
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SITE_ORIGIN: ${{ vars.VITE_SITE_ORIGIN }}
+      - run: npm run deploy:staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

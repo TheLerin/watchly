@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Track, ConnectionState } from 'livekit-client';
-import { useConnectionState, useIsMuted, useIsSpeaking, useLocalParticipant, useSpeakingParticipants, useTracks, VideoTrack } from '@livekit/components-react';
+import { Track, ConnectionState } from '../media/provider';
+import { useConnectionState, useIsMuted, useIsSpeaking, useLocalParticipant, useSpeakingParticipants, useTracks, VideoTrack } from '../media/provider';
 import { Camera, CameraOff, ExternalLink, Mic, MicOff, PhoneOff, Settings2, SwitchCamera } from 'lucide-react';
 import { useMediaCall, mediaStateLabel } from './LiveKitMediaProvider';
 import { useRoom } from '../context/RoomContext';

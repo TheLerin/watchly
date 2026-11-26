@@ -1,0 +1,20 @@
+[
+  {
+    "file": "bg-video.mp4",
+    "originalBytes": 40163902,
+    "optimizedBytes": 4591931,
+    "width": 960,
+    "fps": 30,
+    "audio": false,
+    "ssimAtOutputResolution": 0.905374
+  },
+  {
+    "file": "bg-video-mobile.mp4",
+    "originalBytes": 13611730,
+    "optimizedBytes": 1827854,
+    "width": 640,
+    "fps": 30,
+    "audio": false,
+    "ssimAtOutputResolution": 0.854193
+  }
+]

@@ -6,6 +6,13 @@ dist/
 .gemini/
 .gsd/
 .agent/
+.dev.vars*
+!.dev.vars.example
+.env.*
+!.env.example
+.wrangler/
+.worker-build/
+.codex-runtime/
 
 # Q4: Debug/diagnostic artifacts — do not commit these
 backend/log.json

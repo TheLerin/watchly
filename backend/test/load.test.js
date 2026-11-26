@@ -5,7 +5,7 @@ const { io } = require('../../frontend/node_modules/socket.io-client');
 
 test('room supports fifty sockets with clock traffic inside payload limits', { timeout: 30000 }, async () => {
     const port = 6000 + Math.floor(Math.random() * 300);
-    const server = fork(require.resolve('../server'), [], { env: { ...process.env, PORT: String(port), CORS_ORIGIN: '*' }, stdio: 'ignore' });
+    const server = fork(require.resolve('../server'), [], { env: { ...process.env, PORT: String(port), CORS_ORIGIN: 'http://localhost:5173' }, stdio: 'ignore' });
     const clients = [];
     try {
         let started = false;

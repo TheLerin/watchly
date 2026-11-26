@@ -1,39 +1,7 @@
 const express = require('express');
-const crypto = require('node:crypto');
-const { AccessToken, TrackSource } = require('livekit-server-sdk');
-const { validRoomCode } = require('./validators');
-
+const { AccessToken, TrackSource, RoomServiceClient } = require('livekit-server-sdk');
+const { livekitConfig, voiceMember, voiceRoomName, voiceIdentity } = require('./livekitIdentity');
 const denied = (status, message) => Object.assign(new Error(message), { status });
-const voiceRoomName = roomCode => `watchly-voice-${roomCode}`;
-const voiceIdentity = memberId => `watchly-${memberId}`;
-
-function livekitConfig(env = process.env) {
-    try {
-        const url = new URL(env.LIVEKIT_URL);
-        const local = env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-        if ((url.protocol !== 'wss:' && !(local && url.protocol === 'ws:')) || url.username || url.password || url.search || url.hash) return null;
-        if (!env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) return null;
-        return { serverUrl: url.href.replace(/\/$/, ''), apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET };
-    } catch { return null; }
-}
-
-// The room code, nickname and socket ID alone are never credentials. The
-// private resume token proves ownership of the exact, currently bound member.
-function voiceMember({ rooms, io }, { roomId, socketId, resumeToken } = {}) {
-    if (typeof roomId !== 'string' || !validRoomCode(roomId) || typeof socketId !== 'string' || socketId.length > 100 ||
-        typeof resumeToken !== 'string' || resumeToken.length < 32 || resumeToken.length > 128) {
-        throw denied(400, 'Join a Watchly room before joining voice.');
-    }
-    const room = rooms.get(roomId), socket = io.sockets.sockets.get(socketId);
-    const member = room?.users.find(user => user.id === socketId && user.connected);
-    if (!room || !member || !socket?.connected || socket.data.roomId !== roomId || socket.data.memberId !== member.userId || room.kickedUserIds.has(member.userId)) {
-        throw denied(403, 'You must be an active member of this Watchly room.');
-    }
-    const actual = crypto.createHash('sha256').update(resumeToken).digest();
-    const expected = Buffer.from(member.resumeTokenHash || '', 'hex');
-    if (expected.length !== actual.length || !crypto.timingSafeEqual(actual, expected)) throw denied(403, 'Your room membership could not be verified.');
-    return { room, socket, member };
-}
 
 function registerLivekitVoice({ app, io, rooms, accounts, env = process.env }) {
     const router = express.Router(), issued = new Map();
@@ -73,6 +41,12 @@ function registerLivekitVoice({ app, io, rooms, accounts, env = process.env }) {
             const token = new AccessToken(config.apiKey, config.apiSecret, {
                 identity: voiceIdentity(member.userId), name: member.nickname, ttl: 120,
             });
+            token.roomConfig = { maxParticipants: Math.min(6, Math.max(2, Number(env.LIVEKIT_MAX_PARTICIPANTS) || 6)), emptyTimeout: 120, departureTimeout: 30 };
+            if (env.NODE_ENV === 'production' || env.LIVEKIT_ENFORCE_ROOM_LIMITS === 'true') {
+                const provider = new RoomServiceClient(config.serverUrl.replace(/^ws/, 'http'), config.apiKey, config.apiSecret);
+                const created = await provider.createRoom({ name: voiceRoomName(req.body.roomId), maxParticipants: token.roomConfig.maxParticipants, emptyTimeout: 120, departureTimeout: 30 });
+                if (!created.maxParticipants || created.maxParticipants > token.roomConfig.maxParticipants) throw denied(503, 'This call room needs to empty before the participant limit can apply.');
+            }
             token.addGrant({ room: voiceRoomName(req.body.roomId), roomJoin: true, canPublish: true, canSubscribe: true,
                 canPublishData: false, canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA] });
             const participantToken = await token.toJwt();
@@ -84,7 +58,15 @@ function registerLivekitVoice({ app, io, rooms, accounts, env = process.env }) {
     });
     router.use((_error, _req, res, _next) => res.status(400).set('Cache-Control', 'no-store').json({ error: 'Invalid voice request.' }));
     app.use('/api/livekit/token', router);
-    return () => clearInterval(cleanup);
+    const dispose = () => clearInterval(cleanup);
+    dispose.removeMember = async (roomId, memberId) => {
+        const config = livekitConfig(env);
+        if (!config) return;
+        const client = new RoomServiceClient(config.serverUrl.replace(/^ws/, 'http'), config.apiKey, config.apiSecret);
+        try { await client.removeParticipant(voiceRoomName(roomId), voiceIdentity(memberId)); }
+        catch (error) { if (error.status !== 404 && error.code !== 'not_found') throw error; }
+    };
+    return dispose;
 }
 
 module.exports = { registerLivekitVoice, livekitConfig, voiceMember, voiceRoomName, voiceIdentity };

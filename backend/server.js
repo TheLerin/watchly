@@ -7,16 +7,33 @@ const crypto = require('crypto');
 const { PROTOCOL_VERSION } = require('./validators');
 const { createAccountService } = require('./accounts');
 const { registerLivekitVoice } = require('./livekitVoice');
+const { registerDriveAccess } = require('./driveAccess');
+const { WindowLimiter, clientAddress } = require('./rateLimit');
+const ingress = new WindowLimiter();
+const trustedHops = Number(process.env.TRUST_PROXY_HOPS || 0);
+if (!Number.isInteger(trustedHops) || trustedHops < 0 || trustedHops > 2) throw new Error('Invalid TRUST_PROXY_HOPS');
 
 const splitEnvList = (value) => (value || '')
     .split(',')
     .map(item => item.trim())
     .filter(Boolean);
 const FRONTEND_ORIGINS = splitEnvList(process.env.CORS_ORIGIN || 'http://localhost:5173');
-const CORS_ORIGIN = FRONTEND_ORIGINS.includes('*') ? '*' : FRONTEND_ORIGINS;
+const CORS_ORIGIN = (origin, callback) => callback(null, !origin || FRONTEND_ORIGINS.includes(origin));
+if (FRONTEND_ORIGINS.includes('*')) throw new Error('CORS_ORIGIN must list explicit origins.');
 
 const app = express();
-app.use(cors({ origin: CORS_ORIGIN }));
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+app.use((req, res, next) => {
+    if (req.headers.origin && !FRONTEND_ORIGINS.includes(req.headers.origin)) return res.sendStatus(403);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+});
+app.use('/api', (req, res, next) => {
+    const category = req.path.includes('/proxy/gdrive') ? 'drive' : req.path.includes('/livekit/') ? 'media' : 'api';
+    if (!ingress.consume(`${category}:${clientAddress(req, trustedHops)}`, category === 'media' ? 30 : 240, 60000)) return res.status(429).set('Retry-After', '60').json({ error: 'Too many requests. Retry shortly.' });
+    next();
+});
 
 const server = http.createServer(app);
 
@@ -25,6 +42,7 @@ const io = new Server(server, {
         origin: CORS_ORIGIN,
         methods: ['GET', 'POST']
     },
+    allowRequest: (req, callback) => callback(null, (!req.headers.origin || FRONTEND_ORIGINS.includes(req.headers.origin)) && ingress.consume(`socket:${clientAddress(req, trustedHops)}`, 120, 60000)),
     maxHttpBufferSize: 1e6  // S6: explicit 1 MB limit (Socket.IO default)
 });
 
@@ -36,7 +54,8 @@ const io = new Server(server, {
 // User supplied room codes must never become object prototype keys.
 const rooms = new Map();
 const accounts = createAccountService();
-registerLivekitVoice({ app, io, rooms, accounts });
+const livekit = registerLivekitVoice({ app, io, rooms, accounts });
+registerDriveAccess({ app, io, rooms });
 
 const PUBLIC_STUN_URLS = [
     'stun:stun.l.google.com:19302',
@@ -128,9 +147,9 @@ setInterval(() => {
     }
 }, 10 * 60 * 1000).unref();
 
-// FIX #10: Proxy CORS can safely be wildcard â€” no user auth cookies traverse this route
+// Drive preflight uses only the explicitly permitted frontend origins.
 app.options('/api/proxy/gdrive', (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.headers.origin) res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Range');
     res.sendStatus(204);
@@ -139,7 +158,13 @@ app.options('/api/proxy/gdrive', (req, res) => {
 app.all('/api/proxy/gdrive', async (req, res) => {
     const { id } = req.query;
     if (!['GET', 'HEAD'].includes(req.method)) return res.sendStatus(405);
-    if (!id) return res.status(400).send('Missing Google Drive file id');
+    if (typeof id !== 'string' || !/^[\w-]{10,200}$/.test(id)) return res.status(400).send('Invalid Google Drive file id');
+    const { validDriveUrl } = await import('../workers/src/drive.mjs');
+    const controller = new AbortController();
+    const resolutionTimer = setTimeout(() => controller.abort(), 45000);
+    req.on('aborted', () => controller.abort());
+    res.on('close', () => { clearTimeout(resolutionTimer); controller.abort(); });
+    if (gdriveInFlight.size >= 32 && !gdriveInFlight.has(id)) { clearTimeout(resolutionTimer); return res.status(503).send('Drive is busy. Retry shortly.'); }
 
     const HOP_TIMEOUT_MS  = 15000;
     const STREAM_IDLE_MS  = 30000; // FIX #11: kill piped stream if Google stalls mid-transfer
@@ -148,19 +173,20 @@ app.all('/api/proxy/gdrive', async (req, res) => {
     const isHead  = req.method === 'HEAD';
 
     const setCorsHeaders = () => {
-        res.setHeader('Access-Control-Allow-Origin', '*'); // FIX #10
+        if (req.headers.origin) res.setHeader('Access-Control-Allow-Origin', req.headers.origin); // FIX #10
         res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     };
 
     const streamResponse = (hop) => {
+        clearTimeout(resolutionTimer); // Header-resolution deadline must not truncate a long movie.
         const ct = hop.headers['content-type'] || 'video/mp4';
         setCorsHeaders();
         res.setHeader('Content-Type', ct);
         if (hop.headers['content-length']) res.setHeader('Content-Length', hop.headers['content-length']);
         res.setHeader('Accept-Ranges', hop.headers['accept-ranges'] || 'bytes');
         if (hop.headers['content-range']) res.setHeader('Content-Range', hop.headers['content-range']);
-        res.status(hop.status === 206 ? 206 : 200);
+        res.status(hop.status);
         if (isHead) {
             try { hop.data.destroy(); } catch (_) {}
             return res.end();
@@ -178,9 +204,9 @@ app.all('/api/proxy/gdrive', async (req, res) => {
         resetIdle();
         hop.data.on('data', resetIdle);
         hop.data.on('end',  () => clearTimeout(idleTimer));
-        hop.data.on('error',() => clearTimeout(idleTimer));
+        hop.data.on('error',() => { clearTimeout(idleTimer); res.destroy(); });
         hop.data.pipe(res);
-        req.on('close', () => { clearTimeout(idleTimer); try { hop.data.destroy(); } catch (_) {} });
+        res.on('close', () => { clearTimeout(idleTimer); try { hop.data.destroy(); } catch (_) {} });
     };
 
     // FIX #7: Cap at 64 KB â€” enough to find any confirm token / form field in the HTML
@@ -196,12 +222,12 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 
     // Helper: stream from an already-resolved URL (used by cache hits and in-flight waiters)
     const tryStreamResolved = async (url, cookieJar) => {
+        if (!validDriveUrl(url)) throw new Error('Unsafe Drive destination');
         const headers = { 'User-Agent': UA, 'Referer': REFERER, 'Accept': 'video/mp4,video/webm,video/*;q=0.9,*/*;q=0.8' };
         if (cookieJar)           headers['Cookie'] = cookieJar;
         if (req.headers.range)   headers['Range']  = req.headers.range;
-        const hop = await axios({ method: req.method, url, responseType: 'stream', headers, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
-        if (hop.status < 400 && !(hop.headers['content-type'] || '').includes('text/html')) {
-            console.log(`GDrive: resolved stream (${hop.status}) â†’ ${url.slice(0, 80)}`);
+        const hop = await axios({ method: req.method, url, responseType: 'stream', headers, signal: controller.signal, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
+        if (hop.status === 416 || ([200, 206].includes(hop.status) && /^(video\/|audio\/|application\/octet-stream)/i.test(hop.headers['content-type'] || ''))) {
             streamResponse(hop); return true;
         }
         try { hop.data.destroy(); } catch (_) {}
@@ -221,7 +247,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 
     // â”€â”€ 2. FIX #2: Wait for any in-flight resolution for the same ID â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (gdriveInFlight.has(id)) {
-        console.log(`GDrive: waiting for in-flight resolution of ${id}`);
+        console.log('GDrive: waiting for an existing resolution');
         try {
             const entry = await gdriveInFlight.get(id);
             if (entry) { const ok = await tryStreamResolved(entry.url, entry.cookieJar); if (ok) return; }
@@ -237,8 +263,8 @@ app.all('/api/proxy/gdrive', async (req, res) => {
     ];
 
     // Register in-flight promise so concurrent requests for this ID wait instead of hammering Google
-    let resolveInFlight, rejectInFlight;
-    const inFlightPromise = new Promise((res, rej) => { resolveInFlight = res; rejectInFlight = rej; });
+    let resolveInFlight;
+    const inFlightPromise = new Promise(resolve => { resolveInFlight = resolve; });
     gdriveInFlight.set(id, inFlightPromise);
 
     for (const startUrl of startUrls) {
@@ -252,6 +278,8 @@ app.all('/api/proxy/gdrive', async (req, res) => {
         let rangeAttached = false;
 
         while (hops-- > 0) {
+            if (controller.signal.aborted) throw new Error('Client disconnected');
+            if (!validDriveUrl(url)) throw new Error('Unsafe Drive redirect');
             const headers = {
                 'User-Agent': UA,
                 'Referer':    REFERER,
@@ -263,7 +291,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 
             let hop;
             try {
-                hop = await axios({ method: isHead ? 'HEAD' : 'GET', url, responseType: 'stream', headers, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
+                hop = await axios({ method: isHead ? 'HEAD' : 'GET', url, responseType: 'stream', headers, signal: controller.signal, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
             } catch (e) {
                 if (e.response && e.response.headers.location) { hop = e.response; } else { throw e; }
             }
@@ -280,15 +308,22 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 
             if (status >= 300 && status < 400 && loc) {
                 try { hop.data.destroy(); } catch (_) {}
-                url = loc.startsWith('http') ? loc : `https://drive.google.com${loc}`;
+                url = new URL(loc, url).href;
                 rangeAttached = true; // FIX #1: past the entry-point, safe to send Range now
-                console.log(`GDrive hop (${status}) â†’ ${url.slice(0, 100)}`);
                 continue;
             }
 
-            if (!ct.includes('text/html') && status < 400) {
+            if (status === 416 || ([200, 206].includes(status) && /^(video\/|audio\/|application\/octet-stream)/i.test(ct))) {
+                if (req.headers.range && !rangeAttached && status === 200) {
+                    try { hop.data.destroy(); } catch (_) {}
+                    if (await tryStreamResolved(url, cookieJar)) {
+                        gdriveInFlight.delete(id); resolveInFlight({ url, cookieJar }); return;
+                    }
+                    break;
+                }
                 console.log(`GDrive: streaming (${ct}, status=${status})`);
                 const entry = { url, cookieJar, timestamp: Date.now() };
+                if (gdriveCache.size >= 256) gdriveCache.delete(gdriveCache.keys().next().value);
                 gdriveCache.set(id, entry);
                 gdriveInFlight.delete(id);
                 resolveInFlight({ url, cookieJar });
@@ -297,7 +332,6 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 
             if (status === 403 || status === 404) {
                 try { hop.data.destroy(); } catch (_) {}
-                console.log(`GDrive: ${status} from ${url.slice(0, 80)} â€” trying next strategy`);
                 break;
             }
 
@@ -309,16 +343,14 @@ app.all('/api/proxy/gdrive', async (req, res) => {
                 const um = html.match(/name=["']uuid["'][^>]*value=["']([^"']+)["']/i)
                          || html.match(/[?&]uuid=([0-9A-Za-z_-]+)/);
                 if (cm) {
-                    const confirm = cm[1]; const uuid = um ? um[1] : null;
+                    const confirm = encodeURIComponent(cm[1]); const uuid = um ? encodeURIComponent(um[1]) : null;
                     url = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=${confirm}`;
                     if (uuid) url += `&uuid=${uuid}`;
                     rangeAttached = true;
-                    console.log(`GDrive: confirm retry (confirm=${confirm}, uuid=${uuid || 'none'})`);
                     continue;
                 }
 
                 const lm = html.match(/href="(https:\/\/drive\.usercontent\.google\.com\/download[^"]+)"/i);
-                if (lm) { url = lm[1].replace(/&amp;/g, '&'); rangeAttached = true; console.log(`GDrive: usercontent link in HTML â†’ ${url.slice(0, 100)}`); continue; }
 
                 const fm = html.match(/action="(https?:\/\/[^"]*download[^"]*confirm=[^"]*)"/i)
                          || html.match(/action="([^"]*\/download[^"]*confirm=[^"]*)"/i);
@@ -326,7 +358,6 @@ app.all('/api/proxy/gdrive', async (req, res) => {
                     url = fm[1].replace(/&amp;/g, '&');
                     if (!url.startsWith('http')) url = 'https://drive.google.com' + url;
                     rangeAttached = true;
-                    console.log(`GDrive: form action fallback â†’ ${url.slice(0, 100)}`);
                     continue;
                 }
 
@@ -335,19 +366,20 @@ app.all('/api/proxy/gdrive', async (req, res) => {
             }
 
             console.error(`GDrive: unexpected status=${status} ct="${ct}"`);
+            try { hop.data.destroy(); } catch (_) {}
             break;
         }
 
-        if (res.headersSent) { gdriveInFlight.delete(id); rejectInFlight(new Error('failed')); return; }
-        console.log(`GDrive: startUrl exhausted (${startUrl.slice(0, 60)}), trying next...`);
+        if (res.headersSent) { gdriveInFlight.delete(id); resolveInFlight(null); return; }
     } catch (err) {
-        if (res.headersSent) { gdriveInFlight.delete(id); rejectInFlight(new Error('failed')); break; }
-        console.log(`GDrive: startUrl threw: ${err.message} â€” trying next...`);
+        if (res.headersSent) { gdriveInFlight.delete(id); resolveInFlight(null); break; }
+        console.warn('GDrive: resolution failed; trying next permitted source');
     }
     }
 
     gdriveInFlight.delete(id);
-    rejectInFlight(new Error('all strategies failed'));
+    clearTimeout(resolutionTimer);
+    resolveInFlight(null);
     if (!res.headersSent) {
         setCorsHeaders();
         res.status(502).json({
@@ -363,13 +395,13 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 // and returns a clean JSON response instead of leaking stack traces.
 // Must be registered before server.listen so it's in the middleware chain.
 app.use((err, req, res, next) => {
-    console.error('Unhandled route error:', err.message);
+    console.error('Unhandled route error');
     if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-require('./realtime')({ io, rooms, buildIceConfig, accounts });
+require('./realtime')({ io, rooms, buildIceConfig, accounts, runtime: { onMemberKicked: livekit.removeMember } });
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

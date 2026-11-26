@@ -1,0 +1,20 @@
+[
+  {
+    "file": "bg-video.webm",
+    "originalBytes": 40163902,
+    "optimizedBytes": 4711520,
+    "width": 960,
+    "fps": 30,
+    "audio": false,
+    "ssimAtOutputResolution": 0.907335
+  },
+  {
+    "file": "bg-video-mobile.webm",
+    "originalBytes": 13611730,
+    "optimizedBytes": 1885121,
+    "width": 640,
+    "fps": 30,
+    "audio": false,
+    "ssimAtOutputResolution": 0.873793
+  }
+]

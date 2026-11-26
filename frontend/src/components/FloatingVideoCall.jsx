@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Maximize2, Minus, PanelRight, X, Mic, MicOff, Camera, CameraOff } from 'lucide-react';
-import { useConnectionState, useLocalParticipant } from '@livekit/components-react';
-import { ConnectionState } from 'livekit-client';
+import { useConnectionState, useLocalParticipant } from '../media/provider';
+import { ConnectionState } from '../media/provider';
 import { FloatingCameraSurface } from './VideoCallPanel';
 import { useMediaCall } from './LiveKitMediaProvider';
 import { useRoom } from '../context/RoomContext';

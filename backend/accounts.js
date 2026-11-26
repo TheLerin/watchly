@@ -1,8 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
+const { Buffer } = require('node:buffer');
+const process = require('node:process');
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const failure = (code, message) => Object.assign(new Error(message), { code });
 
-function createAccountService({ url = process.env.SUPABASE_URL, key = process.env.SUPABASE_PUBLISHABLE_KEY, serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY, fetcher = fetch } = {}) {
+function createAccountService({ url = process.env.SUPABASE_URL, key = process.env.SUPABASE_PUBLISHABLE_KEY, serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY, fetcher = fetch, requireSession = process.env.NODE_ENV === 'production' } = {}) {
     let client = null;
     if (url && key) {
         try { client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: (input, options) => fetcher(input, { ...options, signal: options?.signal || AbortSignal.timeout(8000) }) } }); }
@@ -18,8 +20,14 @@ function createAccountService({ url = process.env.SUPABASE_URL, key = process.en
         if (!response.ok) throw failure('ACCOUNT_UNAVAILABLE', 'Account features are temporarily unavailable. Please retry.');
         return response.status === 204 ? null : response.json();
     };
+    const sessionActive = async account => {
+        if (!account?.token || account.expiresAt <= Date.now()) throw failure('AUTH_REQUIRED', 'Sign in again to use your account.');
+        if (requireSession && await request('rpc/watchly_session_active', account.token, {}) !== true) throw failure('AUTH_REQUIRED', 'Your account session was revoked. Sign in again.');
+        account.sessionCheckedAt = Date.now(); return true;
+    };
     return {
         configured: Boolean(client),
+        sessionActive,
         async verify(token) {
             if (!client) throw failure('ACCOUNT_UNAVAILABLE', 'Accounts are not configured. You can join as a guest.');
             if (typeof token !== 'string' || token.length > 16384) throw failure('AUTH_REQUIRED', 'Sign in again to use your account.');
@@ -32,7 +40,8 @@ function createAccountService({ url = process.env.SUPABASE_URL, key = process.en
             if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw failure('AUTH_REQUIRED', 'Your account session expired. Sign in again.');
             const profiles = await request(`profiles?id=eq.${data.user.id}&select=id,username,display_name,avatar_url`, token);
             const profile = profiles?.find(item => item.id === data.user.id) || null;
-            return { id: data.user.id, profile, token, expiresAt };
+            const account = { id: data.user.id, profile, token, expiresAt };
+            await sessionActive(account); return account;
         },
         async friendIds(account) { return (await request('rpc/friend_ids', account.token, {})).filter(uuid); },
         async invite(account, targetId, roomCode) {

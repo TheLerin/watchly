@@ -3,9 +3,10 @@ const ROLES = Object.freeze({ HOST: 'Host', MODERATOR: 'Moderator', VIEWER: 'Vie
 // Computed only from server-owned membership. The coordinator is the single
 // progress/discovery/end publisher, not the only member allowed to control.
 function roomPermissions(member, room) {
-    const host = member?.role === ROLES.HOST;
-    const moderator = member?.role === ROLES.MODERATOR;
-    const coordinator = Boolean(member?.userId && member.userId === room?.controllerMemberId);
+    const valid = !member?.accountId || member.authenticated === true;
+    const host = valid && member?.role === ROLES.HOST;
+    const moderator = valid && member?.role === ROLES.MODERATOR;
+    const coordinator = valid && Boolean(member?.userId && member.userId === room?.controllerMemberId);
     const playback = Boolean(member && (host || moderator || coordinator));
     return {
         canControlPlayback: playback, canSeek: playback, canChangeSource: playback,

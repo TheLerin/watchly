@@ -1,0 +1,90 @@
+{
+  "recordedAt": "2026-11-26T06:25:44.297Z",
+  "node": "v24.18.0",
+  "lastSelectedChecks": [
+    "workerd-direct"
+  ],
+  "results": [
+    {
+      "name": "workers",
+      "exitCode": 0,
+      "elapsedMs": 698,
+      "passed": true,
+      "tests": 47,
+      "pass": 47
+    },
+    {
+      "name": "backend-focused",
+      "exitCode": 0,
+      "elapsedMs": 2446,
+      "passed": true,
+      "tests": 27,
+      "pass": 27
+    },
+    {
+      "name": "frontend",
+      "exitCode": 0,
+      "elapsedMs": 907,
+      "passed": true,
+      "tests": 134,
+      "pass": 134
+    },
+    {
+      "name": "frontend-lint",
+      "exitCode": 0,
+      "elapsedMs": 5510,
+      "passed": true
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "elapsedMs": 13330,
+      "passed": true
+    },
+    {
+      "name": "asset-validation",
+      "exitCode": 0,
+      "elapsedMs": 334,
+      "passed": true
+    },
+    {
+      "name": "worker-bundle",
+      "exitCode": 0,
+      "elapsedMs": 165,
+      "passed": true
+    },
+    {
+      "name": "browser-harness",
+      "exitCode": 0,
+      "elapsedMs": 24046,
+      "passed": true
+    },
+    {
+      "name": "workerd-direct",
+      "exitCode": 0,
+      "elapsedMs": 26356,
+      "passed": true
+    },
+    {
+      "name": "workerd-integration",
+      "exitCode": 1,
+      "elapsedMs": 1966,
+      "passed": false
+    },
+    {
+      "name": "wrangler-dry-run",
+      "exitCode": 0,
+      "elapsedMs": 2270,
+      "passed": true
+    },
+    {
+      "name": "backend-full",
+      "exitCode": 1,
+      "elapsedMs": 16765,
+      "passed": false,
+      "tests": 65,
+      "pass": 28,
+      "fail": 37
+    }
+  ]
+}

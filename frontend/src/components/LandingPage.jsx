@@ -27,7 +27,7 @@ import { useAuth } from '../context/AuthContext';
 
 export { BackgroundLayers };
 
-const WATCHLY_HERO_VIDEO = '/bg-video.mp4';
+import LandingBackgroundVideo from './LandingBackgroundVideo';
 const PANEL_COUNT = 4;
 const MotionArticle = motion.article;
 
@@ -154,19 +154,7 @@ const CinemaScene = ({ onCreate, onJoin, videoRef }) => (
 
     <div className="cinema-screen-shell">
       <div className="cinema-screen">
-        <video
-          ref={videoRef}
-          className="cinema-video"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          poster="/bg-video-poster.jpg"
-        >
-          <source media="(max-width: 1024px)" src="/bg-video-mobile.mp4" type="video/mp4" />
-          <source src={WATCHLY_HERO_VIDEO} type="video/mp4" />
-        </video>
+        <LandingBackgroundVideo videoRef={videoRef} />
         <div className="cinema-screen-vignette" aria-hidden="true" />
       </div>
     </div>

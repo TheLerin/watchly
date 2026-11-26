@@ -1,0 +1,26 @@
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+LIVEKIT_URL=
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+MEDIA_SESSION_SECRET=
+TURN_URLS=
+TURN_SHARED_SECRET=
+TURN_TTL_SECONDS=3600
+# Optional fixed HTTPS origin for the existing Drive proxy, without a path.
+GDRIVE_LEGACY_ORIGIN=
+# Same independent random secret on Worker and controlled Render fallback.
+GDRIVE_LEGACY_SECRET=
+# Manual soft-budget controls; these are not billing counters or provider caps.
+ALLOW_NEW_ROOMS=true
+ENABLE_SOCIAL_PRESENCE=true
+ENABLE_DRIVE_PROXY=true
+ENABLE_CALLS=true
+
+# Application admission counters reset at UTC midnight; they do not measure provider billing.
+DAILY_NEW_ROOM_BUDGET=1000
+DAILY_SOCIAL_LOOKUP_BUDGET=10000
+DAILY_MEDIA_JOIN_BUDGET=100
+LIVEKIT_MAX_PARTICIPANTS=6
+ENABLE_DIAGNOSTICS=false

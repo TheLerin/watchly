@@ -14,7 +14,7 @@ const emit = (client, event, payload) => new Promise(resolve => client.emit(even
 
 test.before(async () => {
     server = fork(require.resolve('../server'), [], { env: {
-        ...process.env, PORT: String(port), CORS_ORIGIN: '*', CONTROLLER_LEASE_MS: '300',
+        ...process.env, PORT: String(port), CORS_ORIGIN: 'http://localhost:5173', CONTROLLER_LEASE_MS: '300',
         TURN_URLS: 'turns:turn.example:443?transport=tcp', TURN_SHARED_SECRET: 'integration-secret'
     }, stdio: 'ignore' });
     for (let attempt = 0; attempt < 150; attempt += 1) {

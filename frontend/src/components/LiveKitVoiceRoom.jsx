@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { ConnectionState } from 'livekit-client';
-import { useConnectionState, useIsMuted, useIsSpeaking, useLocalParticipant, useParticipants } from '@livekit/components-react';
+import { ConnectionState } from '../media/provider';
+import { useConnectionState, useIsMuted, useIsSpeaking, useLocalParticipant, useParticipants } from '../media/provider';
 import '@livekit/components-styles';
 import { ChevronDown, ChevronUp, Mic, MicOff, PhoneCall, PhoneOff, Users } from 'lucide-react';
-import { Track } from 'livekit-client';
+import { Track } from '../media/provider';
 import { useRoom } from '../context/RoomContext';
 import { useMediaCall, mediaStateLabel } from './LiveKitMediaProvider';
 import './livekit-voice.css';

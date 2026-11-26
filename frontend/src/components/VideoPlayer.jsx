@@ -34,11 +34,13 @@ import {
 } from '../utils/mediaTracks';
 
 // How often the host reports playback position (ms)
-const SYNC_INTERVAL_MS = 1500;
+const SYNC_INTERVAL_MS = TRANSPORT === 'native' ? 15000 : 1500;
 // Max drift before a viewer auto-corrects during normal playback
 const HARD_DRIFT_THRESHOLD = 1.25;
-const SOFT_DRIFT_THRESHOLD = 0.18;
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+import { BACKEND_URL, TRANSPORT } from '../config';
+import { rewriteGDriveUrl, resolveArchiveUrl } from '../utils/sourceResolvers';
+import { createPlaybackAdapter, correctPlayback } from '../utils/playbackAdapters';
+import { useDriveSession } from '../hooks/useDriveSession';
 const MotionDiv = motion.div;
 const AUDIO_LANGUAGE_PREFERENCE = 'watchly-preferred-audio-language';
 const SUBTITLE_LANGUAGE_PREFERENCE = 'watchly-preferred-subtitle-language';
@@ -55,79 +57,10 @@ const writeLanguagePreference = (key, value) => {
     } catch { /* storage can be disabled */ }
 };
 
-function rewriteGDriveUrl(url) {
-    if (!url) return url;
-    // Match both share links and direct usercontent links
-    const isGDrive = url.includes('drive.google.com') || url.includes('drive.usercontent.google.com');
-    if (!isGDrive) return url;
-    let fileId = null;
-    const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (m1) fileId = m1[1];
-    if (!fileId) {
-        const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-        if (m2) fileId = m2[1];
-    }
-    if (!fileId) return url;
-    return `${BACKEND_URL}/api/proxy/gdrive?id=${fileId}`;
-}
-
-
-// Resolves an archive.org/details/ page URL into a direct streamable video URL
-// by fetching the item's metadata from the archive.org API.
-// BUG-A FIX: Added .ogv/.webm fallback so more items resolve successfully.
-async function resolveArchiveUrl(url) {
-    if (!url || !url.includes('archive.org')) return url;
-
-    // Already a direct download file URL — use as-is
-    const directMatch = url.match(/archive\.org\/download\/([^/?#]+)\/.+/);
-    if (directMatch) return url;
-
-    // Extract identifier from a details page URL
-    const detailsMatch = url.match(/archive\.org\/details\/([^/?#]+)/);
-    if (!detailsMatch) return url;
-
-    const identifier = detailsMatch[1];
-    try {
-        const res  = await fetch(`https://archive.org/metadata/${identifier}`);
-        const data = await res.json();
-        const files = data.files || [];
-
-        // Find best video file. Priority order — browser-friendly formats first.
-        const priorityFormats = ['MPEG4', 'h.264', 'H.264 IA', '512Kb MPEG4', 'Ogg Video'];
-        let videoFile = null;
-        for (const fmt of priorityFormats) {
-            videoFile = files.find(f => f.format === fmt && !f.name.includes('_thumb') && !f.name.includes('.thumbs'));
-            if (videoFile) break;
-        }
-        // Fallback 1: any .mp4
-        if (!videoFile) {
-            videoFile = files.find(f => f.name.endsWith('.mp4') && !f.name.includes('_thumb'));
-        }
-        // Fallback 2: .ogv or .webm (BUG-A: these were not attempted before)
-        if (!videoFile) {
-            videoFile = files.find(f =>
-                (f.name.endsWith('.ogv') || f.name.endsWith('.webm')) &&
-                !f.name.includes('_thumb')
-            );
-        }
-
-        if (videoFile) {
-            const directUrl = `https://archive.org/download/${identifier}/${videoFile.name}`;
-            console.log(`Archive.org resolved: ${url} → ${directUrl}`);
-            return directUrl;
-        }
-    } catch (e) {
-        console.warn('Archive.org metadata fetch failed:', e);
-    }
-    return url; // Fall back to original URL if resolution fails
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '', controlsTabLabel,
     activeTheaterTool = null, onTheaterToolChange, closeTheaterTool, dockRef, panelRef, panelEvents }) => {
     const {
-        videoState, currentUser, localReadiness, permissions, playback, clock, isConnected,
+        videoState, currentUser, roomId, localReadiness, permissions, playback, clock, isConnected,
         connectionPhase, resyncRequest, completeResync, failResync, canSendRoomAction, canPerformRoomAction, retryConnection,
         roomActionsEnabled,
         loadVideo, addToQueue, updatePlaylist,
@@ -242,7 +175,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     }, [appearance, canControlPlayback, activeTheaterTool, closeTheaterTool]);
     const rawUrl        = videoState.url || null;
     const source        = useMemo(() => detectVideoSource(rawUrl), [rawUrl]);
-    const playerUrl     = rewriteGDriveUrl(source.url);
+    const requestedPlayerUrl = rewriteGDriveUrl(source.url);
+    const driveAuthorized = useDriveSession(requestedPlayerUrl, roomId, currentUser?.userId, isConnected, setPlayerError);
+    const playerUrl = driveAuthorized ? requestedPlayerUrl : undefined;
     const isLocal       = videoState.sourceType === 'local' && !!videoState.localMedia;
     const isGDriveProxy = source.kind === 'drive' && !!(playerUrl && playerUrl.includes('/api/proxy/gdrive'));
     const isSupportedEmbed = source.kind === 'embed' || (source.kind === 'unknown' && ReactPlayer.canPlay(source.url));
@@ -376,10 +311,14 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     }, [connectionPhase, isConnected, isLocal, isLocalReady, playback, correctSynchronizedState]);
     useEffect(() => {
         if (!isLocal || !isLocalReady || !playback) return undefined;
+        let lastReport = null;
         const report = () => {
             if (localPlaybackSwitchRef.current) return;
             const video = nativeVideoRef.current;
             if (!video) return;
+            const reportKey = `${video.readyState}:${isBufferingRef.current}:${playback.seq}`;
+            if (TRANSPORT === 'native' && reportKey === lastReport) return;
+            lastReport = reportKey;
             sendPlaybackTelemetry({
                 positionSec: video.currentTime || 0,
                 readyState: video.readyState,
@@ -388,7 +327,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             });
         };
         report();
-        const interval = setInterval(report, 2000);
+        const interval = setInterval(report, TRANSPORT === 'native' ? 15000 : 2000);
         return () => clearInterval(interval);
     }, [isLocal, isLocalReady, playback, sendPlaybackTelemetry]);
     const everyoneReady = localReadiness.totalCount > 0 && localReadiness.readyCount >= localReadiness.totalCount;
@@ -728,20 +667,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         const isForcedSeek = seekVer !== prevSeekVersionReactPlayerRef.current;
         prevSeekVersionReactPlayerRef.current = seekVer;
         const drift = stateTime - internalTime;
-        if (isForcedSeek || Math.abs(drift) > HARD_DRIFT_THRESHOLD) {
-            resyncSeekTargetRef.current = stateTime;
-            playerRef.current.seekTo(stateTime, 'seconds');
-            const internal = playerRef.current?.getInternalPlayer?.();
-            if (internal instanceof HTMLMediaElement) internal.playbackRate = 1;
-        } else {
-            const internal = playerRef.current?.getInternalPlayer?.();
-            if (internal instanceof HTMLMediaElement) {
-                internal.playbackRate = Math.abs(drift) > SOFT_DRIFT_THRESHOLD
-                    ? (drift > 0 ? 1.03 : 0.97)
-                    : 1;
-            }
-        }
-    }, [connectionPhase, videoState, isPlayerReady, isPlaybackCoordinator, isNativePlayer, getExpectedPosition, isPlaylist, playlist.ready]);
+        const internal = playerRef.current?.getInternalPlayer?.();
+        const adapter = createPlaybackAdapter({ element: internal instanceof HTMLMediaElement ? internal : null, player: playerRef.current, kind: source.kind });
+        if (isForcedSeek || Math.abs(drift) > HARD_DRIFT_THRESHOLD) resyncSeekTargetRef.current = stateTime;
+        correctPlayback(adapter, stateTime, { force: isForcedSeek, baseRate: videoState.rate || 1, hardThreshold: HARD_DRIFT_THRESHOLD });
+    }, [connectionPhase, videoState, isPlayerReady, isPlaybackCoordinator, isNativePlayer, getExpectedPosition, isPlaylist, playlist.ready, source.kind]);
 
     // ── 3. Drift correction – GDrive native video viewers ────────────────────
     // Guard with isPlayerReady so we don't seek before video is loaded
@@ -750,34 +680,15 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         if (connectionPhase !== 'connected' || !isNativePlayer || isLocal || isPlaybackCoordinator || !nativeVideoRef.current || !isPlayerReady || localPlaybackSwitchRef.current) return;
         if (isBufferingRef.current) return; // FIX #6: skip during buffer stall
         const stateTime   = getExpectedPosition(videoState);
-        const currentTime = nativeVideoRef.current.currentTime || 0;
-        const seekVer     = videoState.seekVersion ?? 0;
+        const seekVer = videoState.seekVersion ?? 0;
         const isForcedSeek = seekVer !== prevSeekVersionGDriveRef.current;
         prevSeekVersionGDriveRef.current = seekVer;
-
-        if (isForcedSeek) {
-            resyncSeekTargetRef.current = stateTime;
-            nativeVideoRef.current.currentTime = stateTime;
-            if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
-        } else if (nativeVideoRef.current.readyState >= 3 && !nativeVideoRef.current.paused) {
-            // Use subtle playbackRate to smoothly catch up instead of hard seeking,
-            // which causes buffer starvation on marginal proxy connections.
-            const diff = stateTime - currentTime; // Positive means host is ahead
-
-            if (Math.abs(diff) > HARD_DRIFT_THRESHOLD) {
-                // Way out of sync (or joined late), force jump
-                resyncSeekTargetRef.current = stateTime;
-                nativeVideoRef.current.currentTime = stateTime;
-                if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
-            } else if (diff > SOFT_DRIFT_THRESHOLD) {
-                if (nativeVideoRef.current.playbackRate !== 1.03) nativeVideoRef.current.playbackRate = 1.03;
-            } else if (diff < -SOFT_DRIFT_THRESHOLD) {
-                if (nativeVideoRef.current.playbackRate !== 0.97) nativeVideoRef.current.playbackRate = 0.97;
-            } else {
-                if (nativeVideoRef.current.playbackRate !== 1.0) nativeVideoRef.current.playbackRate = 1.0;
-            }
+        if (isForcedSeek || (nativeVideoRef.current.readyState >= 3 && !nativeVideoRef.current.paused)) {
+            const adapter = createPlaybackAdapter({ element: nativeVideoRef.current, kind: source.kind });
+            if (isForcedSeek || Math.abs(stateTime - adapter.position()) > 0.75) resyncSeekTargetRef.current = stateTime;
+            correctPlayback(adapter, stateTime, { force: isForcedSeek, baseRate: videoState.rate || 1, hardThreshold: HARD_DRIFT_THRESHOLD });
         }
-    }, [connectionPhase, videoState, isNativePlayer, isLocal, isLocalReady, isPlaybackCoordinator, isPlayerReady, getExpectedPosition]);
+    }, [connectionPhase, videoState, isNativePlayer, isLocal, isLocalReady, isPlaybackCoordinator, isPlayerReady, getExpectedPosition, source.kind]);
 
     // ── 4. GDrive play / pause control ────────────────────────────────────────
     useEffect(() => {
@@ -892,18 +803,19 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         syncIntervalRef.current = setInterval(() => {
             if (!canSendRoomAction()) return;
             if (isSeekingRef.current) return;
+            if (TRANSPORT === 'native' && !videoStateRef.current.isPlaying) return;
             if (videoStateRef.current.sourceType === 'youtube-playlist' && !playlist.session.canEmit()) return;
             if (isNativePlayer) {
                 const t = nativeVideoRef.current?.currentTime || 0;
-                if (t > 0) syncProgress(t);
+                if (t > 0 && (TRANSPORT !== 'native' || Math.abs(t - getExpectedPosition(videoStateRef.current)) > 0.35)) syncProgress(t);
             } else {
                 if (!playerRef.current) return;
                 const t = playerRef.current.getCurrentTime?.() || 0;
-                if (t > 0) syncProgress(t);
+                if (t > 0 && (TRANSPORT !== 'native' || Math.abs(t - getExpectedPosition(videoStateRef.current)) > 0.35)) syncProgress(t);
             }
         }, SYNC_INTERVAL_MS);
         return () => clearInterval(syncIntervalRef.current);
-    }, [isPlaybackCoordinator, isLocal, syncProgress, isNativePlayer, playlist.session, canSendRoomAction]);
+    }, [isPlaybackCoordinator, isLocal, syncProgress, isNativePlayer, playlist.session, canSendRoomAction, getExpectedPosition]);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     // P5 FIX: Wrap all helper functions in useCallback so they are stable across renders.
@@ -1903,7 +1815,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                              file: {
                                                  attributes: isArchive
                                                      ? { preload: 'auto' }
-                                                    : { preload: 'auto', crossOrigin: 'anonymous' },
+                                                    : { preload: 'auto', crossOrigin: isGDriveProxy ? 'use-credentials' : 'anonymous' },
                                              }
                                         }}
                                     />
