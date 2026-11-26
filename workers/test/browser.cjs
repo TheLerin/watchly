@@ -6,8 +6,11 @@ const { existsSync } = require('node:fs');
   const server = await localServer(); let browser;
   try {
     const executablePath = process.env.BROWSER_EXECUTABLE || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
-    browser = await chromium.launch({ executablePath, headless: true });
-    const host = await browser.newPage(), viewer = await browser.newPage(); const errors = [];
+    browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-background-networking', '--disable-component-update', '--disable-sync', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1'] });
+    const context = await browser.newContext();
+    // This wire test needs only the isolated local Worker, not external fonts/providers.
+    await context.route('**/*', route => new URL(route.request().url()).origin === server.base ? route.continue() : route.abort());
+    const host = await context.newPage(), viewer = await context.newPage(); const errors = [];
     for (const page of [host, viewer]) page.on('pageerror', error => errors.push(error.message));
     await host.goto(server.base); await host.getByRole('button', { name: 'Create room', exact: true }).first().click();
     await host.getByPlaceholder('Your nickname').fill('Native host'); await host.locator('.room-launcher-submit').click(); await host.waitForURL('**/room/**');
@@ -17,7 +20,7 @@ const { existsSync } = require('node:fs');
     await host.mouse.move(1200, 200); await host.getByRole('button', { name: 'Live chat', exact: true }).click();
     await host.getByPlaceholder('Type a message...').fill('Cloudflare native chat'); await host.getByPlaceholder('Type a message...').press('Enter');
     await viewer.mouse.move(1200, 200); await viewer.getByRole('button', { name: 'Live chat', exact: true }).click(); await viewer.getByText('Cloudflare native chat', { exact: true }).waitFor();
-    const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+    const mobile = await context.newPage(); await mobile.setViewportSize({ width: 390, height: 844 }); await mobile.emulateMedia({ reducedMotion: 'reduce' });
     await mobile.goto(server.base); await mobile.locator('.cinema-video').waitFor();
     assert.equal(await mobile.locator('.cinema-video source').count(), 0);
     assert.equal(await mobile.locator('.cinema-video').getAttribute('poster'), '/bg-video-mobile-poster.jpg');

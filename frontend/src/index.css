@@ -7,7 +7,19 @@
 [data-rht-toaster].watchly-toaster > div { pointer-events: none; }
 
 :root {
-  --bg-base: #000000;
+  --watchly-carbon: #0a0b10;
+  --watchly-midnight: #171226;
+  --watchly-blue: #0975b6;
+  --watchly-cyan: #42ccec;
+  --watchly-turquoise: #18d8cb;
+  --watchly-mint: #aaf3eb;
+  --watchly-lavender: #9d91bc;
+  --watchly-gold: #f0e08b;
+  --watchly-ink: #080e19;
+  /* Lift the blue stop on filled controls so their text stays readable throughout the cycle. */
+  --watchly-action-blue: #298cc2;
+  --watchly-spectrum: linear-gradient(135deg, var(--watchly-blue), var(--watchly-cyan), var(--watchly-turquoise), var(--watchly-mint), var(--watchly-lavender), var(--watchly-gold));
+  --bg-base: var(--watchly-carbon);
   --glass-bg: rgba(255,255,255,0.05);
   --glass-bg-strong: rgba(255,255,255,0.08);
   --glass-border: rgba(255,255,255,0.15);
@@ -42,16 +54,6 @@
   --accent-border: rgba(0,0,0,0.20);
 }
 
-.theme-invert {
-  filter: invert(1);
-  mix-blend-mode: screen;
-}
-
-:root.theme-glass-light .theme-invert {
-  filter: none;
-  mix-blend-mode: multiply;
-}
-
 @layer base {
   html {
     font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
@@ -73,6 +75,93 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 100px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--accent-border); }
+}
+
+.watchly-action,
+.account-primary,
+.cinema-primary-action,
+.landing-nav-create,
+.room-launcher-submit,
+.room-launcher-tabs button.is-active,
+.livekit-voice-actions .livekit-voice-join,
+.room-shell[data-room-appearance="cinematic"] .room-voice-join {
+  background-color: var(--watchly-turquoise);
+  background-image: repeating-linear-gradient(90deg,
+    var(--watchly-action-blue) 0%, var(--watchly-cyan) 8%, var(--watchly-turquoise) 16%,
+    var(--watchly-mint) 25%, var(--watchly-lavender) 33%, var(--watchly-gold) 42%, var(--watchly-action-blue) 50%);
+  background-size: 200% 100%;
+  color: var(--watchly-ink);
+  animation: watchly-spectrum-cycle 12s linear infinite;
+}
+
+@keyframes watchly-spectrum-cycle {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+.watchly-action:enabled:hover,
+.account-primary:not(:disabled):hover,
+.room-launcher-submit:enabled:hover {
+  filter: brightness(1.07);
+}
+
+.watchly-action:focus-visible,
+.cinema-primary-action:focus-visible,
+.room-launcher-submit:focus-visible {
+  outline: 2px solid var(--watchly-cyan);
+  outline-offset: 3px;
+}
+
+.watchly-accent-badge {
+  background: linear-gradient(135deg, var(--watchly-turquoise), var(--watchly-mint), var(--watchly-lavender));
+  color: var(--watchly-ink);
+}
+
+.watchly-player-loading {
+  background: radial-gradient(ellipse at center, var(--watchly-midnight), var(--watchly-carbon) 68%);
+  color: #f3f7fc;
+}
+
+.watchly-buffer-ring {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--watchly-carbon);
+  box-shadow: 0 0 24px rgb(66 204 236 / 18%);
+}
+
+.watchly-buffer-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(transparent 5%, var(--watchly-blue) 20%, var(--watchly-cyan) 36%,
+    var(--watchly-turquoise) 51%, var(--watchly-mint) 65%, var(--watchly-lavender) 79%,
+    var(--watchly-gold) 95%, transparent);
+  mask-image: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  animation: watchly-buffer-spin 1.65s linear infinite;
+}
+
+.watchly-buffer-ring img { width: 57%; height: auto; }
+.watchly-buffering-compact .watchly-buffer-ring { width: 58px; height: 58px; }
+.watchly-buffer-progress { background: var(--watchly-spectrum); }
+
+@keyframes watchly-buffer-spin { to { transform: rotate(1turn); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .watchly-action,
+  .account-primary,
+  .cinema-primary-action,
+  .landing-nav-create,
+  .room-launcher-submit,
+  .room-launcher-tabs button.is-active,
+  .livekit-voice-actions .livekit-voice-join,
+  .room-shell[data-room-appearance="cinematic"] .room-voice-join,
+  .watchly-buffer-ring::before { animation-name: none; }
 }
 
 .bg-base-layer {

@@ -7,7 +7,7 @@ services:
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /api/health
-    autoDeploy: true
+    autoDeploy: false
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,6 +19,8 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: LIVEKIT_ROOM_NAMESPACE
+        value: legacy-render
       - key: LIVEKIT_URL
         sync: false
       - key: LIVEKIT_API_KEY
@@ -33,3 +35,9 @@ services:
         value: watchly
       - key: TURN_TTL_SECONDS
         value: 3600
+      - key: TURNSTILE_SITE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: ANON_CREATE_CHALLENGE_AFTER
+        value: 0

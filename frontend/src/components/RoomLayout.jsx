@@ -128,7 +128,7 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
             <div className="mx-auto flex h-full max-w-[1800px] items-center justify-between px-3 sm:px-5">
                 <div className="flex min-w-0 items-center gap-3">
                     <button onClick={() => navigate('/')} className="room-brand flex shrink-0 items-center gap-2.5" title="Watchly home" aria-label="Watchly home">
-                        <img src="/logo.png" alt="Watchly Logo" className="h-10 w-auto theme-invert" />
+                        <img src="/logo.png" alt="Watchly Logo" className="h-10 w-auto" />
                         <span className="hidden text-sm font-bold tracking-tight text-white sm:block">Watchly</span>
                     </button>
 
@@ -440,7 +440,7 @@ const RoomPresentation = () => {
                         Create a new temporary room
                     </button>
                 )}
-                <button disabled={!effectiveJoinNickname.trim() || isJoining || needsProfile || isProfileLoading} className="mt-5 w-full rounded-xl bg-white px-4 py-3 font-bold text-black disabled:opacity-40">
+                <button disabled={!effectiveJoinNickname.trim() || isJoining || needsProfile || isProfileLoading} className="watchly-action mt-5 w-full rounded-xl px-4 py-3 font-bold disabled:opacity-40">
                     {isJoining ? 'Starting room server…' : 'Join room'}
                 </button>
                 <button type="button" onClick={() => navigate('/')} className="mt-3 w-full text-sm text-zinc-500 hover:text-white">Back home</button>

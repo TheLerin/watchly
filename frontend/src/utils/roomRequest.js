@@ -29,6 +29,7 @@ export function createRoomRequester(socket, { schedule = setTimeout, cancelTimer
                     const failure = new Error(response?.error?.message || 'Could not enter the room.');
                     failure.code = response?.error?.code;
                     failure.retryable = Boolean(response?.error?.retryable);
+                    if (['TURNSTILE_REQUIRED', 'TURNSTILE_FAILED'].includes(failure.code)) failure.challenge = response.error.challenge;
                     return finish(failure);
                 }
                 finish(null, response);

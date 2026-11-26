@@ -15,6 +15,8 @@ const emit = (client, event, payload) => new Promise(resolve => client.emit(even
 test.before(async () => {
     server = fork(require.resolve('../server'), [], { env: {
         ...process.env, PORT: String(port), CORS_ORIGIN: 'http://localhost:5173', CONTROLLER_LEASE_MS: '300',
+        NODE_ENV: 'test', SUPABASE_URL: '', SUPABASE_PUBLISHABLE_KEY: '', SUPABASE_SERVICE_ROLE_KEY: '',
+        LIVEKIT_URL: '', LIVEKIT_API_KEY: '', LIVEKIT_API_SECRET: '', TURNSTILE_ENFORCE_ANONYMOUS: 'false',
         TURN_URLS: 'turns:turn.example:443?transport=tcp', TURN_SHARED_SECRET: 'integration-secret'
     }, stdio: 'ignore' });
     for (let attempt = 0; attempt < 150; attempt += 1) {
@@ -48,18 +50,22 @@ test('existing membership events distinguish intentional departure from socket r
     assert.equal((await emit(host, 'room:snapshot', {})).snapshot.members.length, 1);
 });
 
-test('resume credentials keep one member and fence a superseded active socket', async () => {
+test('resume credentials rotate, fence superseded sockets and bound lost-ACK recovery grace', { timeout: 45000 }, async () => {
     const host = await connect();
     const room = await emit(host, 'room:create', { nickname: 'Resume host', protocolVersion: 2 });
     const viewer = await connect();
     const joined = await emit(viewer, 'room:join', { roomId: room.roomId, nickname: 'Resume viewer', protocolVersion: 2 });
     const replacement = await connect();
     const replaced = receive(viewer, 'room:error', error => error.code === 'SESSION_REPLACED');
+    const superseded = receive(viewer, 'disconnect');
     const resumed = await emit(replacement, 'room:join', { roomId: room.roomId, nickname: 'Resume viewer', protocolVersion: 2,
         resumeToken: joined.resumeToken, memberId: joined.memberId });
     assert.equal((await replaced).code, 'SESSION_REPLACED');
+    await superseded;
     assert.equal(resumed.memberId, joined.memberId);
-    assert.equal(resumed.resumeToken, joined.resumeToken);
+    assert.notEqual(resumed.resumeToken, joined.resumeToken);
+    assert.match(resumed.resumeToken, /^[A-Za-z0-9_-]{43}$/);
+    assert.equal(viewer.connected, false);
     assert.equal(resumed.snapshot.members.length, 2);
     assert.equal(resumed.snapshot.members.filter(member => member.userId === joined.memberId).length, 1);
     const invalid = await connect();
@@ -67,6 +73,28 @@ test('resume credentials keep one member and fence a superseded active socket', 
         resumeToken: 'invalid'.repeat(12), memberId: joined.memberId });
     assert.equal(rejected.error.code, 'SESSION_INVALID');
     assert.equal((await emit(invalid, 'room:snapshot', {})).error.code, 'NOT_IN_ROOM');
+    const stale = await emit(invalid, 'room:join', { roomId: room.roomId, nickname: 'Stale session', protocolVersion: 2,
+        resumeToken: joined.resumeToken, memberId: joined.memberId });
+    assert.equal(stale.error.code, 'SESSION_INVALID'); // Previous proof cannot supersede an active replacement.
+    const disconnected = receive(host, 'user_left'); replacement.disconnect(); await disconnected;
+    const recovered = await emit(invalid, 'room:join', { roomId: room.roomId, nickname: 'Lost ACK recovery', protocolVersion: 2,
+        resumeToken: joined.resumeToken, memberId: joined.memberId });
+    assert.equal(recovered.ok, true); assert.equal(recovered.memberId, joined.memberId);
+    assert.notEqual(recovered.resumeToken, joined.resumeToken); assert.notEqual(recovered.resumeToken, resumed.resumeToken);
+    assert.equal(recovered.snapshot.members.filter(member => member.userId === joined.memberId).length, 1);
+    const staleAgain = await connect();
+    const rejectedOldGeneration = await emit(staleAgain, 'room:join', { roomId: room.roomId, nickname: 'Old generation', protocolVersion: 2,
+        resumeToken: joined.resumeToken, memberId: joined.memberId });
+    assert.equal(rejectedOldGeneration.error.code, 'SESSION_INVALID');
+    const recoveredLeft = receive(host, 'user_left'); invalid.disconnect(); await recoveredLeft;
+    await new Promise(resolve => setTimeout(resolve, 30100));
+    const expiredGrace = await emit(staleAgain, 'room:join', { roomId: room.roomId, nickname: 'Expired previous proof', protocolVersion: 2,
+        resumeToken: resumed.resumeToken, memberId: joined.memberId });
+    assert.equal(expiredGrace.error.code, 'SESSION_INVALID');
+    assert.equal((await emit(staleAgain, 'room:snapshot', {})).error.code, 'NOT_IN_ROOM');
+    const currentProof = await emit(staleAgain, 'room:join', { roomId: room.roomId, nickname: 'Current proof', protocolVersion: 2,
+        resumeToken: recovered.resumeToken, memberId: joined.memberId });
+    assert.equal(currentProof.ok, true); assert.equal(currentProof.memberId, joined.memberId);
     assert.equal((await emit(host, 'room:snapshot', {})).snapshot.members.length, 2);
 });
 

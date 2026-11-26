@@ -41,8 +41,11 @@ function registerDriveAccess({ app, io, rooms, env = process.env }) {
                 const cookie = (req.headers.cookie || '').split(';').map(value => value.trim()).find(value => value.startsWith(`watchly_media_${roomId}=`))?.split('=')[1];
                 const proof = await verifyTicket(env.MEDIA_SESSION_SECRET, cookie);
                 if (proof.roomId !== roomId || proof.fileId !== req.query.id) return fail(res);
-                const { room } = voiceMember({ io, rooms }, proof);
-                if (!selectedDrive(room, proof.fileId)) return fail(res);
+                req.watchlyDriveAuthorized = () => {
+                    try { return selectedDrive(voiceMember({ io, rooms }, proof).room, proof.fileId); }
+                    catch { return false; }
+                };
+                if (!req.watchlyDriveAuthorized()) return fail(res);
             }
             res.setHeader('Cache-Control', 'private, no-store');
             res.setHeader('X-Content-Type-Options', 'nosniff');

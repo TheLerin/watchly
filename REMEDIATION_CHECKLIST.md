@@ -18,8 +18,8 @@
 - [x] Focused tests, Chromium access/playback/recovery checks, real workerd idle reconstruction/KDF, deployment dry-run.
 - [x] Room/load and presence simulations through 500 participants/accounts; eight-hour accelerated lifecycle and 60-second in-process soak.
 - [x] Updated implementation, test, security, cost, performance and rollback documentation and source archive.
-- [ ] Clean online install and dependency audit: EPERM/registry DNS blockers here.
-- [ ] Separate Wrangler HTTP integration and full legacy wire suite: localhost EACCES here.
+- [ ] Critical/high upgrades and final clean install/audit: recorded findings remain; automatic review blocked unapproved telemetry. See DEPENDENCY_REMEDIATION.md.
+- [x] Separate Wrangler HTTP integration and full legacy wire suite now pass locally (backend 67/67).
 - [ ] Live services, provider account limits, real devices, active-tab PWA upgrade and long network/media soak: project/device access required.
 - [ ] Production cutover: explicit authorization and passing external acceptance required.
 

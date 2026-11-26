@@ -3,12 +3,17 @@ import { boundedJson, json } from './runtime.mjs';
 const policies = {
   connect: [40, 60000], create: [6, 600000], join: [40, 60000],
   drive: [180, 60000], media: [30, 60000], social: [30, 60000], auth: [20, 60000],
+  anonymousCreate: [1000, 600000], challenge: [1, 600000],
 };
-const dailyBudgets = { rooms: ['DAILY_NEW_ROOM_BUDGET', 1000], social: ['DAILY_SOCIAL_LOOKUP_BUDGET', 10000], media: ['DAILY_MEDIA_JOIN_BUDGET', 100] };
-export async function reserveBudget(env, kind) {
+const dailyBudgets = new Map([
+  ['rooms', ['DAILY_NEW_ROOM_BUDGET', 1000]], ['social', ['DAILY_SOCIAL_LOOKUP_BUDGET', 10000]],
+  ['media', ['DAILY_MEDIA_JOIN_BUDGET', 100]], ['drive', ['DAILY_DRIVE_BYTE_BUDGET', null]],
+]);
+export async function reserveBudget(env, kind, units = 1) {
+  if (kind === 'drive' && !env.DAILY_DRIVE_BYTE_BUDGET?.trim()) return true;
   if (env.NODE_ENV !== 'production' && env.QUOTA_ENFORCE !== 'true') return true;
   if (!env.ABUSE) return false;
-  const response = await env.ABUSE.get(env.ABUSE.idFromName('quota')).fetch(new Request('https://internal/quota', { method: 'POST', body: JSON.stringify({ kind }) }));
+  const response = await env.ABUSE.get(env.ABUSE.idFromName('quota')).fetch(new Request('https://internal/quota', { method: 'POST', body: JSON.stringify({ kind, units }) }));
   return response.ok;
 }
 export async function actorKey(value) {
@@ -33,18 +38,18 @@ export class AbuseGuard {
   }
   async fetch(request) {
     if (new URL(request.url).pathname === '/quota') {
-      const { kind } = await boundedJson(request);
-      if (!dailyBudgets[kind]) return json({ error: 'Invalid budget' }, 400);
-      const [setting, fallback] = dailyBudgets[kind], configured = Number(this.env[setting]);
+      const { kind, units = 1 } = await boundedJson(request);
+      if (!dailyBudgets.has(kind) || !Number.isSafeInteger(units) || units < 1 || (kind !== 'drive' && units !== 1)) return json({ error: 'Invalid budget' }, 400);
+      const [setting, fallback] = dailyBudgets.get(kind), configured = Number(this.env[setting]);
       const limit = Number.isSafeInteger(configured) && configured >= 0 ? configured : fallback;
       const day = Math.floor(Date.now() / 86400000), previous = this.sql.exec('SELECT count FROM daily_usage WHERE day=? AND kind=?', day, kind).toArray()[0]?.count || 0;
-      if (previous >= limit) return json({ error: 'DAILY_BUDGET_REACHED' }, 429);
-      this.sql.exec('INSERT INTO daily_usage VALUES(?,?,1) ON CONFLICT(day,kind) DO UPDATE SET count=count+1', day, kind);
+      if (limit === null || units > limit - previous) return json({ error: 'DAILY_BUDGET_REACHED' }, 429);
+      this.sql.exec('INSERT INTO daily_usage VALUES(?,?,?) ON CONFLICT(day,kind) DO UPDATE SET count=count+excluded.count', day, kind, units);
       if (await this.ctx.storage.getAlarm() === null) await this.ctx.storage.setAlarm((day + 1) * 86400000);
-      if (previous + 1 === Math.ceil(limit * 0.8)) console.warn(JSON.stringify({ code: 'APPLICATION_BUDGET_80_PERCENT', kind }));
+      if (previous < Math.ceil(limit * 0.8) && previous + units >= Math.ceil(limit * 0.8)) console.warn(JSON.stringify({ code: 'APPLICATION_BUDGET_80_PERCENT', kind }));
       return json({ ok: true });
     }
-    const { actor, action } = await boundedJson(request);
+    const { actor, action, challengeAfter } = await boundedJson(request);
     if (!/^[a-f0-9]{64}$/.test(actor || '') || !policies[action]) return json({ error: 'Invalid rate request' }, 400);
     const now = Date.now(), [limit, window] = policies[action];
     const row = this.sql.exec('SELECT count,expires FROM budgets WHERE actor=? AND action=?', actor, action).toArray()[0];
@@ -52,7 +57,8 @@ export class AbuseGuard {
     if (!row && this.sql.exec('SELECT COUNT(*) AS count FROM budgets').toArray()[0].count >= 10000) return json({ error: 'RATE_LIMITED' }, 429);
     this.sql.exec('INSERT INTO budgets VALUES(?,?,?,?) ON CONFLICT(actor,action) DO UPDATE SET count=excluded.count,expires=excluded.expires', actor, action, row?.expires > now ? row.count + 1 : 1, row?.expires > now ? row.expires : now + window);
     if (await this.ctx.storage.getAlarm() === null) await this.ctx.storage.setAlarm(now + 600000);
-    return json({ ok: true });
+    const count = row?.expires > now ? row.count + 1 : 1;
+    return json({ ok: true, ...(action === 'anonymousCreate' ? { challengeRequired: count > (Number.isInteger(challengeAfter) && challengeAfter >= 0 && challengeAfter <= 5 ? challengeAfter : 2) } : {}) });
   }
   async alarm() {
     this.sql.exec('DELETE FROM budgets WHERE expires<=?', Date.now());

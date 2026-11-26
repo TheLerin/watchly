@@ -527,6 +527,14 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 typeof payload.resumeToken !== 'string' || tokenHash(payload.resumeToken) !== boundUser.resumeTokenHash)) {
                 return rejectRoom('ALREADY_IN_ROOM', 'Leave the current room before entering another room.');
             }
+            if (creating && runtime.checkCreation) {
+                const accountBefore = socket.data.account;
+                const verification = await runtime.checkCreation(socket, payload);
+                if (!verification?.ok) { socket.emit('room:error', verification.error); callback?.(verification); return; }
+                if (!socket.connected || socket.data.account !== accountBefore) return rejectRoom('AUTH_REPLACED', 'Your session changed. Retry room creation.');
+                if (rooms.has(roomId)) return rejectRoom('ROOM_EXISTS', 'This room already exists.');
+                if (getUserBySocket(rooms.get(socket.data.roomId), socket.id)) return rejectRoom('ALREADY_IN_ROOM', 'Leave the current room first.');
+            }
             if (creating) rooms.set(roomId, createRoom(roomId));
             const room = rooms.get(roomId);
             if (!room) {
@@ -757,7 +765,7 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             });
         });
 
-        on('kick_user', async ({ roomId, targetId } = {}) => {
+        on('kick_user', async ({ roomId, targetId, requireApproval = false } = {}) => {
             const room = getBoundRoom(socket, roomId);
             const sender = getUserBySocket(room, socket.id);
             const target = room?.users.find(user => (
@@ -767,6 +775,10 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (!sender || !target) return;
             const allowed = canModerateMember(sender, target, room);
             if (!allowed) return;
+            if (requireApproval === true) {
+                if (sender.role !== 'Host') return;
+                accessControl.requireApproval(room);
+            }
 
             room.kickedUserIds.add(target.userId);
             accessControl.ban(room, target);

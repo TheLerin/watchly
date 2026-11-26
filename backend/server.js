@@ -2,13 +2,14 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const axios = require('axios');
 const crypto = require('crypto');
 const { PROTOCOL_VERSION } = require('./validators');
 const { createAccountService } = require('./accounts');
 const { registerLivekitVoice } = require('./livekitVoice');
 const { registerDriveAccess } = require('./driveAccess');
+const { requestDriveHop } = require('./driveUpstream');
 const { WindowLimiter, clientAddress } = require('./rateLimit');
+const { createLegacyCreationGate } = require('./turnstile');
 const ingress = new WindowLimiter();
 const trustedHops = Number(process.env.TRUST_PROXY_HOPS || 0);
 if (!Number.isInteger(trustedHops) || trustedHops < 0 || trustedHops > 2) throw new Error('Invalid TRUST_PROXY_HOPS');
@@ -180,6 +181,10 @@ app.all('/api/proxy/gdrive', async (req, res) => {
 
     const streamResponse = (hop) => {
         clearTimeout(resolutionTimer); // Header-resolution deadline must not truncate a long movie.
+        if (req.watchlyDriveAuthorized && !req.watchlyDriveAuthorized()) {
+            hop.data.destroy();
+            return res.status(403).end();
+        }
         const ct = hop.headers['content-type'] || 'video/mp4';
         setCorsHeaders();
         res.setHeader('Content-Type', ct);
@@ -202,11 +207,17 @@ app.all('/api/proxy/gdrive', async (req, res) => {
             }, STREAM_IDLE_MS);
         };
         resetIdle();
+        const recheck = req.watchlyDriveAuthorized && setInterval(() => {
+            if (!req.watchlyDriveAuthorized()) {
+                res.destroy();
+                hop.data.destroy();
+            }
+        }, 15000);
         hop.data.on('data', resetIdle);
         hop.data.on('end',  () => clearTimeout(idleTimer));
         hop.data.on('error',() => { clearTimeout(idleTimer); res.destroy(); });
         hop.data.pipe(res);
-        res.on('close', () => { clearTimeout(idleTimer); try { hop.data.destroy(); } catch (_) {} });
+        res.on('close', () => { clearInterval(recheck); clearTimeout(idleTimer); try { hop.data.destroy(); } catch (_) {} });
     };
 
     // FIX #7: Cap at 64 KB â€” enough to find any confirm token / form field in the HTML
@@ -226,7 +237,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
         const headers = { 'User-Agent': UA, 'Referer': REFERER, 'Accept': 'video/mp4,video/webm,video/*;q=0.9,*/*;q=0.8' };
         if (cookieJar)           headers['Cookie'] = cookieJar;
         if (req.headers.range)   headers['Range']  = req.headers.range;
-        const hop = await axios({ method: req.method, url, responseType: 'stream', headers, signal: controller.signal, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
+        const hop = await requestDriveHop(url, { method: req.method, headers, signal: controller.signal, timeout: HOP_TIMEOUT_MS });
         if (hop.status === 416 || ([200, 206].includes(hop.status) && /^(video\/|audio\/|application\/octet-stream)/i.test(hop.headers['content-type'] || ''))) {
             streamResponse(hop); return true;
         }
@@ -289,12 +300,7 @@ app.all('/api/proxy/gdrive', async (req, res) => {
             // FIX #1: Re-apply Range at the top of EVERY hop after first redirect (headers recreated each iteration)
             if (rangeAttached && req.headers.range)     headers['Range']  = req.headers.range;
 
-            let hop;
-            try {
-                hop = await axios({ method: isHead ? 'HEAD' : 'GET', url, responseType: 'stream', headers, signal: controller.signal, maxRedirects: 0, validateStatus: s => s < 600, timeout: HOP_TIMEOUT_MS });
-            } catch (e) {
-                if (e.response && e.response.headers.location) { hop = e.response; } else { throw e; }
-            }
+            const hop = await requestDriveHop(url, { method: isHead ? 'HEAD' : 'GET', headers, signal: controller.signal, timeout: HOP_TIMEOUT_MS });
 
             const sc = hop.headers['set-cookie'];
             if (sc) {
@@ -401,7 +407,9 @@ app.use((err, req, res, next) => {
     }
 });
 
-require('./realtime')({ io, rooms, buildIceConfig, accounts, runtime: { onMemberKicked: livekit.removeMember } });
+require('./realtime')({ io, rooms, buildIceConfig, accounts, runtime: { onMemberKicked: livekit.removeMember,
+    checkCreation: createLegacyCreationGate({ address: socket => clientAddress(socket.request, trustedHops),
+        hostname: socket => new URL(socket.handshake.headers.origin || FRONTEND_ORIGINS[0]).hostname }) } });
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

@@ -1,9 +1,10 @@
 const express = require('express');
-const { AccessToken, TrackSource, RoomServiceClient } = require('livekit-server-sdk');
-const { livekitConfig, voiceMember, voiceRoomName, voiceIdentity } = require('./livekitIdentity');
+const { AccessToken, TrackSource, RoomServiceClient, WebhookReceiver } = require('livekit-server-sdk');
+const { livekitConfig, voiceMember, voiceRoomName, voiceRoomCode, mediaNamespace, voiceIdentity } = require('./livekitIdentity');
 const denied = (status, message) => Object.assign(new Error(message), { status });
 
 function registerLivekitVoice({ app, io, rooms, accounts, env = process.env }) {
+    if (mediaNamespace(env) !== 'legacy-render') throw new Error('The legacy backend must use LIVEKIT_ROOM_NAMESPACE=legacy-render.');
     const router = express.Router(), issued = new Map();
     const cleanup = setInterval(() => { const now = Date.now(); for (const [id, bucket] of issued) if (now - bucket.startedAt >= 60000) issued.delete(id); }, 60000);
     cleanup.unref?.();
@@ -44,10 +45,10 @@ function registerLivekitVoice({ app, io, rooms, accounts, env = process.env }) {
             token.roomConfig = { maxParticipants: Math.min(6, Math.max(2, Number(env.LIVEKIT_MAX_PARTICIPANTS) || 6)), emptyTimeout: 120, departureTimeout: 30 };
             if (env.NODE_ENV === 'production' || env.LIVEKIT_ENFORCE_ROOM_LIMITS === 'true') {
                 const provider = new RoomServiceClient(config.serverUrl.replace(/^ws/, 'http'), config.apiKey, config.apiSecret);
-                const created = await provider.createRoom({ name: voiceRoomName(req.body.roomId), maxParticipants: token.roomConfig.maxParticipants, emptyTimeout: 120, departureTimeout: 30 });
+                const created = await provider.createRoom({ name: voiceRoomName(req.body.roomId, env), maxParticipants: token.roomConfig.maxParticipants, emptyTimeout: 120, departureTimeout: 30 });
                 if (!created.maxParticipants || created.maxParticipants > token.roomConfig.maxParticipants) throw denied(503, 'This call room needs to empty before the participant limit can apply.');
             }
-            token.addGrant({ room: voiceRoomName(req.body.roomId), roomJoin: true, canPublish: true, canSubscribe: true,
+            token.addGrant({ room: voiceRoomName(req.body.roomId, env), roomJoin: true, canPublish: true, canSubscribe: true,
                 canPublishData: false, canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA] });
             const participantToken = await token.toJwt();
             check(); // Membership/account changes during async verification/signing fence this response.
@@ -63,9 +64,40 @@ function registerLivekitVoice({ app, io, rooms, accounts, env = process.env }) {
         const config = livekitConfig(env);
         if (!config) return;
         const client = new RoomServiceClient(config.serverUrl.replace(/^ws/, 'http'), config.apiKey, config.apiSecret);
-        try { await client.removeParticipant(voiceRoomName(roomId), voiceIdentity(memberId)); }
+        try { await client.removeParticipant(voiceRoomName(roomId, env), voiceIdentity(memberId)); }
         catch (error) { if (error.status !== 404 && error.code !== 'not_found') throw error; }
     };
+    const receipts = new Map(), pending = new Map();
+    app.post('/api/livekit/webhook', express.raw({ type: () => true, limit: '32kb' }), async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        const config = livekitConfig(env);
+        let event;
+        try {
+            if (!config || !Buffer.isBuffer(req.body)) throw new Error('Missing webhook configuration');
+            event = await new WebhookReceiver(config.apiKey, config.apiSecret).receive(req.body.toString('utf8'), req.get('authorization'));
+        } catch { return res.status(401).json({ error: 'Invalid webhook' }); }
+        const roomId = voiceRoomCode(event.room?.name, env);
+        if (!roomId) return res.json({ ok: true, ignored: true });
+        const now = Date.now();
+        for (const [id, until] of receipts) if (until <= now) receipts.delete(id);
+        const eventId = typeof event.id === 'string' && event.id.length <= 128 ? event.id : null;
+        if (eventId && receipts.has(eventId)) return res.json({ ok: true, duplicate: true });
+        const participantIdentity = event.participant?.identity;
+        const memberId = typeof participantIdentity === 'string' && /^watchly-[\w-]{1,100}$/.test(participantIdentity) ? participantIdentity.slice(8) : null;
+        const room = rooms.get(roomId), member = room?.users.find(value => value.userId === memberId && value.connected);
+        const removalKey = `${roomId}:${memberId}`;
+        try {
+            if (event.event === 'participant_joined' && memberId && (!member || room.kickedUserIds.has(memberId))) {
+                if (!pending.has(removalKey)) {
+                    if (pending.size >= 128) return res.status(503).json({ error: 'Media moderation is busy. Retry webhook delivery.' });
+                    pending.set(removalKey, Promise.resolve().then(() => dispose.removeMember(roomId, memberId)).finally(() => pending.delete(removalKey)));
+                }
+                await pending.get(removalKey);
+            }
+        } catch { return res.status(503).json({ error: 'Media removal unavailable. Retry webhook delivery.' }); }
+        if (eventId) { if (receipts.size >= 128) receipts.delete(receipts.keys().next().value); receipts.set(eventId, now + 600000); }
+        return res.json({ ok: true });
+    });
     return dispose;
 }
 

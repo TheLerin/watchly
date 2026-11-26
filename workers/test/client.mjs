@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(new URL('../../backend/package.json', import.meta.url));
 const WebSocket = require('ws');
 
-export async function client(base, roomId) {
+export async function client(base, roomId, { recordEvents = true } = {}) {
   const url = new URL(`/ws/rooms/${roomId}`, base); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(url, { origin: base }), pending = new Map(), events = [];
   let seq = 0, socketId;
@@ -14,7 +14,7 @@ export async function client(base, roomId) {
       const frame = JSON.parse(String(message));
       if (frame.type === 'welcome') { socketId = frame.id; clearTimeout(timeout); resolve(); }
       if (frame.ack && pending.has(frame.ack)) { const call = pending.get(frame.ack); clearTimeout(call.timeout); pending.delete(frame.ack); call.resolve(frame.result); }
-      if (frame.event) events.push(frame);
+      if (recordEvents && frame.event) events.push(frame);
     });
   });
   return { ws, events, socketId,

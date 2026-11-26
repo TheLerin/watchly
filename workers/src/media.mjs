@@ -25,7 +25,10 @@ export function buildIceConfig(env, memberId) {
 }
 
 export class LiveKitProvider {
-  constructor(env, fetcher = fetch) { this.env = env; this.fetcher = fetcher; this.config = identity.livekitConfig(env); }
+  constructor(env, fetcher = fetch) {
+    if (env.NODE_ENV === 'production' && !['staging', 'production'].includes(env.LIVEKIT_ROOM_NAMESPACE)) throw Object.assign(new Error('Set the Worker media deployment namespace.'), { status: 503 });
+    this.env = { ...env, LIVEKIT_ROOM_NAMESPACE: env.LIVEKIT_ROOM_NAMESPACE || 'development' }; this.fetcher = fetcher; this.config = identity.livekitConfig(this.env);
+  }
   async ensureRoom(roomId) {
     if (!this.config) throw Object.assign(new Error('Calls are not configured.'), { status: 503 });
     const now = Math.floor(Date.now() / 1000), maximum = Math.min(6, Math.max(2, Number(this.env.LIVEKIT_MAX_PARTICIPANTS) || 6));
@@ -33,7 +36,7 @@ export class LiveKitProvider {
     const url = new URL(this.config.serverUrl); url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
     const response = await this.fetcher(new URL('/twirp/livekit.RoomService/CreateRoom', url), {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: identity.voiceRoomName(roomId), max_participants: maximum, empty_timeout: 120, departure_timeout: 30 }), signal: AbortSignal.timeout(8000),
+      body: JSON.stringify({ name: identity.voiceRoomName(roomId, this.env), max_participants: maximum, empty_timeout: 120, departure_timeout: 30 }), signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw Object.assign(new Error('The call service could not reserve a room. Retry shortly.'), { status: 503 });
     const room = await response.json(), actual = room.maxParticipants ?? room.max_participants;
@@ -46,18 +49,21 @@ export class LiveKitProvider {
     return { serverUrl: this.config.serverUrl, participantToken: await signJwt(this.config.apiSecret, {
       iss: this.config.apiKey, sub: identity.voiceIdentity(member.userId), name: member.nickname, nbf: now - 5, exp: now + 120,
       roomConfig: { maxParticipants: Math.min(6, Math.max(2, Number(this.env.LIVEKIT_MAX_PARTICIPANTS) || 6)), emptyTimeout: 120, departureTimeout: 30 },
-      video: { room: identity.voiceRoomName(roomId), roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false, canPublishSources: ['microphone', 'camera'] },
+      video: { room: identity.voiceRoomName(roomId, this.env), roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false, canPublishSources: ['microphone', 'camera'] },
     }) };
   }
   async remove(roomId, memberId) {
-    if (!this.config) return;
+    if (!this.config) {
+      if (this.env.NODE_ENV === 'production') throw new Error('LiveKit removal is not configured');
+      return;
+    }
     const now = Math.floor(Date.now() / 1000);
     const token = await signJwt(this.config.apiSecret, { iss: this.config.apiKey, nbf: now - 5, exp: now + 60,
-      video: { room: identity.voiceRoomName(roomId), roomAdmin: true } });
+      video: { room: identity.voiceRoomName(roomId, this.env), roomAdmin: true } });
     const url = new URL(this.config.serverUrl); url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
     const response = await this.fetcher(new URL('/twirp/livekit.RoomService/RemoveParticipant', url), {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room: identity.voiceRoomName(roomId), identity: identity.voiceIdentity(memberId) }), signal: AbortSignal.timeout(8000),
+      body: JSON.stringify({ room: identity.voiceRoomName(roomId, this.env), identity: identity.voiceIdentity(memberId) }), signal: AbortSignal.timeout(8000),
     });
     if (!response.ok && response.status !== 404) throw new Error('Media participant removal failed');
   }

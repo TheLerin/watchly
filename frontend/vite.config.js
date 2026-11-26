@@ -27,8 +27,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      workbox: { skipWaiting: false, clientsClaim: false, globIgnores: ['**/bg-video*.mp4', '**/bg-video*.webm'], navigateFallbackDenylist: [/^\/api\//, /^\/ws\//] },
-      includeAssets: ['logo.png', 'bg-video-poster.jpg', 'assets/sofa-couple-mobile.webp'],
+      workbox: { skipWaiting: false, clientsClaim: false, globIgnores: ['**/bg-video*.mp4', '**/bg-video*.webm'], navigateFallbackDenylist: [/^\/api\//, /^\/ws\//, /^\/auth\/callback(?:\/|\?|$)/] },
+      includeAssets: ['logo.png', 'logo-512.png', 'bg-video-poster.jpg', 'assets/sofa-couple-mobile.webp'],
       manifest: {
         name: 'Watchly',
         short_name: 'Watchly',
@@ -44,7 +44,7 @@ export default defineConfig({
             type: 'image/png'
           },
           {
-            src: '/logo.png',
+            src: '/logo-512.png',
             sizes: '512x512',
             type: 'image/png'
           }

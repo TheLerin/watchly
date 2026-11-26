@@ -1,5 +1,7 @@
 # Security review — 26 November 2026
 
+> Current targeted status: see RELEASE_GATES.md and PROJECT_ISSUES.md. Older audit/install/localhost blocker statements below describe the earlier baseline; current full backend and HTTP integration pass, while critical/high dependency remediation and live-service acceptance remain open. Turnstile and media namespace changes are documented in docs/TURNSTILE_AND_MEDIA_ISOLATION.md.
+
 The controls below have the stated local evidence; this is not production security sign-off. Full failures and external gates remain in TEST_REPORT.md and KNOWN_LIMITATIONS.md.
 
 - Server-owned membership and roles authorize every room mutation. Shared safeEvents validates payloads, ACKs, byte/rate bounds and exceptions on both transports. Native version/ID/sequence/event/connection checks fence replay and cross-room commands.

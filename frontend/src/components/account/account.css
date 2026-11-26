@@ -1,8 +1,9 @@
-.account-page { min-height: 100dvh; background: radial-gradient(ellipse at 50% 0%,rgb(119 110 160 / 9%),transparent 60%),var(--bg,#080809); color: var(--text,#f5f5f7); font-family: inherit; }
+.account-page { min-height: 100dvh; background: radial-gradient(ellipse at 50% 0%,var(--watchly-midnight),transparent 64%),var(--bg-base); color: var(--text,#f5f5f7); font-family: inherit; }
+:root.theme-glass-light .account-page:not(.my-watchly-page) { background: var(--bg-base); }
 .account-page button,.account-page input,.account-nav-actions button { font: inherit; }
 .account-header { width: min(1160px,calc(100% - 40px)); margin: auto; min-height: 88px; display:flex; justify-content:space-between; align-items:center; gap:16px; border-bottom:1px solid rgb(255 255 255 / 7%); }
 .account-brand { display:inline-flex; align-items:center; gap:9px; font-size:20px; font-weight:750; color:inherit; text-decoration:none; }
-.account-brand img { width:36px; height:36px; object-fit:contain; filter:invert(1); }
+.account-brand img { width:36px; height:36px; object-fit:contain; }
 .account-main { width:min(1040px,calc(100% - 40px)); margin:0 auto; padding:48px 0 80px; }
 .account-main h1 { font-size:clamp(26px,4vw,36px); line-height:1.2; font-weight:700; letter-spacing:-.035em; margin:12px 0; }
 .account-main h2,.account-dialog h2 { font-size:18px; font-weight:650; margin:0 0 20px; }
@@ -10,10 +11,10 @@
 .account-muted { color:var(--text-muted,#92929d); font-size:14px; line-height:1.65; margin:12px 0; }
 .account-muted.small { font-size:12px; }
 .account-primary,.account-secondary,.account-text-action { min-height:44px; display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:10px 16px; border-radius:13px; font-size:13px; font-weight:600; cursor:pointer; text-decoration:none; white-space:nowrap; }
-.account-primary { background:var(--text,#f4f4f6); color:var(--bg,#080809); border:1px solid transparent; }
+.account-primary { border:1px solid transparent; }
 .account-secondary { background:rgb(255 255 255 / 4%); color:var(--text,#f4f4f6); border:1px solid rgb(255 255 255 / 11%); }
 .account-text-action { background:transparent; border:0; color:var(--text-muted,#babac4); padding:10px 8px; }
-.account-primary:hover,.account-secondary:hover { filter:brightness(.92); }
+.account-secondary:hover { filter:brightness(.92); }
 .account-page button:disabled,.account-dialog button:disabled,.account-nav-actions button:disabled { opacity:.4; cursor:default; }
 .account-page :focus-visible,.account-dialog :focus-visible,.account-nav-actions :focus-visible { outline:2px solid var(--text,#fff); outline-offset:3px; }
 .account-card { border:1px solid var(--glass-border,rgb(255 255 255 / 9%)); background:var(--glass-bg,rgb(255 255 255 / 2%)); border-radius:22px; padding:26px; box-shadow:0 12px 35px rgb(0 0 0 / 10%); }
@@ -27,7 +28,7 @@
 .account-notice,.account-error { padding:12px 14px; margin:16px 0; border-radius:12px; font-size:13px; line-height:1.6; border:1px solid rgb(255 255 255 / 10%); background:rgb(255 255 255 / 3%); }
 .account-error { color:#fca5a5; border-color:rgb(248 113 113 / 20%); background:rgb(248 113 113 / 5%); }
 .account-nav-actions { display:flex; align-items:center; gap:8px; }
-.landing-nav-actions .account-primary { color:var(--bg,#080809); }
+.landing-nav-actions .account-primary { color:var(--watchly-ink); }
 .account-avatar { flex-shrink:0; display:inline-flex; position:relative; align-items:center; justify-content:center; border-radius:50%; background:rgb(128 128 142 / 15%); color:inherit; border:1px solid rgb(128 128 142 / 20%); font-size:14px; font-weight:700; overflow:hidden; }
 .account-avatar img { position:absolute; width:100%; height:100%; object-fit:cover; }
 .account-avatar-button { background:transparent; border:0; padding:4px; min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
@@ -73,7 +74,6 @@
 }
 .my-watchly-page .account-main { width: min(1240px,calc(100% - 40px)); padding-top: 40px; }
 .my-watchly-page .account-header { border-color: var(--home-border); }
-:root.theme-glass-light .my-watchly-page .account-brand img { filter: none; }
 .my-watchly-heading { margin-bottom: 36px; }
 .my-watchly-heading > div:first-child { min-width: 0; }
 .my-watchly-heading h1 { overflow-wrap: anywhere; }

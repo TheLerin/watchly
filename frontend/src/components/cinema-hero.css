@@ -7,7 +7,7 @@
   min-height: 100vh;
   overflow-x: clip;
   color: #f8f8fa;
-  background: #050506;
+  background: var(--watchly-carbon);
   isolation: isolate;
 }
 
@@ -79,8 +79,6 @@
   width: 38px;
   height: 38px;
   object-fit: contain;
-  filter: invert(1);
-  mix-blend-mode: screen;
 }
 
 .landing-nav-links {
@@ -122,8 +120,7 @@
   min-height: 44px;
   padding: 0 17px;
   border-radius: 14px;
-  background: rgb(255 255 255 / 94%);
-  color: #08080a !important;
+  color: var(--watchly-ink) !important;
   font-size: 0.8rem;
   font-weight: 750;
   box-shadow: 0 8px 28px rgb(0 0 0 / 20%);
@@ -131,7 +128,6 @@
 }
 
 .landing-nav-create:hover {
-  background: white;
   transform: translateY(-1px);
 }
 
@@ -141,7 +137,7 @@
   z-index: 20;
   inset: 0;
   overflow: hidden;
-  background: #020203;
+  background: var(--watchly-carbon);
 }
 
 .cinema-stage,
@@ -335,8 +331,6 @@
 }
 
 .cinema-primary-action {
-  background: rgb(255 255 255 / 94%);
-  color: #09090b;
   box-shadow: 0 12px 30px rgb(0 0 0 / 25%);
 }
 
@@ -817,11 +811,6 @@
   font-weight: 700;
 }
 
-.room-launcher-tabs button.is-active {
-  background: rgb(255 255 255 / 92%);
-  color: #09090b;
-}
-
 .room-launcher-field {
   margin-top: 18px;
   display: grid;
@@ -883,8 +872,6 @@
   align-items: center;
   border: 0;
   border-radius: 14px;
-  background: white;
-  color: #09090b;
   cursor: pointer;
   font-size: 0.84rem;
   font-weight: 800;

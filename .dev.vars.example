@@ -24,3 +24,16 @@ DAILY_SOCIAL_LOOKUP_BUDGET=10000
 DAILY_MEDIA_JOIN_BUDGET=100
 LIVEKIT_MAX_PARTICIPANTS=6
 ENABLE_DIAGNOSTICS=false
+
+# Separate media rooms from other deployments, even when API keys are shared.
+LIVEKIT_ROOM_NAMESPACE=development
+
+# Use separate Turnstile widgets for each deployed environment. Secret never belongs in VITE_* or Git.
+TURNSTILE_SITE_KEY=
+TURNSTILE_SECRET_KEY=
+ANON_CREATE_CHALLENGE_AFTER=2
+# Development only: production always enforces anonymous challenge policy.
+TURNSTILE_ENFORCE_ANONYMOUS=false
+
+# Optional daily Worker Drive byte cap. Empty leaves the existing request-based limits in effect.
+DAILY_DRIVE_BYTE_BUDGET=

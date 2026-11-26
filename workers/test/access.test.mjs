@@ -69,3 +69,13 @@ test('guest continuity bans fresh socket joins using the same credential and hos
   assert.equal((await host.send('room:unban', { memberId: admitted.memberId })).ok, true);
   assert.equal((await returning.send('room:join', { memberId: admitted.memberId, resumeToken: admitted.resumeToken, roomId: 'ABCDEFG', nickname: 'Visitor', guestKey: 'v'.repeat(43), protocolVersion: 2 })).ok, true);
 });
+
+test('host can kick a guest and require approval before anyone joins with a fresh identity', async () => {
+  const { setup, item, host, join } = await fixture();
+  const visitor = await connect(item), admitted = await join(visitor);
+  await host.send('kick_user', { roomId: 'ABCDEFG', targetId: admitted.memberId, requireApproval: true });
+  await setup.evict('ABCDEFG');
+  const returning = await connect(item);
+  assert.equal((await join(returning, { guestKey: 'n'.repeat(43) })).error.code, 'APPROVAL_REQUIRED');
+  assert.equal((await host.send('room:access-get')).access.policy.approvalRequired, true);
+});

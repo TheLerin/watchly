@@ -1,0 +1,65 @@
+{
+  "note": "Read-only observations from completed local logs; command exit/timing records remain in verification.json. Dry-run evidence predates the latest test-harness changes and does not verify remote resources.",
+  "observations": [
+    {
+      "check": "browser-harness",
+      "logRecordedAt": "2026-11-26T07:43:56.918220+00:00",
+      "completionMarkerPresent": true,
+      "passLines": [
+        "PASS Chromium host access controls, approval and automatic admission, private invitations, password entry and URL credential cleanup.",
+        "PASS Chromium queue deltas and missing-revision recovery.",
+        "PASS Chromium local-file selection, metadata fingerprint/readiness, synchronized play/pause and seek.",
+        "PASS Chromium desktop/mobile compressed background decoding, responsive variant selection and loop restart.",
+        "PASS Chromium mandatory anonymous Turnstile prompt, safe cancellation, server verification and automatic room creation.",
+        "PASS Chromium UI + SQLite harness: native create/join/chat, direct routes, reconstructed room, mobile layout, reduced-motion poster, no page errors."
+      ]
+    },
+    {
+      "check": "workerd-direct",
+      "logRecordedAt": "2026-11-26T07:45:30.004355+00:00",
+      "completionMarkerPresent": true,
+      "passLines": [
+        "PASS workerd native WebSockets, SQLite Durable Objects, permissions, chat, queue, access policy and moderation.",
+        "PASS workerd negotiated delivery receipts and chunked large-snapshot reassembly.",
+        "PASS workerd actual idle eviction and hibernating WebSocket reconstruction with SQLite state, access policy and Host authority.",
+        "PASS workerd anonymous creation challenge threshold and denial without a server-verified token.",
+        "PASS workerd WebCrypto PBKDF2 600000 iterations.",
+        "workerd/server/server\\run.rs:668: debug: [ PASS ] watchly-direct-runtime-tests (25.1241158s)",
+        "workerd/server/server\\run.rs:668: debug: [ PASS ] watchly-direct-runtime-tests:anonymousChallenge (71.8147ms)",
+        "workerd/server/server\\run.rs:668: debug: [ PASS ] watchly-direct-runtime-tests:cryptoCompatibility (1.1212871s)"
+      ]
+    },
+    {
+      "check": "workerd-integration",
+      "logRecordedAt": "2026-11-26T07:47:30.337002+00:00",
+      "completionMarkerPresent": true,
+      "passLines": [
+        "PASS real Wrangler/workerd: native room, chat, queue, source, host-only authorization, kick, media authorization, SPA and Origin checks."
+      ]
+    },
+    {
+      "check": "browser-wire",
+      "logRecordedAt": "2026-11-26T11:13:12.658514+00:00",
+      "completionMarkerPresent": true,
+      "passLines": [
+        "PASS two-browser native rooms/chat, direct SPA navigation, mobile reduced-motion poster."
+      ]
+    },
+    {
+      "check": "wrangler-staging-dry-run",
+      "logRecordedAt": "2026-11-26T07:15:28.849945+00:00",
+      "completionMarkerPresent": true,
+      "passLines": [
+        "--dry-run: exiting now."
+      ]
+    },
+    {
+      "check": "wrangler-production-dry-run",
+      "logRecordedAt": "2026-11-26T07:15:40.970443+00:00",
+      "completionMarkerPresent": true,
+      "passLines": [
+        "--dry-run: exiting now."
+      ]
+    }
+  ]
+}

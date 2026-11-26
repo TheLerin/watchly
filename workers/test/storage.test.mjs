@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { context, environment, connect } from './harness.mjs';
 import { RoomStorage } from '../src/RoomStorage.mjs';
+import { WatchRoom } from '../src/WatchRoom.mjs';
 import { encode } from '../src/runtime.mjs';
 
 async function fixture() {
@@ -50,6 +51,25 @@ test('schema 2 upgrades to 3 while preserving granular records and preventing un
   assert.equal(item.ctx.storage.sql.exec('SELECT version FROM storage_schema').toArray()[0].version, 3);
   assert.deepEqual(item.ctx.storage.sql.exec('SELECT * FROM queue_items').toArray(), before);
   assert.equal(upgraded.load().rooms.get('ABCDEFG').users[0].role, 'Host');
+});
+
+test('a compatible restore keeps a drained private room protected and rotates the returning host proof', async () => {
+  const { item, host, joined, setup } = await fixture();
+  assert.equal((await host.send('room:access-update', { revision: 0, visibility: 'private' })).ok, true);
+  await host.close();
+  const saved = item.object.store.load();
+  const ctx = context(); ctx.storage.ctx = ctx;
+  new RoomStorage(ctx.storage).write(saved);
+  const restored = { ctx, object: new WatchRoom(ctx, setup.env) };
+  await ctx.ready;
+  const guest = await connect(restored);
+  const join = { roomId: joined.roomId, protocolVersion: 2, nickname: 'Guest' };
+  assert.equal((await guest.send('room:join', join)).error.code, 'INVITE_REQUIRED');
+  const recovered = await connect(restored);
+  const resume = await recovered.send('room:join', { ...join, memberId: joined.memberId, resumeToken: joined.resumeToken });
+  assert.equal(resume.user.role, 'Host');
+  assert.notEqual(resume.resumeToken, joined.resumeToken);
+  assert.equal((await recovered.send('room:snapshot')).snapshot.queue.length, 1);
 });
 test('read-only, rejected and ephemeral events perform zero row writes; chat does not rewrite queue or video', async () => {
   const { item, host, joined } = await fixture();

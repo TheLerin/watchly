@@ -9,6 +9,7 @@ export class PresenceDirectory {
     ctx.storage.sql.exec('CREATE INDEX IF NOT EXISTS connections_account ON connections(account_id,expires_at)');
     ctx.storage.sql.exec('CREATE INDEX IF NOT EXISTS connections_expiry ON connections(expires_at)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS subscriptions (subject_id TEXT NOT NULL, object_name TEXT NOT NULL, PRIMARY KEY(subject_id,object_name))');
+    ctx.storage.sql.exec('CREATE INDEX IF NOT EXISTS subscriptions_object ON subscriptions(object_name)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS notifications (object_name TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1, attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL DEFAULT 0, terminal_until INTEGER NOT NULL DEFAULT 0)');
     const columns = new Set(this.rows('PRAGMA table_info(notifications)').map(row => row.name));
     for (const [name, definition] of [['version', 'INTEGER NOT NULL DEFAULT 1'], ['attempts', 'INTEGER NOT NULL DEFAULT 0'], ['next_at', 'INTEGER NOT NULL DEFAULT 0'], ['terminal_until', 'INTEGER NOT NULL DEFAULT 0']]) if (!columns.has(name)) ctx.storage.sql.exec(`ALTER TABLE notifications ADD COLUMN ${name} ${definition}`);
@@ -17,14 +18,47 @@ export class PresenceDirectory {
   }
   rows(sql, ...args) { return this.ctx.storage.sql.exec(sql, ...args).toArray(); }
   status(id) {
-    const live = this.rows('SELECT status FROM connections WHERE account_id=? AND expires_at>?', id, Date.now());
-    return live.some(row => row.status === 'in_room') ? 'in_room' : live.length ? 'online' : 'offline';
+    return this.statuses([id])[0].status;
+  }
+  statuses(ids) {
+    const status = new Map(), now = Date.now();
+    // Chunk parameters below SQLite's 100-binding limit on Durable Objects.
+    for (let offset = 0; offset < ids.length; offset += 90) {
+      const batch = ids.slice(offset, offset + 90);
+      const query = `SELECT account_id, MAX(CASE WHEN status='in_room' THEN 2 ELSE 1 END) AS state FROM connections WHERE account_id IN (${batch.map(() => '?').join(',')}) AND expires_at>? GROUP BY account_id`;
+      for (const row of this.rows(query, ...batch, now)) status.set(row.account_id, row.state);
+    }
+    return ids.map(accountId => ({ accountId, status: status.get(accountId) === 2 ? 'in_room' : status.has(accountId) ? 'online' : 'offline' }));
   }
   notify(subjects) {
-    for (const id of subjects) for (const row of this.rows('SELECT object_name FROM subscriptions WHERE subject_id=?', id)) {
-      const previous = this.rows('SELECT version FROM notifications WHERE object_name=?', row.object_name)[0];
-      if (!previous && this.rows('SELECT COUNT(*) AS count FROM notifications')[0].count >= 10000) continue;
-      this.ctx.storage.sql.exec('INSERT INTO notifications(object_name,version,next_at) VALUES(?,1,?) ON CONFLICT(object_name) DO UPDATE SET version=version+1,attempts=0,next_at=excluded.next_at,terminal_until=0', row.object_name, Date.now() + 1000);
+    const ids = [...new Set(subjects)], targets = new Set();
+    for (let offset = 0; offset < ids.length; offset += 90) {
+      const batch = ids.slice(offset, offset + 90);
+      const matches = this.rows(`SELECT DISTINCT object_name FROM subscriptions WHERE subject_id IN (${batch.map(() => '?').join(',')})`, ...batch);
+      for (const row of matches) targets.add(row.object_name);
+    }
+    if (!targets.size) return;
+    let available = 10000 - this.rows('SELECT COUNT(*) AS count FROM notifications')[0].count;
+    const checkCapacity = targets.size > available;
+    const nextAt = Date.now() + 1000;
+    for (const target of targets) {
+      if (checkCapacity && !this.rows('SELECT version FROM notifications WHERE object_name=?', target).length) {
+        if (available <= 0) continue;
+        available--;
+      }
+      this.ctx.storage.sql.exec(`INSERT INTO notifications(object_name,version,next_at) VALUES(?,1,?)
+        ON CONFLICT(object_name) DO UPDATE SET version=version+1,
+          next_at=CASE WHEN attempts=0 AND terminal_until=0 THEN MIN(next_at,excluded.next_at) ELSE excluded.next_at END,
+          attempts=0,terminal_until=0`, target, nextAt);
+    }
+  }
+  syncSubscriptions(name, subjects) {
+    const current = new Set(this.rows('SELECT subject_id FROM subscriptions WHERE object_name=?', name).map(row => row.subject_id));
+    for (const id of current) {
+      if (!subjects.has(id)) this.ctx.storage.sql.exec('DELETE FROM subscriptions WHERE subject_id=? AND object_name=?', id, name);
+    }
+    for (const id of subjects) {
+      if (!current.has(id)) this.ctx.storage.sql.exec('INSERT INTO subscriptions VALUES(?,?)', id, name);
     }
   }
   async schedule() {
@@ -40,7 +74,7 @@ export class PresenceDirectory {
     const body = await boundedJson(request, 512 * 1024);
     if (new URL(request.url).pathname === '/query') {
       if (!Array.isArray(body.friends) || body.friends.length > 5000 || body.friends.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id))) return json({ error: 'Invalid presence query' }, 400);
-      return json([...new Set(body.friends)].map(accountId => ({ accountId, status: this.status(accountId) })));
+      return json(this.statuses([...new Set(body.friends)]));
     }
     if (!/^[A-Z0-9]{7}$/.test(body.objectName) || !Array.isArray(body.entries) || body.entries.length > 70) return json({ error: 'Invalid object' }, 400);
     if (body.entries.some(entry => !entry || typeof entry.id !== 'string' || entry.id.length > 100 || typeof entry.accountId !== 'string' || !/^[0-9a-f-]{36}$/i.test(entry.accountId) || !Number.isFinite(entry.expiresAt) || !['online', 'in_room'].includes(entry.status) || !Array.isArray(entry.friends) || entry.friends.length > 5000 || entry.friends.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)))) return json({ error: 'Invalid presence entries' }, 400);
@@ -50,25 +84,24 @@ export class PresenceDirectory {
     const previous = this.rows('SELECT * FROM connections WHERE object_name=?', body.objectName);
     const next = body.entries.filter(entry => entry.expiresAt > Date.now()).map(entry => ({ ...entry, expiresAt: Math.min(entry.expiresAt, Date.now() + 600000) }));
     const affected = new Set([...previous.map(entry => entry.account_id), ...next.map(entry => entry.accountId)]);
-    const before = new Map([...affected].map(id => [id, this.status(id)]));
+    const before = new Map(this.statuses([...affected]).map(({ accountId, status }) => [accountId, status]));
     const nextById = new Map(next.map(entry => [entry.id, entry]));
+    const previousById = new Map(previous.map(entry => [entry.id, entry]));
     let subscriptionsChanged = false;
     for (const old of previous) if (!nextById.has(old.id)) {
       this.ctx.storage.sql.exec('DELETE FROM connections WHERE id=?', old.id); subscriptionsChanged = true;
     }
     for (const entry of next) {
-      const old = previous.find(item => item.id === entry.id), friends = JSON.stringify(entry.friends || []);
+      const old = previousById.get(entry.id), friends = JSON.stringify(entry.friends || []);
       if (!old || old.account_id !== entry.accountId || old.expires_at !== entry.expiresAt || old.status !== entry.status || old.friends !== friends) {
         this.ctx.storage.sql.exec('INSERT INTO connections VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id,expires_at=excluded.expires_at,status=excluded.status,friends=excluded.friends', entry.id, body.objectName, entry.accountId, entry.expiresAt, entry.status, friends);
       }
       if (!old || old.friends !== friends) subscriptionsChanged = true;
     }
     if (subscriptionsChanged) {
-      this.ctx.storage.sql.exec('DELETE FROM subscriptions WHERE object_name=?', body.objectName);
-      const subjects = new Set(next.flatMap(entry => entry.friends || []));
-      for (const subject of subjects) this.ctx.storage.sql.exec('INSERT OR IGNORE INTO subscriptions VALUES(?,?)', subject, body.objectName);
+      this.syncSubscriptions(body.objectName, new Set(next.flatMap(entry => entry.friends)));
     }
-    this.notify([...affected].filter(id => before.get(id) !== this.status(id)));
+    this.notify(this.statuses([...affected]).filter(({ accountId, status }) => before.get(accountId) !== status).map(({ accountId }) => accountId));
     if (body.version !== undefined) this.ctx.storage.sql.exec('INSERT INTO source_updates VALUES(?,?,?) ON CONFLICT(object_name) DO UPDATE SET version=excluded.version,expires_at=excluded.expires_at', body.objectName, body.version, Date.now() + 86400000);
     await this.schedule(); return json({ ok: true });
   }
@@ -77,7 +110,8 @@ export class PresenceDirectory {
     this.ctx.storage.sql.exec('DELETE FROM source_updates WHERE expires_at<=?', now);
     for (const row of expired) this.ctx.storage.sql.exec('DELETE FROM connections WHERE id=?', row.id);
     for (const name of new Set(expired.map(row => row.object_name))) {
-      if (!this.rows('SELECT id FROM connections WHERE object_name=? LIMIT 1', name).length) this.ctx.storage.sql.exec('DELETE FROM subscriptions WHERE object_name=?', name);
+      const live = this.rows('SELECT friends FROM connections WHERE object_name=? AND expires_at>?', name, now);
+      this.syncSubscriptions(name, new Set(live.flatMap(row => JSON.parse(row.friends))));
     }
     this.notify(new Set(expired.map(row => row.account_id)));
     // Bound fan-out per event; pending notifications remain durable and are retried by the next alarm.

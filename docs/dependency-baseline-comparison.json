@@ -1,0 +1,285 @@
+{
+  "recordedAt": "2026-11-26T18:54:20.708Z",
+  "baselineAudit": "2026-11-26T07:36:32.818Z",
+  "mode": "Recorded high and critical npm ranges compared to the current lockfiles. This is not a new registry audit.",
+  "scopes": {
+    "root": {
+      "lockfile": "package-lock.json",
+      "sha256": "c46553bddd6c8adb90cf3408ec875c5bca2a46bfaeefc50aab3e059eacb10526",
+      "remaining": [],
+      "outsideRecordedRange": []
+    },
+    "backend": {
+      "lockfile": "backend/package-lock.json",
+      "sha256": "4fddc6f1e99f071bbb961825f9fdc7f31135588ade90c2b8598e9995e9b73f7c",
+      "remaining": [
+        {
+          "name": "engine.io",
+          "severity": "high",
+          "versions": [
+            "6.6.5"
+          ],
+          "matching": [
+            "6.6.5"
+          ]
+        },
+        {
+          "name": "socket.io-parser",
+          "severity": "high",
+          "versions": [
+            "4.2.5"
+          ],
+          "matching": [
+            "4.2.5"
+          ]
+        }
+      ],
+      "outsideRecordedRange": [
+        {
+          "name": "axios",
+          "severity": "high",
+          "versions": [],
+          "matching": []
+        },
+        {
+          "name": "body-parser",
+          "severity": "high",
+          "versions": [
+            "2.4.0"
+          ],
+          "matching": []
+        },
+        {
+          "name": "form-data",
+          "severity": "high",
+          "versions": [],
+          "matching": []
+        },
+        {
+          "name": "path-to-regexp",
+          "severity": "high",
+          "versions": [
+            "8.4.2"
+          ],
+          "matching": []
+        },
+        {
+          "name": "proxy-addr",
+          "severity": "critical",
+          "versions": [
+            "2.0.8"
+          ],
+          "matching": []
+        }
+      ]
+    },
+    "frontend": {
+      "lockfile": "frontend/package-lock.json",
+      "sha256": "573ecff851e5ff7e7a536bb396fcb4da33f0b1fab001659e7eb8c016aa5c1327",
+      "remaining": [
+        {
+          "name": "@babel/plugin-transform-modules-systemjs",
+          "severity": "high",
+          "versions": [
+            "7.29.0"
+          ],
+          "matching": [
+            "7.29.0"
+          ]
+        },
+        {
+          "name": "@vercel/cli-config",
+          "severity": "high",
+          "versions": [
+            "0.3.0"
+          ],
+          "matching": [
+            "0.3.0"
+          ]
+        },
+        {
+          "name": "@vercel/functions",
+          "severity": "high",
+          "versions": [
+            "3.9.9"
+          ],
+          "matching": [
+            "3.9.9"
+          ]
+        },
+        {
+          "name": "@vercel/oidc",
+          "severity": "high",
+          "versions": [
+            "3.8.9"
+          ],
+          "matching": [
+            "3.8.9"
+          ]
+        },
+        {
+          "name": "brace-expansion",
+          "severity": "high",
+          "versions": [
+            "1.1.22",
+            "2.1.8",
+            "5.0.5"
+          ],
+          "matching": [
+            "5.0.5"
+          ]
+        },
+        {
+          "name": "flatted",
+          "severity": "high",
+          "versions": [
+            "3.3.3"
+          ],
+          "matching": [
+            "3.3.3"
+          ]
+        },
+        {
+          "name": "minimatch",
+          "severity": "high",
+          "versions": [
+            "3.1.5",
+            "5.1.9",
+            "10.2.5"
+          ],
+          "matching": [
+            "10.2.5"
+          ]
+        },
+        {
+          "name": "react-router",
+          "severity": "high",
+          "versions": [
+            "7.13.0"
+          ],
+          "matching": [
+            "7.13.0"
+          ]
+        },
+        {
+          "name": "react-router-dom",
+          "severity": "high",
+          "versions": [
+            "7.13.0"
+          ],
+          "matching": [
+            "7.13.0"
+          ]
+        },
+        {
+          "name": "rollup",
+          "severity": "high",
+          "versions": [
+            "2.80.0",
+            "4.57.1"
+          ],
+          "matching": [
+            "4.57.1"
+          ]
+        },
+        {
+          "name": "serialize-javascript",
+          "severity": "high",
+          "versions": [
+            "6.0.2"
+          ],
+          "matching": [
+            "6.0.2"
+          ]
+        },
+        {
+          "name": "socket.io-parser",
+          "severity": "high",
+          "versions": [
+            "4.2.5"
+          ],
+          "matching": [
+            "4.2.5"
+          ]
+        },
+        {
+          "name": "vite",
+          "severity": "high",
+          "versions": [
+            "7.3.1"
+          ],
+          "matching": [
+            "7.3.1"
+          ]
+        }
+      ],
+      "outsideRecordedRange": [
+        {
+          "name": "browserslist",
+          "severity": "high",
+          "versions": [
+            "4.28.8"
+          ],
+          "matching": []
+        },
+        {
+          "name": "fast-uri",
+          "severity": "high",
+          "versions": [
+            "3.1.9"
+          ],
+          "matching": []
+        },
+        {
+          "name": "js-yaml",
+          "severity": "high",
+          "versions": [
+            "4.3.2"
+          ],
+          "matching": []
+        },
+        {
+          "name": "nanoid",
+          "severity": "high",
+          "versions": [
+            "3.3.18"
+          ],
+          "matching": []
+        },
+        {
+          "name": "picomatch",
+          "severity": "high",
+          "versions": [
+            "2.3.2",
+            "4.0.4"
+          ],
+          "matching": []
+        },
+        {
+          "name": "postcss",
+          "severity": "high",
+          "versions": [
+            "8.5.26"
+          ],
+          "matching": []
+        },
+        {
+          "name": "source-map-js",
+          "severity": "high",
+          "versions": [
+            "1.2.2"
+          ],
+          "matching": []
+        },
+        {
+          "name": "zod",
+          "severity": "high",
+          "versions": [
+            "4.6.7"
+          ],
+          "matching": []
+        }
+      ]
+    }
+  }
+}

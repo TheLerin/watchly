@@ -22,6 +22,43 @@ test('slow receivers have bounded in-flight delivery, chunked snapshots drain in
   ws.bufferedAmount = 300000; flow.send(ws, { v: 1 }); assert.equal(ws.closed, 1013);
 });
 
+test('a stalled delivery window closes the socket and releases queued frames', () => {
+  const flow = new OutboundFlow();
+  const attachment = { deliveryEnabled: true, delivery: { seq: 1, pending: [[1, 128 * 1024, 1000]] } };
+  const ws = { readyState: 1, deserializeAttachment: () => attachment, serializeAttachment() {}, close(code) { this.closed = code; } };
+  attachment.delivery.pending[0][2] = Date.now();
+  flow.send(ws, { event: 'room:snapshot' });
+  assert.ok(flow.queuedBytes > 0);
+  assert.equal(flow.expire(ws, attachment, attachment.delivery.pending[0][2] + 30000), true);
+  assert.equal(ws.closed, 1013);
+  assert.equal(flow.queuedBytes, 0);
+});
+
+test('delivery alarms close an idle peer with an expired unacknowledged frame after reconstruction', async () => {
+  const setup = environment(), item = await setup.room(), peer = await connect(item);
+  const attachment = peer.ws.deserializeAttachment();
+  attachment.deliveryEnabled = true;
+  peer.ws.serializeAttachment(attachment);
+  item.object.outbox.push({ id: peer.id, frame: { v: 1, event: 'room:snapshot' } });
+  await item.object.commit();
+  const pending = peer.ws.deserializeAttachment();
+  assert.equal(item.object.deliveryTimer.at, pending.delivery.pending[0][2] + 30000);
+  pending.delivery.pending[0][2] -= 31000;
+  peer.ws.serializeAttachment(pending);
+  await setup.evict('ABCDEFG');
+  await item.object.alarm();
+  assert.equal(peer.ws.closed?.code, 1013);
+});
+
+test('receipts cannot bypass the server byte budget even if runtime buffering is unavailable', () => {
+  const flow = new OutboundFlow();
+  const attachment = { deliveryEnabled: true, delivery: { seq: 1, pending: [[1, 64, Date.now()]] }, sendWindowAt: Date.now(), sendWindowBytes: 16 * 1024 * 1024 };
+  const ws = { readyState: 1, deserializeAttachment: () => attachment, serializeAttachment() {}, send() { assert.fail('Over-budget frame sent'); }, close(code) { this.closed = code; } };
+  assert.equal(flow.receipt(ws, 1), true);
+  flow.send(ws, { event: 'room:snapshot' });
+  assert.equal(ws.closed, 1013);
+});
+
 test('SQL failure quarantines mutated memory, delivers no success, and reconstruction restores committed state', async () => {
   const setup = environment(), item = await setup.room(), host = await connect(item);
   await host.send('room:create', { nickname: 'Host', protocolVersion: 2 });
@@ -66,6 +103,31 @@ test('presence notification races preserve newer versions; retries terminate and
   assert.equal(directory.rows('SELECT * FROM notifications').length, 0);
 });
 
+test('a refresh coalesces changed friends per room and preserves the scheduled delivery time', () => {
+  const ctx = context(); ctx.storage.ctx = ctx;
+  const directory = new PresenceDirectory(ctx, {});
+  const other = '00000000-0000-4000-8000-000000000002';
+  for (const id of [subject, other]) ctx.storage.sql.exec('INSERT INTO subscriptions VALUES(?,?)', id, 'ABCDEFG');
+  directory.notify([subject, other]);
+  assert.deepEqual(directory.rows('SELECT version FROM notifications').map(row => row.version), [1]);
+  ctx.storage.sql.exec('UPDATE notifications SET next_at=1');
+  directory.notify([subject]);
+  assert.equal(directory.rows('SELECT next_at FROM notifications')[0].next_at, 1);
+});
+
+test('presence expiry drops only subscriptions from the expired connection', async () => {
+  const ctx = context(); ctx.storage.ctx = ctx;
+  const directory = new PresenceDirectory(ctx, {});
+  const other = '00000000-0000-4000-8000-000000000002';
+  const expiresAt = Date.now() + 60000;
+  const entries = [{ id: 'one', accountId: subject, expiresAt, status: 'in_room', friends: [other] },
+    { id: 'two', accountId: other, expiresAt, status: 'in_room', friends: [subject] }];
+  await directory.fetch(new Request('https://internal/update', { method: 'POST', body: JSON.stringify({ objectName: 'ABCDEFG', entries, version: 1 }) }));
+  ctx.storage.sql.exec("UPDATE connections SET expires_at=0 WHERE id='one'");
+  await directory.alarm();
+  assert.deepEqual(directory.rows('SELECT subject_id FROM subscriptions').map(row => row.subject_id), [subject]);
+});
+
 test('resume credentials rotate between sockets, fence the old media proof, and recover a disconnected lost ACK within grace', async () => {
   const setup = environment(), item = await setup.room(), host = await connect(item);
   const joined = await host.send('room:create', { nickname: 'Host', protocolVersion: 2 }); await host.close();
@@ -76,6 +138,19 @@ test('resume credentials rotate between sockets, fence the old media proof, and 
   assert.equal((await stale.send('room:join', { roomId: 'ABCDEFG', nickname: 'Stale', protocolVersion: 2, memberId: joined.memberId, resumeToken: joined.resumeToken })).error.code, 'SESSION_INVALID');
   await next.close();
   assert.equal((await stale.send('room:join', { roomId: 'ABCDEFG', nickname: 'Recovered', protocolVersion: 2, memberId: joined.memberId, resumeToken: joined.resumeToken })).ok, true);
+});
+
+test('expired previous proofs fail after reconstruction while the current proof still recovers the same membership', async () => {
+  const setup = environment(), item = await setup.room(), first = await connect(item);
+  const joined = await first.send('room:create', { nickname: 'Host', protocolVersion: 2 }); await first.close();
+  const next = await connect(item), payload = { roomId: 'ABCDEFG', nickname: 'Host', protocolVersion: 2, memberId: joined.memberId };
+  const rotated = await next.send('room:join', { ...payload, resumeToken: joined.resumeToken }); await next.close();
+  item.object.rooms.get('ABCDEFG').users[0].previousResumeTokenUntil = Date.now() - 1;
+  await item.object.commit(); await setup.evict('ABCDEFG');
+  const recovery = await connect(item);
+  assert.equal((await recovery.send('room:join', { ...payload, resumeToken: joined.resumeToken })).error.code, 'SESSION_INVALID');
+  const current = await recovery.send('room:join', { ...payload, resumeToken: rotated.resumeToken });
+  assert.equal(current.ok, true); assert.equal(current.memberId, joined.memberId); assert.notEqual(current.resumeToken, rotated.resumeToken);
 });
 
 test('a revoked account loses action permissions while retaining its recoverable public-room role', async () => {

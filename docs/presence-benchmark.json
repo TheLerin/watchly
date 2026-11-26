@@ -1,34 +1,69 @@
 {
-  "recordedAt": "2026-11-26T06:19:45.062Z",
+  "recordedAt": "2026-11-26T18:04:53.971Z",
   "simulationOnly": true,
   "results": [
     {
       "population": 50,
       "friendsPerAccount": 10,
       "rooms": 1,
-      "elapsedMs": 21.47,
-      "statements": 1084,
-      "returnedRows": 766,
+      "elapsedMs": 19.53,
+      "statements": 292,
+      "returnedRows": 718,
       "targetedNotifications": 1
     },
     {
       "population": 250,
       "friendsPerAccount": 10,
       "rooms": 5,
-      "elapsedMs": 59.16,
-      "statements": 4655,
-      "returnedRows": 3472,
+      "elapsedMs": 55.33,
+      "statements": 1004,
+      "returnedRows": 2957,
       "targetedNotifications": 5
     },
     {
       "population": 500,
       "friendsPerAccount": 10,
       "rooms": 10,
-      "elapsedMs": 104.23,
-      "statements": 9085,
-      "returnedRows": 6832,
+      "elapsedMs": 98.19,
+      "statements": 1869,
+      "returnedRows": 5742,
+      "targetedNotifications": 10
+    },
+    {
+      "population": 500,
+      "friendsPerAccount": 150,
+      "rooms": 10,
+      "elapsedMs": 319.3,
+      "statements": 3926,
+      "returnedRows": 75899,
       "targetedNotifications": 10
     }
   ],
-  "limitations": "Node SQLite, mocked room notification transport, ten friends/account. Statement/returned-row counts are instrumentation, not Cloudflare billing. No network concurrency/throughput or 10000-user capacity claim."
+  "limitations": "Node SQLite and mocked room notification transport. Statement/returned-row counts do not measure Cloudflare billing or remote capacity.",
+  "beforeCoalescing": [
+    {
+      "population": 50,
+      "friendsPerAccount": 10,
+      "previousStatements": 438,
+      "currentStatements": 292
+    },
+    {
+      "population": 250,
+      "friendsPerAccount": 10,
+      "previousStatements": 1817,
+      "currentStatements": 1004
+    },
+    {
+      "population": 500,
+      "friendsPerAccount": 10,
+      "previousStatements": 3507,
+      "currentStatements": 1869
+    },
+    {
+      "population": 500,
+      "friendsPerAccount": 150,
+      "previousStatements": 7907,
+      "currentStatements": 3926
+    }
+  ]
 }

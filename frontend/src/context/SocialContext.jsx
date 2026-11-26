@@ -24,5 +24,5 @@ export function SocialProvider({ children }) {
 export function useSocialState() {
     const store = useContext(SocialContext);
     const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
-    return { ...state, load: store.load, mutate: store.mutate, invite: store.invite, search };
+    return { ...state, load: store.load, mutate: store.mutate, invite: store.invite, search, checkInvite: store.checkInvite };
 }

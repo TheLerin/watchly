@@ -702,7 +702,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                             <span className="flex items-center gap-2 text-xs font-semibold text-amber-200">
                                 <Headphones size={14} /> Tap to enable voice audio.
                             </span>
-                            <button type="button" onClick={enableVoiceAudio} className="rounded-xl bg-white px-3 py-1.5 text-[10px] font-bold text-black">Enable</button>
+                            <button type="button" onClick={enableVoiceAudio} className="watchly-action rounded-xl px-3 py-1.5 text-[10px] font-bold">Enable</button>
                         </MotionDiv>
                     )}
                 </AnimatePresence>

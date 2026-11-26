@@ -1,75 +1,86 @@
 {
-  "recordedAt": "2026-11-26T06:25:44.297Z",
+  "recordedAt": "2026-11-26T18:54:39.082Z",
   "node": "v24.18.0",
   "lastSelectedChecks": [
-    "workerd-direct"
+    "wrangler-bindings",
+    "workers",
+    "backend-focused"
   ],
   "results": [
     {
       "name": "workers",
       "exitCode": 0,
-      "elapsedMs": 698,
+      "elapsedMs": 1070,
       "passed": true,
-      "tests": 47,
-      "pass": 47
+      "tests": 66,
+      "pass": 66,
+      "recordedAt": "2026-11-26T18:54:36.390Z"
     },
     {
       "name": "backend-focused",
       "exitCode": 0,
-      "elapsedMs": 2446,
+      "elapsedMs": 2688,
       "passed": true,
-      "tests": 27,
-      "pass": 27
+      "tests": 31,
+      "pass": 31,
+      "recordedAt": "2026-11-26T18:54:39.079Z"
     },
     {
       "name": "frontend",
       "exitCode": 0,
-      "elapsedMs": 907,
+      "elapsedMs": 1030,
       "passed": true,
-      "tests": 134,
-      "pass": 134
+      "tests": 136,
+      "pass": 136,
+      "recordedAt": "2026-11-26T18:05:12.192Z"
     },
     {
       "name": "frontend-lint",
       "exitCode": 0,
-      "elapsedMs": 5510,
-      "passed": true
+      "elapsedMs": 5695,
+      "passed": true,
+      "recordedAt": "2026-11-26T18:05:17.888Z"
     },
     {
       "name": "build",
       "exitCode": 0,
-      "elapsedMs": 13330,
-      "passed": true
+      "elapsedMs": 12928,
+      "passed": true,
+      "recordedAt": "2026-11-26T18:05:30.818Z"
     },
     {
       "name": "asset-validation",
       "exitCode": 0,
-      "elapsedMs": 334,
-      "passed": true
+      "elapsedMs": 352,
+      "passed": true,
+      "recordedAt": "2026-11-26T18:05:31.172Z"
     },
     {
       "name": "worker-bundle",
       "exitCode": 0,
-      "elapsedMs": 165,
-      "passed": true
+      "elapsedMs": 125,
+      "passed": true,
+      "recordedAt": "2026-11-26T18:05:31.298Z"
     },
     {
       "name": "browser-harness",
       "exitCode": 0,
-      "elapsedMs": 24046,
+      "elapsedMs": 32660,
       "passed": true
     },
     {
       "name": "workerd-direct",
       "exitCode": 0,
-      "elapsedMs": 26356,
-      "passed": true
+      "passed": true,
+      "recordedAt": "2026-11-26T18:55:43.743Z",
+      "notes": "Direct workerd suite passed after the media removal concurrency change. Optional extended soak is separate."
     },
     {
       "name": "workerd-integration",
-      "exitCode": 1,
-      "elapsedMs": 1966,
-      "passed": false
+      "exitCode": 0,
+      "elapsedMs": 4202,
+      "passed": true,
+      "recordedAt": "2026-11-26T16:49:03.507Z"
     },
     {
       "name": "wrangler-dry-run",
@@ -79,12 +90,53 @@
     },
     {
       "name": "backend-full",
-      "exitCode": 1,
-      "elapsedMs": 16765,
+      "exitCode": 0,
+      "passed": true,
+      "recordedAt": "2026-11-26T16:43:14.768296+00:00",
+      "tests": 67,
+      "pass": 67
+    },
+    {
+      "name": "wrangler-bindings",
+      "exitCode": 0,
+      "elapsedMs": 82,
+      "passed": true,
+      "recordedAt": "2026-11-26T18:54:35.317Z"
+    },
+    {
+      "name": "browser-wire",
+      "exitCode": 0,
+      "elapsedMs": 10468,
+      "passed": true,
+      "recordedAt": "2026-11-26T11:13:12.659Z"
+    },
+    {
+      "name": "dependency-audits",
+      "recordedAt": "2026-11-26T07:36:32.818Z",
       "passed": false,
-      "tests": 65,
-      "pass": 28,
-      "fail": 37
+      "exitCode": 1,
+      "sourceFile": "docs/dependency-audits.json",
+      "note": "Completed audit evidence; upgrades/final clean install blocked by automatic review, see DEPENDENCY_REMEDIATION.md."
+    },
+    {
+      "name": "pwa-update",
+      "exitCode": 0,
+      "passed": true,
+      "recordedAt": "2026-11-26T16:45:42.642935+00:00"
+    },
+    {
+      "name": "wrangler-staging-dry-run",
+      "exitCode": 0,
+      "elapsedMs": 5359,
+      "passed": true,
+      "recordedAt": "2026-11-26T16:49:08.867Z"
+    },
+    {
+      "name": "wrangler-production-dry-run",
+      "exitCode": 0,
+      "elapsedMs": 7441,
+      "passed": true,
+      "recordedAt": "2026-11-26T16:49:16.309Z"
     }
   ]
 }

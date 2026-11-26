@@ -104,10 +104,10 @@ test('native payload validation rejects null, scalars and arrays without losing 
 
 test('signed media-event delivery is idempotent and does not reset failed removal attempts', async () => {
   const setup = environment(), empty = await setup.room('HIJKLMN');
-  await empty.object.fetch(new Request('https://internal/media-event', { method: 'POST', body: JSON.stringify({ id: 'unknown-room-event', event: 'participant_joined', room: { name: 'watchly-voice-HIJKLMN' }, participant: { identity: 'watchly-stale-member' } }) }));
+  await empty.object.fetch(new Request('https://internal/media-event', { method: 'POST', body: JSON.stringify({ id: 'unknown-room-event', event: 'participant_joined', room: { name: 'watchly-development-voice-HIJKLMN' }, participant: { identity: 'watchly-stale-member' } }) }));
   assert.equal(empty.object.mediaRemovals.get('stale-member').roomId, 'HIJKLMN');
   const { item } = await create();
-  const event = { id: 'test-event-1', event: 'participant_joined', participant: { identity: 'watchly-removed-member' } };
+  const event = { id: 'test-event-1', event: 'participant_joined', room: { name: 'watchly-development-voice-ABCDEFG' }, participant: { identity: 'watchly-removed-member' } };
   const deliver = () => item.object.fetch(new Request('https://internal/media-event', { method: 'POST', body: JSON.stringify(event) }));
   assert.equal((await deliver()).ok, true);
   item.object.mediaRemovals.get('removed-member').failures = 5;
@@ -132,7 +132,7 @@ test('failed server media removal remains durable and retries after eviction', a
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test('media removal gives up after twelve failures and expires its terminal record without dropping the ban', async () => {
+test('media removal retries past twelve failures, then expires its terminal record without dropping the ban', async () => {
   const originalFetch = globalThis.fetch; let calls = 0;
   globalThis.fetch = async () => { calls++; return new Response('{}', { status: 503 }); };
   try {
@@ -144,10 +144,15 @@ test('media removal gives up after twelve failures and expires its terminal reco
       await item.object.serial(async () => { item.object.mediaRemovals.get(joined.memberId).nextAt = Date.now() - 1; await item.object.removeMediaParticipants(); await item.object.commit(); });
       await Promise.all(item.ctx.tasks);
     }
-    assert.equal(calls, 12); assert.equal(item.object.mediaRemovals.get(joined.memberId).terminal, true);
+    assert.equal(calls, 12); assert.equal(item.object.mediaRemovals.get(joined.memberId).terminal, false);
+    item.object.mediaRemovals.get(joined.memberId).createdAt = Date.now() - 86400001;
     item.object.mediaRemovals.get(joined.memberId).nextAt = Date.now() - 1;
     await item.object.serial(async () => { await item.object.removeMediaParticipants(); await item.object.commit(); });
-    assert.equal(calls, 12); assert.equal(item.object.mediaRemovals.size, 0);
+    await Promise.all(item.ctx.tasks);
+    assert.equal(calls, 13); assert.equal(item.object.mediaRemovals.get(joined.memberId).terminal, true);
+    item.object.mediaRemovals.get(joined.memberId).nextAt = Date.now() - 1;
+    await item.object.serial(async () => { await item.object.removeMediaParticipants(); await item.object.commit(); });
+    assert.equal(calls, 13); assert.equal(item.object.mediaRemovals.size, 0);
     assert.equal(item.object.rooms.get(room.roomId).kickedUserIds.has(joined.memberId), true);
   } finally { globalThis.fetch = originalFetch; }
 });

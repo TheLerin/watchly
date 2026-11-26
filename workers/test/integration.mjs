@@ -20,6 +20,10 @@ try {
   await host.send('kick_user', { roomId: code, targetId: joined.memberId });
   assert.equal((await viewer.send('room:join', { roomId: code, nickname: 'Viewer', protocolVersion: 2, resumeToken: joined.resumeToken, memberId: joined.memberId })).error.code, 'MEMBER_BANNED');
   assert.equal((await fetch(server.base + '/room/ABCDEFG', { headers: { Accept: 'text/html' } })).status, 200);
+  const callback = await fetch(server.base + '/auth/callback?code=fixture', { headers: { Accept: 'text/html' } });
+  assert.equal(callback.status, 200);
+  assert.equal(callback.headers.get('cache-control'), 'no-store');
+  assert.equal(callback.headers.get('referrer-policy'), 'no-referrer');
   assert.equal((await fetch(server.base + '/api/proxy/gdrive?id=abcdefghijk&roomId=' + code)).status, 401);
   assert.equal((await fetch(server.base + '/api/health', { headers: { Origin: 'https://evil.test' } })).status, 403);
   console.log('PASS real Wrangler/workerd: native room, chat, queue, source, host-only authorization, kick, media authorization, SPA and Origin checks.');

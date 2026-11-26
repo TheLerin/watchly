@@ -1,6 +1,6 @@
 # Deploy Watchly to Cloudflare
 
-The source is prepared; production deployment is **not yet verified**. Real workerd integration, external OAuth/Drive/LiveKit/TURN and a two-device media/moderation test remain release gates. No account, billing setting, deployment, DNS record or existing service was changed during this work.
+The source is prepared; production deployment is **not yet verified**. Dependency security, external OAuth/Drive/LiveKit/Turnstile/TURN and two-device media/moderation acceptance remain release gates. Local workerd and HTTP integration pass. No account, billing setting, deployment, DNS record or existing service was changed during this work.
 
 ## 1. Account and dependencies
 
@@ -15,7 +15,7 @@ npm ci
 npx wrangler login
 ```
 
-Wrangler is pinned to 4.168.0 in the root lockfile, validated against the cached npm-resolved graph. Direct workerd and dry-run tests pass. Clean npm ci/audit and TCP-listener integration still need an environment without the observed EPERM/ENOTFOUND/EACCES restrictions.
+Wrangler is pinned to 4.168.0 in the root lockfile. See RELEASE_GATES.md for current installation, audit and runtime results; a dry-run does not validate remote secrets or deployed resources.
 
 ## 2. Public browser configuration
 
@@ -44,6 +44,9 @@ For the existing Node/Vercel rollback build, use the original `npm --prefix fron
 | `TURN_TTL_SECONDS` | Optional, defaults to 3600, bounded 300–86400 | Optional |
 | `GDRIVE_LEGACY_SECRET` | Independent shared Worker/Render HMAC secret for short signed fallback requests | Required with fallback |
 | `GDRIVE_LEGACY_ORIGIN` | Fixed HTTPS origin of current Render proxy, no path/query | Only if direct Drive delivery fails |
+| `TURNSTILE_SITE_KEY` | Public widget key in environment vars; checked-in value is empty | Anonymous challenge |
+| `TURNSTILE_SECRET_KEY` | Private widget key in Worker/Render secrets | Mandatory server verification |
+| `LIVEKIT_ROOM_NAMESPACE` | Explicit `staging` / `production` Worker var; `legacy-render` on Render | Media isolation |
 
 Generate the media-cookie secret locally, then paste it at Wrangler's secret prompt. Do not put secrets on command lines, in `VITE_*`, in Git or in workflow YAML.
 
@@ -56,6 +59,7 @@ npx wrangler secret put LIVEKIT_URL --env staging
 npx wrangler secret put LIVEKIT_API_KEY --env staging
 npx wrangler secret put LIVEKIT_API_SECRET --env staging
 npx wrangler secret put MEDIA_SESSION_SECRET --env staging
+npx wrangler secret put TURNSTILE_SECRET_KEY --env staging
 ```
 
 Set optional TURN/legacy secrets using the same `secret put NAME --env staging` form only if those services are used. Repeat for `--env production` when production cutover is approved. Use separate staging LiveKit rooms/projects and a Supabase test project where practical; production retains the original Supabase project and records. Never run credential-dependent test fixtures against production data.
@@ -149,7 +153,11 @@ Review Worker errors/CPU, DO requests and active duration, SQLite read/write row
 
 ## V2.1 hardening operational notes
 
-Root lockfile generation and a verified exact Wrangler pin remain blocked. After installation on a network-enabled host, review/commit the root lockfile and switch root CI install steps to `npm ci`. The declared Wrangler range starts at 4.36; it is not a verified exact runtime pin. Existing backend/frontend installs use their lockfiles.
+Root Wrangler is pinned to 4.168.0 and all three lockfiles are checked in. CI uses `npm ci` and fails on critical/high audit findings. See DEPENDENCY_REMEDIATION.md for the current incomplete dependency gate.
+
+Run `npm run check:bindings`, `npm run check:deploy:staging` and `npm run check:deploy:production` before an approved deployment. These validate the explicit ASSETS, ROOMS, PRESENCE and ABUSE bindings and SQLite migration declarations without deploying. They do not verify account secrets, actual remote namespaces or provider configuration. The [session migration guide](docs/SUPABASE_SESSION_MIGRATION.md) covers the additive RPC and staging acceptance without resetting data.
+
+Configure separate Turnstile widgets/keys and retain the exact LiveKit namespace for each environment. Read [anonymous creation and media cutover](docs/TURNSTILE_AND_MEDIA_ISOLATION.md) before updating any deployment. Both Workers and Render now expose `/api/livekit/webhook`; foreign and unscoped room names are ignored, and old calls need an ownership-aware drain.
 
 Both Worker and Render need their configured `MEDIA_SESSION_SECRET` for their own cookie grants. The optional bridge additionally requires the same independent `GDRIVE_LEGACY_SECRET` on both sides. Deploying only the Worker bridge change against an old public Render proxy is not the supported final configuration; deploy and verify its authentication middleware together. Never expose these secrets through `VITE_*`.
 

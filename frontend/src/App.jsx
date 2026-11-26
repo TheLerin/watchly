@@ -81,7 +81,7 @@ function ProtocolGuard({ children }) {
   if (!protocolMismatch) return children;
   return <div className="flex min-h-screen items-center justify-center bg-black p-6 text-center text-white">
     <div><h1 className="text-2xl font-bold">Update required</h1><p className="mt-2 text-zinc-400">Watchly changed while this page was open.</p>
-      <button className="mt-5 rounded-xl bg-white px-5 py-3 font-bold text-black" onClick={() => window.location.reload()}>Refresh Watchly</button></div>
+      <button className="watchly-action mt-5 rounded-xl px-5 py-3 font-bold" onClick={() => window.location.reload()}>Refresh Watchly</button></div>
   </div>;
 }
 

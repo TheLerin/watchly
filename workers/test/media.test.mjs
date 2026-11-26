@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { LiveKitProvider, buildIceConfig, signJwt, mediaProvider } from '../src/media.mjs';
-import { verifyTicket, streamDrive, validDriveUrl } from '../src/drive.mjs';
+import { verifyTicket, revalidateDriveBody, streamDrive, validDriveUrl } from '../src/drive.mjs';
+import { AbuseGuard } from '../src/AbuseGuard.mjs';
+import { context } from './harness.mjs';
 const require = createRequire(new URL('../../backend/package.json', import.meta.url));
 const { TokenVerifier } = require('livekit-server-sdk');
 const env = { LIVEKIT_URL: 'wss://media-test.livekit.cloud', LIVEKIT_API_KEY: 'test-api', LIVEKIT_API_SECRET: 'test-secret-fixture' };
@@ -10,7 +12,7 @@ const env = { LIVEKIT_URL: 'wss://media-test.livekit.cloud', LIVEKIT_API_KEY: 't
 test('Worker WebCrypto tokens are verified by the existing LiveKit SDK and have matching grants', async () => {
   const provider = new LiveKitProvider(env), issued = await provider.token('ABCDEFG', { userId: 'member1', nickname: 'Member' });
   const claims = await new TokenVerifier(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET).verify(issued.participantToken);
-  assert.equal(claims.sub, 'watchly-member1'); assert.equal(claims.video.room, 'watchly-voice-ABCDEFG');
+  assert.equal(claims.sub, 'watchly-member1'); assert.equal(claims.video.room, 'watchly-development-voice-ABCDEFG');
   assert.deepEqual(claims.video.canPublishSources, ['microphone', 'camera']); assert.equal(claims.video.canPublishData, false);
   assert.ok(claims.exp - claims.nbf <= 125);
 });
@@ -19,7 +21,7 @@ test('moderation uses a scoped server-only RoomService token and never leaks cre
   const provider = new LiveKitProvider(env, async (url, options) => { request = { url, options }; return new Response('{}'); });
   await provider.remove('ABCDEFG', 'member1');
   assert.equal(request.url.pathname, '/twirp/livekit.RoomService/RemoveParticipant');
-  assert.deepEqual(JSON.parse(request.options.body), { room: 'watchly-voice-ABCDEFG', identity: 'watchly-member1' });
+  assert.deepEqual(JSON.parse(request.options.body), { room: 'watchly-development-voice-ABCDEFG', identity: 'watchly-member1' });
   const claims = await new TokenVerifier(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET).verify(request.options.headers.Authorization.slice(7));
   assert.equal(claims.video.roomAdmin, true); assert.equal(claims.video.roomJoin, undefined);
   assert.throws(() => mediaProvider({ MEDIA_PROVIDER: 'cloudflare' }), /not enabled/);
@@ -51,6 +53,30 @@ test('Drive preserves Range, 206, HEAD and 416 without buffering the media body'
   const head = await streamDrive(new Request('https://watchly.test/api/proxy/gdrive?id=abcdefghijk', { method: 'HEAD' }), {}, fetcher); assert.equal(head.body, null);
   const rangeError = await streamDrive(new Request('https://watchly.test/api/proxy/gdrive?id=abcdefghijk'), {}, async () => new Response(null, { status: 416, headers: { 'Content-Range': 'bytes */100' } }));
   assert.equal(rangeError.status, 416);
+});
+test('in-progress Drive delivery discards the next chunk and cancels upstream after revocation', async () => {
+  let now = 0, cancelled = false, checks = 0;
+  const source = new ReadableStream({
+    pull(controller) { controller.enqueue(Uint8Array.of(42)); },
+    cancel() { cancelled = true; },
+  });
+  const reader = revalidateDriveBody(source, async () => { checks++; return false; }, { now: () => now }).getReader();
+  assert.deepEqual((await reader.read()).value, Uint8Array.of(42));
+  now = 15000;
+  await assert.rejects(reader.read(), /revoked/);
+  assert.equal(checks, 1);
+  assert.equal(cancelled, true);
+});
+test('Drive quota atomically reserves response bytes and blocks transfers over the daily budget', async () => {
+  const ctx = context(); ctx.storage.ctx = ctx;
+  const quota = new AbuseGuard(ctx, { DAILY_DRIVE_BYTE_BUDGET: '3' });
+  const settings = { NODE_ENV: 'development', QUOTA_ENFORCE: 'true', DAILY_DRIVE_BYTE_BUDGET: '3',
+    ABUSE: { idFromName: value => value, get: () => ({ fetch: request => quota.fetch(request) }) } };
+  const stream = () => streamDrive(new Request('https://watchly.test/api/proxy/gdrive?id=abcdefghijk'), settings,
+    async () => new Response(Uint8Array.of(1, 2), { headers: { 'Content-Type': 'video/mp4', 'Content-Length': '2' } }));
+  const responses = await Promise.all([stream(), stream()]);
+  assert.deepEqual(responses.map(response => response.status).sort(), [200, 429]);
+  assert.deepEqual(await responses.find(response => response.ok).bytes(), Uint8Array.of(1, 2));
 });
 test('Drive validates every redirect and cannot become an open SSRF proxy', async () => {
   for (const url of ['http://drive.google.com/file', 'https://127.0.0.1/', 'https://drive.google.com.evil.test/', 'https://drive.google.com:8443/', 'https://a@drive.google.com/']) assert.equal(validDriveUrl(url), false);

@@ -1,3 +1,4 @@
+import mediaIdentity from '../../backend/livekitIdentity.js';
 import { WatchRoom } from './WatchRoom.mjs';
 import { PresenceDirectory } from './PresenceDirectory.mjs';
 import { buildIceConfig, mediaProvider } from './media.mjs';
@@ -14,10 +15,10 @@ function authorizedOrigin(request, env) {
   if (!origin) return true;
   return origin === new URL(request.url).origin || (env.ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean).includes(origin);
 }
-async function authorize(env, proof, livekit = false, authorization) {
+async function authorize(env, proof, livekit = false, authorization, signal) {
   if (!validRoom(proof.roomId)) return json({ error: 'Invalid room' }, 400);
   return roomStub(env, proof.roomId).fetch(new Request(`https://internal/authorize${livekit ? '?livekit=true' : ''}`, {
-    method: 'POST', headers: authorization ? { Authorization: authorization } : {}, body: JSON.stringify(proof),
+    method: 'POST', headers: authorization ? { Authorization: authorization } : {}, body: JSON.stringify(proof), signal,
   }));
 }
 
@@ -54,6 +55,9 @@ const app = {
         // Browsers must supply an allowed Origin. Tokens are sent in the first frame, never in URLs.
         if (!request.headers.get('origin')) return json({ error: 'Origin required' }, 403);
         const headers = new Headers(request.headers); headers.set('X-Watchly-Actor', actor);
+        headers.set('X-Watchly-Origin', request.headers.get('origin'));
+        // Only Cloudflare-provided request metadata can raise this flag; incoming custom headers cannot opt out or forge it.
+        headers.set('X-Watchly-Suspicious', String(typeof request.cf?.botManagement?.score === 'number' && request.cf.botManagement.score < 30));
         return roomStub(env, roomId).fetch(new Request(request, { headers }));
       }
       if (path === '/api/livekit/token' && request.method === 'POST') {
@@ -67,7 +71,7 @@ const app = {
         if (rawBytes.byteLength > 32768) return json({ error: 'Payload too large' }, 413);
         let event; try { event = await mediaProvider(env).verifyWebhook(new TextDecoder().decode(rawBytes), request.headers.get('authorization')); }
         catch { return json({ error: 'Invalid webhook' }, 401); }
-        const roomId = event.room?.name?.match(/^watchly-voice-([A-Z0-9]{7})$/)?.[1];
+        const roomId = mediaIdentity.voiceRoomCode(event.room?.name, { ...env, LIVEKIT_ROOM_NAMESPACE: env.LIVEKIT_ROOM_NAMESPACE || 'development' });
         if (roomId) return roomStub(env, roomId).fetch(new Request('https://internal/media-event', { method: 'POST', body: JSON.stringify(event) }));
         return json({ ok: true });
       }
@@ -84,7 +88,12 @@ const app = {
         let proof; try { proof = await verifyTicket(env.MEDIA_SESSION_SECRET, cookie); } catch { return json({ error: 'Media session expired. Reconnect to your room.' }, 401); }
         if (proof.roomId !== roomId || proof.fileId !== url.searchParams.get('id')) return json({ error: 'File access denied' }, 403);
         const checked = await authorize(env, proof); if (!checked.ok) return checked;
-        return streamDrive(request, env);
+        return streamDrive(request, env, fetch, async () => {
+          if (env.ENABLE_DRIVE_PROXY === 'false') return false;
+          const response = await authorize(env, proof, false, undefined, AbortSignal.timeout(5000));
+          await response.body?.cancel();
+          return response.ok;
+        });
       }
       if (path.startsWith('/api/') || path.startsWith('/ws/')) return json({ error: 'Not found' }, 404);
       if (/^\/room\/[A-Z0-9]{7}\/?$/.test(path) && ['GET', 'HEAD'].includes(request.method)) {
@@ -108,6 +117,10 @@ export default {
       response = new Response(response.body, response);
       response.headers.set('X-Content-Type-Options', 'nosniff');
       response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+      if (/^\/auth\/callback\/?$/.test(new URL(request.url).pathname)) {
+        response.headers.set('Cache-Control', 'no-store');
+        response.headers.set('Referrer-Policy', 'no-referrer');
+      }
       if (new URL(request.url).pathname.startsWith('/api/')) response.headers.set('X-Watchly-Request-ID', requestId);
       if (response.headers.get('Content-Type')?.includes('text/html')) response.headers.set('Content-Security-Policy', "base-uri 'self'; object-src 'none'; frame-ancestors 'self'");
     }

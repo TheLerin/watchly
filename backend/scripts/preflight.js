@@ -30,6 +30,8 @@ if (!origins.length) {
 if (origins.includes('*')) fail('CORS_ORIGIN cannot be * in production.');
 
 if (!livekitConfig()) fail('LIVEKIT_URL (wss://), LIVEKIT_API_KEY and LIVEKIT_API_SECRET are required for LiveKit voice.');
+if (process.env.LIVEKIT_ROOM_NAMESPACE !== 'legacy-render') fail('LIVEKIT_ROOM_NAMESPACE must be legacy-render.');
+if (!process.env.TURNSTILE_SITE_KEY?.trim() || !process.env.TURNSTILE_SECRET_KEY?.trim()) fail('Both Turnstile keys are required for anonymous room creation.');
 // coturn remains optional for the retained legacy voice and Screen Share Beta;
 // LiveKit Cloud supplies voice transport/relay independently of these settings.
 if (turnUrls.length && !process.env.TURN_SHARED_SECRET) fail('TURN_SHARED_SECRET is required when TURN_URLS is configured.');

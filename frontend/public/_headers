@@ -11,6 +11,9 @@
   Cache-Control: no-cache
 /auth/*
   X-Robots-Tag: noindex, nofollow
+/auth/callback
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
 /my-watchly
   X-Robots-Tag: noindex, nofollow
 /profile

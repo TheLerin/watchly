@@ -10,8 +10,10 @@ import { actorKey, consume, reserveBudget } from './AbuseGuard.mjs';
 import { tablesForEvent, actionForEvent } from './eventPolicy.mjs';
 import { OutboundFlow } from './OutboundFlow.mjs';
 import { RoomDiagnostics } from './diagnostics.mjs';
+import { checkAnonymousCreation } from './turnstile.mjs';
 
 const allowed = new Set(eventMap.clientToServer.filter(event => event !== 'disconnect'));
+const MAX_MEDIA_REMOVALS_IN_FLIGHT = 4;
 
 export class WatchRoom {
   constructor(ctx, env) {
@@ -93,11 +95,18 @@ export class WatchRoom {
       this.engine.restore(); this.restoring = false;
       this.armMediaJobs();
       this.armPresenceJob();
+      this.armDeliveryCheck();
+      await this.scheduleAlarm();
     });
   }
   engineRuntime() {
     return {
       hibernating: true, roomCode: this.name, presence: this.presence,
+      checkCreation: socket => {
+        const prepared = this.verifiedAccounts.get(socket.id);
+        if (prepared?.creation && prepared.creationAccount === socket.data.account) return prepared.creation;
+        return { ok: false, error: { code: 'AUTH_REPLACED', message: 'Room creation authorization changed. Retry shortly.' } };
+      },
       verifyAccount: (token, socket) => typeof token === 'string' && this.verifiedAccounts.get(socket.id)?.token === token ? this.verifiedAccounts.get(socket.id).account : this.accounts.verify(token),
       checkRoomPassword: (room, password, socket) => {
         const prepared = this.verifiedAccounts.get(socket.id)?.passwordCheck;
@@ -188,15 +197,31 @@ export class WatchRoom {
     if (!this.rooms.size && !this.connections.size && !this.websockets.size && !this.mediaRemovals.size && !this.presenceState.job) {
       this.scheduler.timers.clear();
     }
-    const deadline = this.scheduler.next();
-    const current = await this.ctx.storage.getAlarm();
-    if (Number.isFinite(deadline)) { if (current !== deadline) await this.ctx.storage.setAlarm(deadline); }
-    else if (current !== null) await this.ctx.storage.deleteAlarm();
     // Durable storage output gate commits before externally visible event delivery.
     for (const { id, frame } of this.outbox.splice(0)) {
       try { this.outbound.send(this.websockets.get(id), { ...frame, revision: this.revision }); } catch { /* close callback performs cleanup */ }
     }
+    this.armDeliveryCheck();
+    await this.scheduleAlarm();
     if (dispatchPresence) this.ctx.waitUntil(this.deliverPresence(dispatchPresence));
+  }
+  async scheduleAlarm() {
+    const deadline = this.scheduler.next();
+    const current = await this.ctx.storage.getAlarm();
+    if (Number.isFinite(deadline)) { if (current !== deadline) await this.ctx.storage.setAlarm(deadline); }
+    else if (current !== null) await this.ctx.storage.deleteAlarm();
+  }
+  armDeliveryCheck() {
+    this.scheduler.clearTimeout(this.deliveryTimer);
+    let deadline = Infinity;
+    for (const ws of this.websockets.values()) {
+      if (ws.readyState === 1) deadline = Math.min(deadline, this.outbound.deadline(ws.deserializeAttachment()));
+    }
+    if (Number.isFinite(deadline)) {
+      this.deliveryTimer = this.scheduler.setTimeout(() => {
+        for (const ws of this.websockets.values()) if (ws.readyState === 1) this.outbound.expire(ws);
+      }, deadline - Date.now());
+    }
   }
   armPresenceJob() {
     this.scheduler.clearTimeout(this.presenceTimer);
@@ -240,14 +265,18 @@ export class WatchRoom {
       }
       if (url.pathname === '/media-event') {
         const event = await boundedJson(request, 32768);
+        const eventRoomId = identityModule.voiceRoomCode(event.room?.name, { ...this.env, LIVEKIT_ROOM_NAMESPACE: this.env.LIVEKIT_ROOM_NAMESPACE || 'development' });
+        if (!eventRoomId || this.name && eventRoomId !== this.name) return json({ ok: true, ignored: true });
+        this.name ||= eventRoomId;
         const eventId = typeof event.id === 'string' && event.id.length <= 128 ? event.id : await actorKey(JSON.stringify(event));
         if (this.mediaEvents.get(eventId) > Date.now()) return json({ ok: true, duplicate: true });
         if (this.mediaEvents.size >= 128) this.mediaEvents.delete(this.mediaEvents.keys().next().value);
         this.mediaEvents.set(eventId, Date.now() + 600000);
-        const memberId = event.participant?.identity?.replace(/^watchly-/, '');
+        const participantIdentity = event.participant?.identity;
+        const memberId = typeof participantIdentity === 'string' && /^watchly-[\w-]{1,100}$/.test(participantIdentity) ? participantIdentity.slice(8) : null;
         const room = this.rooms.get(this.name), member = room?.users.find(user => user.userId === memberId && user.connected);
         if (event.event === 'participant_joined' && memberId && (!member || room.kickedUserIds.has(memberId))) {
-          const roomId = event.room?.name?.match(/^watchly-voice-([A-Z0-9]{7})$/)?.[1] || this.name;
+          const roomId = eventRoomId;
           if (!roomId) return json({ error: 'Invalid media room' }, 400);
           this.queueMediaRemoval(roomId, memberId);
         }
@@ -267,7 +296,9 @@ export class WatchRoom {
       }
       const pair = new WebSocketPair(), id = crypto.randomUUID().replaceAll('-', '');
       this.ctx.acceptWebSocket(pair[1]);
-      pair[1].serializeAttachment({ id, openedAt: Date.now(), seq: 0, actor: request.headers.get('X-Watchly-Actor') });
+      pair[1].serializeAttachment({ id, openedAt: Date.now(), seq: 0, actor: request.headers.get('X-Watchly-Actor'),
+        hostname: new URL(request.headers.get('X-Watchly-Origin') || request.headers.get('Origin') || request.url).hostname,
+        suspicious: request.headers.get('X-Watchly-Suspicious') === 'true' });
       this.websockets.set(id, pair[1]);
       this.armHandshake(pair[1], pair[1].deserializeAttachment());
       await this.commit();
@@ -280,6 +311,7 @@ export class WatchRoom {
       const account = bearer ? await this.accounts.verify(/^Bearer (\S+)$/i.exec(bearer)?.[1]) : null;
       const check = () => {
         const current = identityModule.voiceMember({ io: this.io, rooms: this.rooms }, proof);
+        if (this.mediaRemovals.has(current.member.userId)) throw Object.assign(new Error('A previous call session is still being cleared. Retry shortly.'), { status: 409 });
         if (current.member.accountId || account) {
           if (!account || account.id !== current.member.accountId || current.socket.data.account?.id !== account.id || !current.member.authenticated || current.socket.data.account?.expiresAt <= Date.now()) throw Object.assign(new Error('Use the account that owns this membership.'), { status: 401 });
         }
@@ -320,7 +352,17 @@ export class WatchRoom {
           }
           const socket = this.io.sockets.sockets.get(ws.deserializeAttachment()?.id), payload = packet?.args?.[0];
           if (socket && packet?.v === 1 && typeof packet.id === 'string' && Number.isSafeInteger(packet.seq) && packet.seq > (ws.deserializeAttachment()?.seq || 0) && !ws.deserializeAttachment()?.recentIds?.includes(packet.id) && !this.frames.get(socket.id)?.recentIds?.includes(packet.id) && payload && typeof payload === 'object' && !Array.isArray(payload)) {
-            if (packet.event === 'room:create') { verified ||= {}; verified.budgetAllowed = await reserveBudget(this.env, 'rooms'); }
+            if (packet.event === 'room:create') {
+              verified ||= {}; verified.creationAccount = socket.data.account;
+              if (!await this.consumeAction(socket, ws, 'create')) verified.preflightDenied = true;
+              else {
+                verified.consumedAction = 'create';
+                const attachment = ws.deserializeAttachment();
+                verified.creation = await checkAnonymousCreation(this.env, { account: socket.data.account, actor: attachment.actor,
+                  hostname: attachment.hostname, suspicious: attachment.suspicious, token: payload.turnstileToken });
+                if (verified.creation.ok) verified.budgetAllowed = await reserveBudget(this.env, 'rooms');
+              }
+            }
             const account = socket.data.account;
             if (account?.token && Date.now() - (account.sessionCheckedAt || 0) >= 60000 && !['clock:ping', 'network_ping', 'auth:update'].includes(packet.event)) {
               try { await this.accounts.sessionActive(account); }
@@ -345,12 +387,17 @@ export class WatchRoom {
                 catch (error) { verified.passwordCreate = { hash: accessModule.hash(payload.password), error }; }
               }
             }
-            if (packet.event === 'social:invite' && member && ['Host', 'Moderator'].includes(member.role) && socket.data.account?.expiresAt > Date.now()) {
+            if (packet.event === 'social:invite' && member && accountOwnsMember && ['Host', 'Moderator'].includes(member.role) && socket.data.account?.expiresAt > Date.now() && !verified?.revokedAccount) {
               verified ||= {}; const account = socket.data.account;
               if (!await this.consumeAction(socket, ws, 'social')) verified.preflightDenied = true;
               else {
                 verified.consumedAction = 'social';
-                try { verified.invitation = { account, targetId: payload.targetId, room, result: await this.accounts.invite(account, payload.targetId, room.id) }; }
+                try {
+                  if (!socket.connected || socket.data.account !== account || this.rooms.get(room.id) !== room || socket.data.roomId !== room.id || !member.connected || member.id !== socket.id || room.kickedUserIds.has(member.userId) || !['Host', 'Moderator'].includes(member.role) || account.expiresAt <= Date.now()) {
+                    throw new Error('Invitation authorization changed');
+                  }
+                  verified.invitation = { account, targetId: payload.targetId, room, result: await this.accounts.invite(account, payload.targetId, room.id) };
+                }
                 catch (error) { verified.invitation = { account, targetId: payload.targetId, room, error }; }
               }
             }
@@ -372,6 +419,7 @@ export class WatchRoom {
         const packet = JSON.parse(message), attachment = ws.deserializeAttachment();
         diagnosticEvent = allowed.has(packet?.event) ? packet.event : 'protocol';
         if (!this.websockets.has(attachment?.id) || ws.readyState > 1) return;
+        if (this.outbound.expire(ws, attachment)) return;
         if (verified) this.verifiedAccounts.set(attachment.id, verified);
         if (!packet || packet.v !== 1) { ws.close(1008, 'Protocol mismatch'); return; }
         if (packet.type === 'delivery-ack') {
@@ -468,19 +516,35 @@ export class WatchRoom {
   }
   webSocketError(ws) { return this.webSocketClose(ws, 1006); }
   queueMediaRemoval(roomId, memberId) {
-    if (this.mediaRemovals.has(memberId)) return;
-    this.mediaRemovals.set(memberId, { roomId, memberId, nextAt: Date.now(), failures: 0 });
+    const existing = this.mediaRemovals.get(memberId);
+    if (existing && !(existing.terminal && existing.namespace === (this.env.LIVEKIT_ROOM_NAMESPACE || 'development'))) return;
+    if (!existing && this.mediaRemovals.size >= 1024) {
+      console.error(JSON.stringify({ code: 'MEDIA_REMOVAL_QUEUE_LIMIT' }));
+      return;
+    }
+    const now = Date.now();
+    this.mediaRemovals.set(memberId, { roomId, memberId, namespace: this.env.LIVEKIT_ROOM_NAMESPACE || 'development', nextAt: now, createdAt: now, failures: 0 });
     this.armMediaJobs();
   }
   armMediaJobs() {
     this.scheduler.clearTimeout(this.mediaTimer);
-    if (this.mediaRemovals.size) this.mediaTimer = this.scheduler.setTimeout(() => this.removeMediaParticipants(), Math.max(0, Math.min(...[...this.mediaRemovals.values()].map(job => job.nextAt || 0)) - Date.now()));
+    const hasCapacity = this.mediaInFlight.size < MAX_MEDIA_REMOVALS_IN_FLIGHT;
+    let nextAt = Infinity;
+    for (const [id, job] of this.mediaRemovals) {
+      if (hasCapacity || job.terminal || this.mediaInFlight.has(id)) nextAt = Math.min(nextAt, job.nextAt || 0);
+    }
+    if (nextAt !== Infinity) this.mediaTimer = this.scheduler.setTimeout(() => this.removeMediaParticipants(), Math.max(0, nextAt - Date.now()));
   }
   async removeMediaParticipants() {
     for (const [id, removal] of this.mediaRemovals) {
       if (removal.nextAt > Date.now()) continue;
       if (removal.terminal) { this.mediaRemovals.delete(id); continue; }
+      if (removal.namespace !== (this.env.LIVEKIT_ROOM_NAMESPACE || 'development')) {
+        removal.terminal = true; removal.nextAt = Date.now() + 86400000;
+        console.warn(JSON.stringify({ code: 'MEDIA_JOB_NAMESPACE_MISMATCH' })); continue;
+      }
       if (this.mediaInFlight.has(id)) { removal.nextAt = Date.now() + 15000; continue; }
+      if (this.mediaInFlight.size >= MAX_MEDIA_REMOVALS_IN_FLIGHT) continue;
       removal.nextAt = Date.now() + 15000; // Durable watchdog survives interruption before HTTP completion.
       this.mediaInFlight.add(id);
       this.ctx.waitUntil((async () => {
@@ -488,12 +552,17 @@ export class WatchRoom {
         try { await mediaProvider(this.env).remove(removal.roomId, id); } catch { failed = true; }
         await this.serial(async () => {
           this.mediaInFlight.delete(id);
-          if (this.mediaRemovals.get(id) !== removal) return;
-          if (!failed) this.mediaRemovals.delete(id);
-          else {
-            removal.failures++; removal.terminal = removal.failures >= 12;
-            removal.nextAt = Date.now() + (removal.terminal ? 86400000 : Math.round(Math.min(300000, 15000 * 2 ** Math.min(removal.failures, 5)) * (0.85 + Math.random() * 0.3)));
-            if (removal.terminal) console.error(JSON.stringify({ code: 'MEDIA_REMOVAL_EXHAUSTED', attempts: removal.failures }));
+          if (this.mediaRemovals.get(id) === removal) {
+            if (!failed) this.mediaRemovals.delete(id);
+            else {
+              const now = Date.now();
+              removal.createdAt ??= now;
+              removal.failures++;
+              removal.terminal = now - removal.createdAt >= 86400000;
+              const delay = removal.failures >= 12 ? 900000 : Math.min(300000, 15000 * 2 ** Math.min(removal.failures, 5));
+              removal.nextAt = now + (removal.terminal ? 86400000 : Math.round(delay * (0.85 + Math.random() * 0.3)));
+              if (removal.failures === 12 || removal.terminal) console.error(JSON.stringify({ code: removal.terminal ? 'MEDIA_REMOVAL_EXHAUSTED' : 'MEDIA_REMOVAL_DELAYED', namespace: removal.namespace, attempts: removal.failures }));
+            }
           }
           this.armMediaJobs(); await this.commit();
         });

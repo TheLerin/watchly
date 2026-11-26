@@ -5,7 +5,8 @@ import { readFile, stat, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { environment } from './harness.mjs';
+import { environment, context as storageContext } from './harness.mjs';
+import { AbuseGuard } from '../src/AbuseGuard.mjs';
 import app from '../src/index.mjs';
 const require = createRequire(new URL('../../frontend/package.json', import.meta.url));
 const { chromium } = require('playwright');
@@ -35,7 +36,7 @@ try {
     const code = new URL(route.url()).pathname.split('/').pop();
     const ready = (async () => {
       const item = await setup.room(code);
-      await item.object.fetch(new Request(`https://watchly.test/ws/rooms/${code}`, { headers: { Upgrade: 'websocket' } }));
+      await app.fetch(new Request(`https://watchly.test/ws/rooms/${code}`, { headers: { Upgrade: 'websocket', Origin: 'https://watchly.test', 'CF-Connecting-IP': '192.0.2.10' } }), setup.env);
       const ws = item.ctx.sockets.at(-1), record = ws.send.bind(ws);
       ws.send = value => { record(value); route.send(value); };
       ws.close = (code = 1000, reason = '') => { ws.readyState = 3; route.close({ code, reason }); };
@@ -52,7 +53,23 @@ try {
   pages.push(host, viewer);
   for (const page of [host, viewer]) page.on('pageerror', error => errors.push(error.message));
   await host.goto('https://watchly.test');
-  await host.getByRole('button', { name: 'Create room', exact: true }).first().click();
+  const createButton = host.getByRole('button', { name: 'Create room', exact: true }).first();
+  const logo = host.locator('.landing-brand img');
+  await logo.evaluate(image => image.decode());
+  assert.equal(await logo.evaluate(image => image.naturalWidth), 192);
+  const fill = await createButton.evaluate(button => {
+    const cycle = button.getAnimations().find(animation => animation.animationName === 'watchly-spectrum-cycle');
+    if (!cycle) return null;
+    cycle.currentTime = 0;
+    const start = getComputedStyle(button).backgroundPosition;
+    cycle.currentTime = 3000;
+    const next = getComputedStyle(button).backgroundPosition;
+    return { start, next, image: getComputedStyle(button).backgroundImage };
+  });
+  assert.match(fill?.image || '', /repeating-linear-gradient/);
+  assert.notEqual(fill.start, fill.next);
+  await createButton.click();
+  assert.equal(await host.locator('.room-launcher-submit').evaluate(button => getComputedStyle(button).animationName), 'watchly-spectrum-cycle');
   await host.getByPlaceholder('Your nickname').fill('Harness host'); await host.locator('.room-launcher-submit').click();
   await host.waitForURL('**/room/**');
   const code = host.url().split('/').pop(); await host.locator('.room-shell').waitFor();
@@ -120,6 +137,15 @@ try {
     for (const page of [host, viewer]) await page.waitForFunction(() => document.querySelector('.room-player-surface video')?.readyState >= 2);
     await host.evaluate(() => document.activeElement?.blur()); await host.keyboard.press('Space');
     for (const page of [host, viewer]) await page.waitForFunction(() => { const video = document.querySelector('.room-player-surface video'); return video && !video.paused && video.currentTime > 0.5; });
+    const viewerVideo = viewer.locator('.room-player-surface video');
+    const buffering = viewer.locator('.watchly-buffering-compact');
+    await viewerVideo.evaluate(video => video.dispatchEvent(new Event('waiting')));
+    await buffering.waitFor();
+    const ring = await buffering.locator('.watchly-buffer-ring').evaluate(element => getComputedStyle(element, '::before').animationName);
+    assert.equal(ring, 'watchly-buffer-spin');
+    assert.equal(await buffering.evaluate(element => getComputedStyle(element).pointerEvents), 'none');
+    await viewerVideo.evaluate(video => video.dispatchEvent(new Event('playing')));
+    await buffering.waitFor({ state: 'hidden' });
     await host.keyboard.press('Space');
     for (const page of [host, viewer]) await page.waitForFunction(() => document.querySelector('.room-player-surface video')?.paused);
     await host.locator('.room-player-surface video').evaluate(video => { video.currentTime = 5; });
@@ -147,6 +173,44 @@ try {
   await reduced.waitForTimeout(200);
   assert.equal(await reduced.locator('.cinema-video source').count(), 0);
   assert.equal(await reduced.locator('.cinema-video').getAttribute('poster'), '/bg-video-mobile-poster.jpg');
+  const reducedCreate = reduced.getByRole('button', { name: 'Create room', exact: true }).first();
+  assert.equal(await reducedCreate.evaluate(button => getComputedStyle(button).animationName), 'none');
+  assert.match(await reducedCreate.evaluate(button => getComputedStyle(button).backgroundImage), /repeating-linear-gradient/);
+  const account = await context.newPage();
+  await account.goto('https://watchly.test/auth');
+  const emailAction = account.getByRole('button', { name: 'Continue with email' });
+  assert.match(await emailAction.evaluate(button => getComputedStyle(button).backgroundImage), /repeating-linear-gradient/);
+  await account.close();
+  console.log('PASS Chromium logo, cycling action fills, buffering ring during a playback stall and reduced-motion styling.');
+  // Test the actual browser challenge flow with a deterministic widget and Siteverify fixture.
+  // No production key or success bypass exists in application code.
+  const guards = new Map(), originalFetch = globalThis.fetch;
+  Object.assign(setup.env, { TURNSTILE_ENFORCE_ANONYMOUS: 'true', TURNSTILE_SITE_KEY: 'public-browser-fixture', TURNSTILE_SECRET_KEY: 'private-browser-fixture', ANON_CREATE_CHALLENGE_AFTER: '0' });
+  setup.env.ABUSE = { idFromName: value => value, get(name) {
+    if (!guards.has(name)) { const ctx = storageContext(); ctx.storage.ctx = ctx; guards.set(name, new AbuseGuard(ctx, setup.env)); }
+    return { fetch: request => guards.get(name).fetch(request) };
+  } };
+  let verifiedChallenges = 0;
+  globalThis.fetch = async (url, options) => {
+    if (String(url) !== 'https://challenges.cloudflare.com/turnstile/v0/siteverify') return originalFetch(url, options);
+    const body = JSON.parse(options.body); assert.equal(body.response, 'browser-fixture-once'); assert.equal(body.secret, 'private-browser-fixture'); verifiedChallenges++;
+    return Response.json({ success: true, action: 'room_create', hostname: 'watchly.test', challenge_ts: new Date().toISOString() });
+  };
+  try {
+    await context.route('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit', route => route.fulfill({ contentType: 'application/javascript', body: `window.turnstile = {
+      render(element, options) { const button = document.createElement('button'); button.textContent = 'Complete test verification'; button.onclick = () => options.callback('browser-fixture-once'); element.appendChild(button); return 1; },
+      remove() {}, reset() {}
+    };` }));
+    const challenged = await context.newPage(); pages.push(challenged); challenged.on('pageerror', error => errors.push(error.message));
+    await challenged.goto('https://watchly.test'); await challenged.getByRole('button', { name: 'Create room', exact: true }).first().click();
+    await challenged.getByPlaceholder('Your nickname').fill('Verified browser guest'); await challenged.locator('.room-launcher-submit').click();
+    await challenged.getByRole('alertdialog').waitFor(); await challenged.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await challenged.getByRole('alertdialog').waitFor({ state: 'detached' }); assert.equal(verifiedChallenges, 0);
+    await challenged.locator('.room-launcher-submit').click(); await challenged.getByRole('button', { name: 'Complete test verification' }).click();
+    await challenged.waitForURL('**/room/**'); await challenged.locator('.room-shell').waitFor(); assert.equal(verifiedChallenges, 1);
+    await challenged.close(); pages.splice(pages.indexOf(challenged), 1);
+    console.log('PASS Chromium mandatory anonymous Turnstile prompt, safe cancellation, server verification and automatic room creation.');
+  } finally { globalThis.fetch = originalFetch; }
   assert.deepEqual(errors, []);
   await mkdir('.codex-runtime/browser', { recursive: true });
   await reduced.screenshot({ path: '.codex-runtime/browser/mobile-reduced-motion.png' });

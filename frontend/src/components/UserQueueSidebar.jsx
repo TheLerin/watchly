@@ -29,7 +29,7 @@ const roleMeta = {
     Host: {
         icon: <Crown size={11} />,
         label: 'Host',
-        className: 'border-white/20 bg-white text-black',
+        className: 'watchly-accent-badge border-white/20',
     },
     Moderator: {
         icon: <Shield size={11} />,
@@ -105,7 +105,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                         return (
                             <div key={user.id} className="group relative">
                                 <div className="room-member-row flex items-center gap-2 rounded-2xl border border-transparent px-2.5 py-2 transition hover:border-white/10 hover:bg-white/[0.04]">
-                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-bold text-black">
+                                    <div className="watchly-accent-badge flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold">
                                         <Avatar name={user.nickname} url={user.avatarUrl} size={32} />
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -158,6 +158,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                             )}
                                             <div className="my-1 h-px bg-white/10" />
                                             <ActionItem icon={<UserX size={14} />} label="Kick user" danger onClick={() => { kickUser(user.id); setOpenMenuId(null); }} />
+                                            {currentUser?.role === 'Host' && <ActionItem icon={<UserX size={14} />} label="Kick and require approval for new joins" danger onClick={() => { kickUser(user.id, true); setOpenMenuId(null); }} />}
                                         </MotionDiv>
                                     )}
                                 </AnimatePresence>

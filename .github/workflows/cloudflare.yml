@@ -28,14 +28,21 @@ jobs:
       - run: npm --prefix backend ci
       - run: npm --prefix frontend ci
       - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm --prefix backend audit --audit-level=high
+      - run: npm --prefix frontend audit --audit-level=high
       - run: npm test
       - run: npm run build
+      - run: npm run check:bindings
       - run: npm run check:deploy
+      - run: npm run check:deploy:staging
+      - run: npm run check:deploy:production
       - run: node workers/test/workerd-direct.mjs
       - run: npm --prefix frontend exec -- playwright install --with-deps chromium
       - run: npm run test:integration
       - run: npm run test:browser
       - run: npm run test:browser:harness
+      - run: node workers/test/pwa-update.cjs
 
   staging:
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_staging
@@ -50,12 +57,19 @@ jobs:
       - run: npm --prefix backend ci
       - run: npm --prefix frontend ci
       - run: npm ci
+      - run: node scripts/check-wrangler.mjs --staging-preflight
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SITE_ORIGIN: ${{ vars.VITE_SITE_ORIGIN }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_SITE_ORIGIN: ${{ vars.VITE_SITE_ORIGIN }}
-      - run: npm run deploy:staging
+      - run: npm run deploy:staging -- --var "TURNSTILE_SITE_KEY:$TURNSTILE_SITE_KEY"
         env:
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

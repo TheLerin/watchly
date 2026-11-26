@@ -1,5 +1,7 @@
 # Watchly V2.1 remediation report
 
+> Current targeted status: see RELEASE_GATES.md and PROJECT_ISSUES.md. Older audit/install/localhost blocker statements below describe the earlier baseline; current full backend and HTTP integration pass, while critical/high dependency remediation and live-service acceptance remain open. Turnstile and media namespace changes are documented in docs/TURNSTILE_AND_MEDIA_ISOLATION.md.
+
 26 November 2026. This continues the existing uncommitted migration. Existing UI/features, optimized background loops, Supabase records, LiveKit and rollback hosts remain. No production migration, deployment, DNS/billing change, commit, push or service retirement occurred. Unrelated user images were preserved.
 
 | Severity | Finding | Implemented change | Evidence / status |

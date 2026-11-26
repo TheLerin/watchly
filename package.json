@@ -17,7 +17,14 @@
     "test:benchmark": "node workers/test/benchmark.mjs",
     "test:runtime": "node workers/test/workerd-direct.mjs",
     "test:soak": "node workers/test/soak.mjs",
-    "test:presence": "node workers/test/presence-benchmark.mjs"
+    "test:soak:network": "node workers/test/network-soak.mjs",
+    "test:soak:runtime": "node workers/test/workerd-direct.mjs --soak",
+    "test:presence": "node workers/test/presence-benchmark.mjs",
+    "check:bindings": "node scripts/check-wrangler.mjs",
+    "check:deploy:staging": "wrangler deploy --dry-run --env staging --outdir .worker-build/staging",
+    "check:deploy:production": "wrangler deploy --dry-run --env production --outdir .worker-build/production",
+    "audit:dependencies": "node scripts/audit-dependencies.mjs",
+    "fix:dependencies": "node scripts/remediate-dependencies.mjs --apply"
   },
   "dependencies": {},
   "devDependencies": {

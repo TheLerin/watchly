@@ -13,7 +13,6 @@
   "description": "",
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
-    "axios": "^1.14.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "livekit-server-sdk": "^2.19.1",
@@ -21,6 +20,12 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
-    "ws": "^8.18.3"
+    "ws": "8.21.0"
+  },
+  "overrides": {
+    "ws": "$ws",
+    "proxy-addr": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.8.tgz",
+    "path-to-regexp": "https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-8.4.2.tgz",
+    "body-parser": "https://registry.npmjs.org/body-parser/-/body-parser-2.4.0.tgz"
   }
 }

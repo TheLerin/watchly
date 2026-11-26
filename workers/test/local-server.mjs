@@ -21,9 +21,11 @@ export async function localServer() {
   config.assets.directory = path.resolve(config.assets.directory);
   config.observability = { enabled: false };
   // Isolated config directory prevents loading real .dev.vars or production credentials.
-  config.vars = { NODE_ENV: 'development', MEDIA_PROVIDER: 'livekit', ALLOWED_ORIGINS: '' };
+  config.vars = { NODE_ENV: 'development', MEDIA_PROVIDER: 'livekit', LIVEKIT_ROOM_NAMESPACE: 'development', ALLOWED_ORIGINS: '' };
   await writeFile(path.join(directory, 'wrangler.json'), JSON.stringify(config, null, 2));
-  const child = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--config', path.join(directory, 'wrangler.json'), '--ip', '127.0.0.1', '--port', String(port), '--persist-to', path.join(directory, 'state')], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, WRANGLER_SEND_METRICS: 'false' } });
+  // Test-only CLI settings avoid external Request.cf fetches and user-profile registry writes.
+  // Worker NODE_ENV remains development in config.vars.
+  const child = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--config', path.join(directory, 'wrangler.json'), '--ip', '127.0.0.1', '--port', String(port), '--persist-to', path.join(directory, 'state')], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NODE_ENV: 'test', XDG_CONFIG_HOME: path.join(directory, 'config'), WRANGLER_SEND_METRICS: 'false' } });
   let output = ''; child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
   const base = `http://127.0.0.1:${port}`;
   for (let attempt = 0; attempt < 150; attempt++) {

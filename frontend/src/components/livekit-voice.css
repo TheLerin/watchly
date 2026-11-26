@@ -10,7 +10,6 @@
 .livekit-voice-count { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-sub); }
 .livekit-voice-actions { display: flex; gap: 8px; margin-top: 12px; }
 .livekit-voice-actions button, .livekit-voice-start-audio { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 10px; border: 1px solid var(--glass-border); border-radius: 14px; background: var(--accent-soft); color: var(--text); font-size: 12px; font-weight: 650; }
-.livekit-voice-actions .livekit-voice-join { background: var(--text); color: var(--bg-base); }
 .livekit-voice-actions .livekit-voice-leave { color: #dc7777; border-color: rgb(220 119 119 / 25%); }
 .livekit-voice-start-audio { width: 100%; margin-top: 10px; }
 .livekit-voice-error { color: #dc7777; font-size: 12px; line-height: 1.6; margin: 12px 0 0; }

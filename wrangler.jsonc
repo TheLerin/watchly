@@ -14,7 +14,8 @@
     "run_worker_first": [
       "/api/*",
       "/ws/*",
-      "/room/*"
+      "/room/*",
+      "/auth/callback*"
     ]
   },
   "durable_objects": {
@@ -56,7 +57,10 @@
     "DAILY_SOCIAL_LOOKUP_BUDGET": "10000",
     "DAILY_MEDIA_JOIN_BUDGET": "100",
     "LIVEKIT_MAX_PARTICIPANTS": "6",
-    "ENABLE_DIAGNOSTICS": "false"
+    "ENABLE_DIAGNOSTICS": "false",
+    "LIVEKIT_ROOM_NAMESPACE": "development",
+    "TURNSTILE_SITE_KEY": "",
+    "ANON_CREATE_CHALLENGE_AFTER": "2"
   },
   "observability": {
     "enabled": true,
@@ -76,7 +80,10 @@
         "DAILY_SOCIAL_LOOKUP_BUDGET": "10000",
         "DAILY_MEDIA_JOIN_BUDGET": "100",
         "LIVEKIT_MAX_PARTICIPANTS": "6",
-        "ENABLE_DIAGNOSTICS": "false"
+        "ENABLE_DIAGNOSTICS": "false",
+        "LIVEKIT_ROOM_NAMESPACE": "staging",
+        "TURNSTILE_SITE_KEY": "",
+        "ANON_CREATE_CHALLENGE_AFTER": "2"
       },
       "durable_objects": {
         "bindings": [
@@ -93,7 +100,34 @@
             "class_name": "AbuseGuard"
           }
         ]
-      }
+      },
+      "assets": {
+  "directory": "./frontend/dist",
+  "binding": "ASSETS",
+  "html_handling": "auto-trailing-slash",
+  "not_found_handling": "single-page-application",
+  "run_worker_first": [
+    "/api/*",
+    "/ws/*",
+    "/room/*",
+    "/auth/callback*"
+  ]
+},
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": [
+            "WatchRoom",
+            "PresenceDirectory"
+          ]
+        },
+        {
+          "tag": "v2-abuse",
+          "new_sqlite_classes": [
+            "AbuseGuard"
+          ]
+        }
+      ]
     },
     "production": {
       "name": "watchly-production",
@@ -105,7 +139,10 @@
         "DAILY_SOCIAL_LOOKUP_BUDGET": "10000",
         "DAILY_MEDIA_JOIN_BUDGET": "100",
         "LIVEKIT_MAX_PARTICIPANTS": "6",
-        "ENABLE_DIAGNOSTICS": "false"
+        "ENABLE_DIAGNOSTICS": "false",
+        "LIVEKIT_ROOM_NAMESPACE": "production",
+        "TURNSTILE_SITE_KEY": "",
+        "ANON_CREATE_CHALLENGE_AFTER": "2"
       },
       "durable_objects": {
         "bindings": [
@@ -122,7 +159,33 @@
             "class_name": "AbuseGuard"
           }
         ]
-      }
+      },
+      "assets": {
+        "directory": "frontend/dist",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": [
+          "/api/*",
+          "/ws/*",
+          "/room/*",
+          "/auth/callback*"
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": [
+            "WatchRoom",
+            "PresenceDirectory"
+          ]
+        },
+        {
+          "tag": "v2-abuse",
+          "new_sqlite_classes": [
+            "AbuseGuard"
+          ]
+        }
+      ]
     }
   }
 }

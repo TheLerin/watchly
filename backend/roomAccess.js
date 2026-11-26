@@ -151,6 +151,12 @@ function createRoomAccess({ io, rooms, runtime = {}, now = Date.now }) {
     };
     for (const room of rooms.values()) init(room);
     return { init, check, handlers, state, publish,
+        requireApproval(room) {
+            init(room);
+            if (room.access.approvalRequired) return;
+            room.access.approvalRequired = true;
+            room.access.revision++;
+        },
         friendInvited(room, accountId) {
             init(room); prune(room); if (room.access.visibility !== 'private') return;
             const old = [...room.roomInvites.values()].find(value => value.accountId === accountId);

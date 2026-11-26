@@ -125,6 +125,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     // ── State ─────────────────────────────────────────────────────────────────
     const [inputUrl, setInputUrl]           = useState('');
     const [isPlayerReady, setIsPlayerReady] = useState(false);
+    const [isBuffering, setIsBuffering]     = useState(false);
     const [playerError, setPlayerError]     = useState(null);
     // FIX #9: Show actual buffer fill % in the loading skeleton
     const [bufferedPercent, setBufferedPercent] = useState(0);
@@ -149,6 +150,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const [isFingerprinting, setIsFingerprinting] = useState(false);
     const [localFileError, setLocalFileError] = useState('');
     const [isStartingAnyway, setIsStartingAnyway] = useState(false);
+
+    const updateBuffering = useCallback((waiting) => {
+        isBufferingRef.current = waiting;
+        setIsBuffering(waiting);
+    }, []);
     useVideoAmbientLight(activeMediaElement, ambientTargetRef, !cinemaLuxe && ambientEnabled && appearance === 'cinematic' && videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError);
     useCinemaLuxeEffects(activeMediaElement, ambientTargetRef, cinemaLuxe,
         videoState.isPlaying && isPlayerReady && !autoplayBlocked && !playerError && !viewerDiverged);
@@ -619,7 +625,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         setMediaInspectionError(cachedInspection?.error || '');
         setBufferedPercent(0);
         lastSyncedPosRef.current = 0;
-        isBufferingRef.current   = false;
+        updateBuffering(false);
         initialSeekDoneRef.current = true; // FIX #5: reset; will be set false if stateTime > 2
         // FIX #3: reset retry state on every new URL
         retryCountRef.current = 0;
@@ -1249,7 +1255,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                             <button type="submit" disabled={!roomActionsEnabled || !inputUrl.trim()}
-                                className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 active:scale-95 disabled:opacity-40">
+                                className="watchly-action rounded-xl px-4 py-2 text-xs font-bold transition active:scale-95 disabled:opacity-40">
                                 Play Now
                             </button>
                             <button type="button" disabled={!roomActionsEnabled || !inputUrl.trim()} onClick={handleQueueAdd}
@@ -1376,7 +1382,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                 try { await playVideo({ startAnyway: true }); }
                                 finally { setIsStartingAnyway(false); }
                             }}
-                            className="rounded-xl border border-white/10 bg-white px-3 py-1.5 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                            className="watchly-action rounded-xl border border-white/10 px-3 py-1.5 font-bold transition disabled:opacity-50"
                         >
                             {isStartingAnyway ? 'Starting…' : 'Start anyway'}
                         </button>
@@ -1432,7 +1438,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                             className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.06),transparent_45%)] p-6 text-center">
                             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/60">
-                                <img src="/logo.png" alt="Watchly Logo" className="w-14 h-auto opacity-80 theme-invert transition-all" />
+                                <img src="/logo.png" alt="Watchly Logo" className="w-14 h-auto" />
                             </div>
                             <h2 className="mb-2 text-xl font-semibold text-white">No video playing</h2>
                             <p className="max-w-sm text-sm leading-6 text-zinc-500">
@@ -1450,27 +1456,31 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
                             {/* ── Loading Skeleton ─────────────────────────────── */}
                             <AnimatePresence>
-                                {!isPlayerReady && !playerError && (!isLocal || isLocalReady) && (
+                                {!playerError && (!isLocal || isLocalReady) && (
+                                    !isPlayerReady || (isBuffering && videoState.isPlaying && !autoplayBlocked)
+                                ) && (
                                     <MotionDiv
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         exit={{ opacity: 0 }}
-                                        className="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 text-center"
-                                        style={{ background: '#0b0b0b' }}
+                                        role="status"
+                                        className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center ${
+                                            isPlayerReady ? 'watchly-buffering-compact pointer-events-none' : 'watchly-player-loading'
+                                        }`}
                                     >
-                                        <div className="w-24 h-24 rounded-full border border-white/10 bg-black/40 flex items-center justify-center mb-6">
-                                            <img src="/logo.png" alt="Watchly" className="w-16 h-auto opacity-65 theme-invert" />
+                                        <div className="watchly-buffer-ring" aria-hidden="true">
+                                            <img src="/logo.png" alt="" />
                                         </div>
-                                        <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
-                                            {isLocal ? 'Preparing local video…' : 'Buffering stream...'}
-                                        </h2>
+                                        <span className={isPlayerReady ? 'sr-only' : 'text-xl font-bold'}>
+                                            {isLocal && !isPlayerReady ? 'Preparing local video…' : 'Buffering stream...'}
+                                        </span>
                                         {/* Only report measurable buffer progress. */}
-                                        {isGDriveProxy && bufferedPercent > 0 && (
+                                        {!isPlayerReady && isGDriveProxy && bufferedPercent > 0 && (
                                             <>
-                                                <div className="mt-2 h-2 w-48 overflow-hidden rounded-full bg-white/10">
-                                                    <div className="h-full rounded-full bg-zinc-400" style={{ width: `${bufferedPercent}%` }} />
+                                                <div className="h-2 w-48 overflow-hidden rounded-full bg-white/10">
+                                                    <div className="watchly-buffer-progress h-full rounded-full" style={{ width: `${bufferedPercent}%` }} />
                                                 </div>
-                                                <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{bufferedPercent}% buffered</p>
+                                                <p className="text-xs text-slate-300">{bufferedPercent}% buffered</p>
                                             </>
                                         )}
                                     </MotionDiv>
@@ -1495,7 +1505,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                                 localInputModeRef.current = 'match';
                                                 localFileInputRef.current?.click();
                                             }}
-                                            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                                            className="watchly-action mt-5 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition disabled:opacity-50"
                                         >
                                             <FolderOpen size={16} />
                                             {isFingerprinting ? `Checking ${fingerprintProgress}%` : 'Choose matching file'}
@@ -1541,7 +1551,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             }
                                         }}
                                         onCanPlay={() => {
-                                            isBufferingRef.current = false;
+                                            updateBuffering(false);
                                             if (isLocal) {
                                                 setIsPlayerReady(true);
                                                 setPlayerError(null);
@@ -1670,11 +1680,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         // FIX #6: Track buffering state on native <video> so drift
                                         // correction skips during stalls (same as ReactPlayer path).
                                         onWaiting={() => {
-                                            isBufferingRef.current = true;
+                                            updateBuffering(true);
                                             if (isLocal && !localPlaybackSwitchRef.current) markLocalMediaStatus(videoState.localMedia.sessionId, 'BUFFERING', 'Local player is buffering');
                                         }}
                                         onPlaying={() => {
-                                            isBufferingRef.current = false;
+                                            updateBuffering(false);
                                             if (isLocal && !localPlaybackSwitchRef.current) markLocalMediaStatus(videoState.localMedia.sessionId, 'READY');
                                         }}
                                         // FIX #9: Update buffer fill progress
@@ -1803,8 +1813,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             }
                                         }}
                                         progressInterval={1000}
-                                        onBuffer={() => { isBufferingRef.current = true; }}
-                                        onBufferEnd={() => { isBufferingRef.current = false; }}
+                                        onBuffer={() => updateBuffering(true)}
+                                        onBufferEnd={() => updateBuffering(false)}
                                         config={{
                                             youtube: {
                                                 playerVars: { disablekb: canControlPlayback ? 0 : 1, modestbranding: 1 },
@@ -1875,7 +1885,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                                 setIsPlayerReady(false);
                                                 nativeVideoRef.current?.load();
                                             }}
-                                            className="mb-4 flex items-center gap-2 rounded-xl border border-white/15 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                                            className="watchly-action mb-4 flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold transition"
                                         >
                                             <RefreshCw size={14} /> Try Anyway
                                         </button>

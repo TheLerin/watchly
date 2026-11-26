@@ -26,6 +26,8 @@ import { createMembershipSounds, createCallPresenceSounds } from '../utils/sound
 import { applyQueueDelta } from '../utils/queueState';
 import { guestCredential } from '../utils/guestCredential';
 import { expectedRemotePosition } from '../../../shared/playback-core.mjs';
+import { createCreationVerification } from '../utils/turnstileWidget';
+import TurnstileVerification from '../components/TurnstileVerification';
 
 const RoomContext = createContext();
 export const useRoom = () => useContext(RoomContext);
@@ -55,6 +57,9 @@ const emptyReadiness = {
 };
 
 export const RoomProvider = ({ children }) => {
+    const [creationChallenge, setCreationChallenge] = useState(null);
+    const creationVerification = useMemo(() => createCreationVerification(setCreationChallenge), []);
+    useEffect(() => () => creationVerification.dispose(), [creationVerification]);
     const { playSound } = useSoundEffects();
     const { session: accountSession, profile: accountProfile, isAuthLoading } = useAuth();
     const location = useLocation();
@@ -575,7 +580,17 @@ export const RoomProvider = ({ children }) => {
         return requestRoom('room:join', { roomId: id, nickname: accountProfile?.display_name || nickname, guestKey: guestCredential(), ...options, ...resume });
     }, [requestRoom, accountProfile]);
 
-    const createRoom = useCallback(nickname => requestRoom('room:create', { nickname: accountProfile?.display_name || nickname, guestKey: guestCredential() }), [requestRoom, accountProfile]);
+    const createRoom = useCallback(async nickname => {
+        const payload = { nickname: accountProfile?.display_name || nickname, guestKey: guestCredential() };
+        let token;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try { return await requestRoom('room:create', { ...payload, ...(token ? { turnstileToken: token } : {}) }); }
+            catch (error) {
+                if (attempt >= 2 || !error.challenge || !['TURNSTILE_REQUIRED', 'TURNSTILE_FAILED'].includes(error.code)) throw error;
+                token = await creationVerification.request(error.challenge);
+            }
+        }
+    }, [requestRoom, accountProfile, creationVerification]);
 
     const accessRequest = useCallback((event, payload = {}) => new Promise((resolve, reject) => {
         if (!socket.connected) return reject(new Error('Reconnect before changing room access.'));
@@ -752,7 +767,7 @@ export const RoomProvider = ({ children }) => {
     const promoteUser = useCallback(targetId => emitRoomAction('promote_to_moderator', { roomId, targetId }), [roomId, emitRoomAction]);
     const demoteUser = useCallback(targetId => emitRoomAction('demote_to_viewer', { roomId, targetId }), [roomId, emitRoomAction]);
     const transferHost = useCallback(targetId => emitRoomAction('transfer_host', { roomId, targetId }), [roomId, emitRoomAction]);
-    const kickUser = useCallback(targetId => emitRoomAction('kick_user', { roomId, targetId }), [roomId, emitRoomAction]);
+    const kickUser = useCallback((targetId, requireApproval = false) => emitRoomAction('kick_user', { roomId, targetId, requireApproval }), [roomId, emitRoomAction]);
     const addToQueue = useCallback((url, magnetURI = '', label = '') => {
         if (url || magnetURI) return emitRoomAction('add_to_queue', { roomId, url, magnetURI, label: label || url });
     }, [roomId, emitRoomAction]);
@@ -836,6 +851,7 @@ export const RoomProvider = ({ children }) => {
             getExpectedPosition,
         }}>
             {children}
+            {creationChallenge && <TurnstileVerification key={creationChallenge.requestId} challenge={creationChallenge} onComplete={creationVerification.complete} onCancel={creationVerification.cancel} />}
         </RoomContext.Provider>
     );
 };

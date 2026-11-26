@@ -4,7 +4,20 @@ const process = require('node:process');
 const { validRoomCode } = require('./validators');
 
 const denied = (status, message) => Object.assign(new Error(message), { status });
-const voiceRoomName = roomCode => `watchly-voice-${roomCode}`;
+const mediaNamespace = (env = process.env) => {
+    const namespace = env.LIVEKIT_ROOM_NAMESPACE || 'legacy-render';
+    if (!['development', 'staging', 'production', 'legacy-render'].includes(namespace)) throw denied(503, 'Invalid media deployment namespace.');
+    return namespace;
+};
+const voiceRoomName = (roomCode, env = process.env) => {
+    if (!validRoomCode(roomCode)) throw denied(400, 'Invalid media room code.');
+    return `watchly-${mediaNamespace(env)}-voice-${roomCode}`;
+};
+const voiceRoomCode = (name, env = process.env) => {
+    const prefix = `watchly-${mediaNamespace(env)}-voice-`;
+    const code = typeof name === 'string' && name.startsWith(prefix) ? name.slice(prefix.length) : '';
+    return validRoomCode(code) ? code : null;
+};
 const voiceIdentity = memberId => `watchly-${memberId}`;
 
 function livekitConfig(env = process.env) {
@@ -29,10 +42,13 @@ function voiceMember({ rooms, io }, { roomId, socketId, resumeToken } = {}) {
     if (!room || !member || !socket?.connected || socket.data.roomId !== roomId || socket.data.memberId !== member.userId || room.kickedUserIds.has(member.userId)) {
         throw denied(403, 'You must be an active member of this Watchly room.');
     }
+    if (member.accountId && (!member.authenticated || socket.data.account?.id !== member.accountId || socket.data.account.expiresAt <= Date.now())) {
+        throw denied(403, 'Sign in again before using this room membership.');
+    }
     const actual = crypto.createHash('sha256').update(resumeToken).digest();
     const expected = Buffer.from(member.resumeTokenHash || '', 'hex');
     if (expected.length !== actual.length || !crypto.timingSafeEqual(actual, expected)) throw denied(403, 'Your room membership could not be verified.');
     return { room, socket, member };
 }
 
-module.exports = { livekitConfig, voiceMember, voiceRoomName, voiceIdentity };
+module.exports = { livekitConfig, voiceMember, voiceRoomName, voiceRoomCode, mediaNamespace, voiceIdentity };

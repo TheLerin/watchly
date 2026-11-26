@@ -19,6 +19,12 @@ export function createSocialStore({ client, socket, owner, windowTarget = window
     let active = false, generation = 0, timer, running = null, removal = Promise.resolve(), cleanup = () => {};
     const publish = patch => { state = { ...state, ...patch }; for (const listener of listeners) listener(); };
     const refreshPresence = () => { if (socket.connected) socket.emit('social:refresh'); };
+    const fetchSections = async (sections, signal) => {
+        const result = await client.rpc('get_social_data', { sections }).abortSignal(signal);
+        if (result.error?.code !== 'PGRST202') return result;
+        const legacy = await client.rpc('get_my_watchly').abortSignal(signal);
+        return { data: legacy.data ? { sentInvites: [], ...legacy.data } : null, error: legacy.error };
+    };
     const drain = async () => {
         if (running) return running;
         const current = generation;
@@ -28,15 +34,7 @@ export function createSocialStore({ client, socket, owner, windowTarget = window
                 const controller = new AbortController(); controllers.add(controller);
                 try {
                     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]);
-                    let { data, error } = await client.rpc('get_social_data', { sections }).abortSignal(signal);
-                    // Keep the existing social page/actions usable during a
-                    // staggered deploy before SQL reaches the project. Normal
-                    // operation always uses the targeted projection above.
-                    if (error?.code === 'PGRST202') {
-                        const legacy = await client.rpc('get_my_watchly').abortSignal(signal);
-                        data = legacy.data ? { sentInvites: [], ...legacy.data } : null;
-                        error = legacy.error;
-                    }
+                    const { data, error } = await fetchSections(sections, signal);
                     if (!active || current !== generation) return;
                     if (error) throw error;
                     const patch = { loading: false, error: '' };
@@ -147,6 +145,19 @@ export function createSocialStore({ client, socket, owner, windowTarget = window
             resolve(response.inviteId);
         });
     });
+    const checkInvite = async id => {
+        const current = generation;
+        if (!active) throw new Error('Sign in before opening this invitation.');
+        const { data, error } = await fetchSections(['invites'], AbortSignal.timeout(10000));
+        if (!active || current !== generation) throw new Error('Your account changed. Open the invitation again.');
+        if (error) throw new Error(accountError(error, 'This invitation could not be verified. Try again.'));
+        const invitation = data?.invites?.find(value => value.id === id);
+        if (!invitation || !/^[A-Z0-9]{7}$/.test(invitation.room_code)) {
+            await invalidate(['invites'], true);
+            throw new Error('This invitation is no longer available.');
+        }
+        return invitation.room_code;
+    };
     return { start, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
-        getSnapshot: () => state, load, mutate, invite };
+        getSnapshot: () => state, load, mutate, invite, checkInvite };
 }

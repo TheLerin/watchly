@@ -801,12 +801,10 @@
 
 .room-shell[data-room-appearance="cinematic"] .room-voice-join {
     border-color: rgb(255 255 255 / 16%);
-    background: rgb(255 255 255 / 94%);
-    color: #09090b;
 }
 
 .room-shell[data-room-appearance="cinematic"] .room-voice-join:hover {
-    background: #fff;
+    filter: brightness(1.07);
 }
 
 .room-shell[data-room-appearance="cinematic"] .room-voice-heading {

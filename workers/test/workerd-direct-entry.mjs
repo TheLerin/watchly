@@ -13,7 +13,10 @@ async function connect(env, ctx, code) {
   check(response.status === 101, `WebSocket rejected: ${response.status}`);
   const ws = response.webSocket, pending = new Map(); let seq = 0, welcome;
   const connected = new Promise(resolve => { welcome = resolve; });
-  const receiver = createFrameReceiver({ receipt: seq => ws.send(JSON.stringify({ v: 1, type: 'delivery-ack', seq })), fail: () => { throw new Error('Snapshot transfer failed'); } });
+  const receiver = createFrameReceiver({
+    receipt: seq => { if (ws.readyState === 1) ws.send(JSON.stringify({ v: 1, type: 'delivery-ack', seq })); },
+    fail: () => { throw new Error('Snapshot transfer failed'); },
+  });
   ws.accept();
   ws.addEventListener('message', message => {
     const frame = receiver.accept(JSON.parse(message.data)); if (!frame) return;
@@ -34,6 +37,64 @@ export const cryptoCompatibility = { async test() {
   check(await access.verifyPassword(record, 'workerd-password-123'), 'WebCrypto password verification failed');
   check(!await access.verifyPassword(record, 'wrong-password'), 'Incorrect password accepted');
   console.log('PASS workerd WebCrypto PBKDF2 600000 iterations.');
+} };
+
+export const anonymousChallenge = { async test(_ctrl, env, ctx) {
+  let challenged = false;
+  for (let index = 0; index < 3; index++) {
+    const code = crypto.randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase(), client = await connect(env, ctx, code);
+    try {
+      const result = await client.send('room:create', { nickname: 'Anonymous runtime guest', protocolVersion: 2 });
+      if (result.error?.code === 'TURNSTILE_REQUIRED') {
+        challenged = true;
+        check((await client.send('room:snapshot')).error.code === 'NOT_IN_ROOM', 'Unverified challenge admitted a member');
+      } else check(result.ok, 'Unexpected creation result');
+    } finally { client.ws.close(1000); }
+  }
+  check(challenged, 'Fresh room codes bypassed the anonymous challenge threshold');
+  console.log('PASS workerd anonymous creation challenge threshold and denial without a server-verified token.');
+} };
+
+export const roomSoak = { async test(_ctrl, env, ctx) {
+  if (!env.WATCHLY_RUNTIME_SOAK_SECONDS) return;
+  const seconds = Number(env.WATCHLY_RUNTIME_SOAK_SECONDS);
+  const roomId = crypto.randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase();
+  const host = await connect(env, ctx, roomId);
+  let viewer;
+  const payload = { roomId, nickname: 'Fixture viewer', protocolVersion: 2 };
+  try {
+    check((await host.send('room:create', { nickname: 'Fixture host', protocolVersion: 2 })).ok, 'Room creation failed');
+    viewer = await connect(env, ctx, roomId);
+    let membership = await viewer.send('room:join', payload);
+    check(membership.ok, 'Initial join failed');
+    const { memberId } = membership;
+    const source = 'https://example.test/soak.mp4';
+    await host.send('change_video', { roomId, url: source });
+    const start = Date.now(), latencies = [];
+    let reconnects = 0, maxDriftSeconds = 0;
+    while (Date.now() - start < seconds * 1000) {
+      const began = Date.now();
+      const [a, b] = await Promise.all([host.send('room:snapshot'), viewer.send('room:snapshot')]);
+      latencies.push(Date.now() - began);
+      check(a.snapshot.members.length === 2 && b.snapshot.members.length === 2, 'Membership changed');
+      check(a.snapshot.videoState.url === source && b.snapshot.videoState.url === source, 'Playback source changed');
+      const drift = Math.abs(a.snapshot.videoState.playedSeconds - b.snapshot.videoState.playedSeconds);
+      check(drift < 1, 'Snapshot playback drift exceeded a second');
+      maxDriftSeconds = Math.max(maxDriftSeconds, drift);
+      if (latencies.length % 5 === 0) {
+        const { resumeToken } = membership;
+        viewer.ws.close(1000);
+        viewer = await connect(env, ctx, roomId);
+        membership = await viewer.send('room:join', { ...payload, memberId, resumeToken });
+        check(membership.ok && membership.memberId === memberId && membership.resumeToken !== resumeToken, 'Room recovery failed to rotate the proof');
+        reconnects++;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    latencies.sort((a, b) => a - b);
+    console.log(JSON.stringify({ durationSeconds: Math.round((Date.now() - start) / 1000), snapshots: latencies.length * 2,
+      reconnects, maxDriftSeconds, snapshotPairP95Ms: latencies[Math.floor(latencies.length * 0.95)], transport: 'workerd internal WebSocket' }));
+  } finally { host.ws.close(1000); viewer?.ws.close(1000); }
 } };
 
 export default { async test(_ctrl, env, ctx) {
