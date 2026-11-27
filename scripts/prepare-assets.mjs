@@ -12,7 +12,7 @@ await check(root);
 // Only content-hashed bundles receive immutable caching; public /assets filenames can change in place.
 const headersPath = path.join(root, '_headers');
 let headers = (await readFile(headersPath, 'utf8')).split('\n# Generated immutable bundle routes')[0] + '\n# Generated immutable bundle routes\n';
-for (const name of await readdir(path.join(root, 'assets'))) if (/-[\w-]{8,}\.(js|css)$/.test(name)) headers += `\n/assets/${name}\n  Cache-Control: public, max-age=31536000, immutable\n`;
+for (const name of await readdir(path.join(root, 'assets'))) if (/-[\w-]{8,}\.(js|css|woff2)$/.test(name)) headers += `\n/assets/${name}\n  Cache-Control: public, max-age=31536000, immutable\n`;
 await writeFile(headersPath, headers);
 const html = await readFile(path.join(root, 'index.html'), 'utf8');
 if (!html.includes('/assets/')) throw new Error('Missing production frontend assets');

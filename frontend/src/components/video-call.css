@@ -1,5 +1,5 @@
 .room-video-call { min-width: 0; padding: 14px; color: var(--classic-text, #eee); }
-.room-video-call h2 { margin: 0 0 10px; font-size: 14px; font-weight: 700; }
+.room-video-call h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
 .video-call-content { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 9px; }
 .video-call-status { display: flex; justify-content: space-between; gap: 6px; color: #96969f; font-size: 11px; }
 .video-call-status > span { color: #ccc; }

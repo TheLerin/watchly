@@ -28,7 +28,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      workbox: { skipWaiting: false, clientsClaim: false, globIgnores: ['**/bg-video*.mp4', '**/bg-video*.webm'], navigateFallbackDenylist: [/^\/api\//, /^\/ws\//, /^\/auth\/callback(?:\/|\?|$)/, deploymentRetryNavigation] },
+      workbox: { skipWaiting: false, clientsClaim: false, globPatterns: ['**/*.{js,wasm,css,html,woff2}'], globIgnores: ['**/bg-video*.mp4', '**/bg-video*.webm'], navigateFallbackDenylist: [/^\/api\//, /^\/ws\//, /^\/auth\/callback(?:\/|\?|$)/, deploymentRetryNavigation] },
       includeAssets: ['logo.png', 'logo-512.png', 'bg-video-poster.jpg', 'assets/sofa-couple-mobile.webp'],
       manifest: {
         name: 'Watchly',

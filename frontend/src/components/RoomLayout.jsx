@@ -129,7 +129,7 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
                 <div className="flex min-w-0 items-center gap-3">
                     <button onClick={() => navigate('/')} className="room-brand flex shrink-0 items-center gap-2.5" title="Watchly home" aria-label="Watchly home">
                         <img src="/logo.png" alt="Watchly Logo" className="h-10 w-auto" />
-                        <span className="hidden text-sm font-bold tracking-tight text-white sm:block">Watchly</span>
+                        <span className="hidden text-sm font-semibold tracking-tight text-white sm:block">Watchly</span>
                     </button>
 
                     {roomAppearance === 'cinematic' ? (
@@ -163,8 +163,8 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
                                 title={`Copy room code ${roomId}`}
                                 aria-label="Copy room code"
                             >
-                                <span className="hidden text-[10px] font-bold uppercase tracking-wider text-zinc-600 sm:inline">Room</span>
-                                <span className="truncate font-mono text-xs font-bold text-white">{roomId}</span>
+                                <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-600 sm:inline">Room</span>
+                                <span className="truncate tabular-nums text-xs font-semibold text-white">{roomId}</span>
                                 <AnimatePresence mode="wait">
                                     {copied ? (
                                         <MotionSpan key="copied" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>

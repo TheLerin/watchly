@@ -626,7 +626,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
 
                         <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-2 min-w-0">
-                                <span className="syne text-sm font-bold truncate" style={{ color: 'var(--text)' }}>Voice Call</span>
+                                <span className="text-sm font-[650] truncate" style={{ color: 'var(--text)' }}>Voice Call</span>
                                 <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold" style={callStatusStyle}>{callStatus}</span>
                                 {FORCE_RELAY && <span className="shrink-0 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold text-violet-300">Relay test</span>}
                             </span>

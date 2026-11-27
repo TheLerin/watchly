@@ -15,8 +15,8 @@ const { pathToFileURL } = require('node:url');
     await page.evaluate(async () => {
       await document.fonts.ready;
       await Promise.all([...document.images].map(image => image.decode()));
-      for (const weight of [400, 600]) {
-        const faces = await document.fonts.load(`${weight} 48px "DM Sans"`);
+      for (const weight of [400, 600, 800]) {
+        const faces = await document.fonts.load(`${weight} 48px "Manrope Variable"`);
         if (!faces.length || faces.some(face => face.status !== 'loaded')) throw new Error('The preview font did not load.');
       }
       await document.fonts.ready;

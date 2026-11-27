@@ -12,7 +12,7 @@ the lower sofa foreground are secondary; the complete player, bezel, wall sliver
 platform and top navbar remain. No interface, content, users, logo or chat are generated.
 Branding and the player fit inside the central 630-pixel square for common centered
 thumbnail crops. Very small thumbnails may make supporting text unreadable; platform
-crops vary. The background stays #050505 and the font remains Watchly's DM Sans.
+crops vary. The background stays #050505 and the font uses Watchly's self-hosted Manrope Variable.
 
 To regenerate from the `frontend` directory:
 
@@ -20,7 +20,7 @@ To regenerate from the `frontend` directory:
 node social-preview/render.cjs
 ```
 
-The renderer uses Playwright and installed Chrome or Edge. Set `BROWSER_EXECUTABLE` to use another Chromium executable. The layout loads DM Sans from Google Fonts and fails if the font or either image cannot load, rather than silently exporting an incomplete card.
+The renderer uses Playwright and installed Chrome or Edge. Set `BROWSER_EXECUTABLE` to use another Chromium executable. The layout loads Manrope Variable from the installed Fontsource package and verifies that the font and images load before exporting the card.
 
 Older preview images remain available for existing cached links.
 

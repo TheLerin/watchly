@@ -212,7 +212,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                 transition={{ duration: 0.18 }}
                                 className="group/queue flex items-center gap-2 rounded-2xl border border-transparent px-2.5 py-2 transition hover:border-white/10 hover:bg-white/[0.04]"
                             >
-                                <span className="w-5 shrink-0 font-mono text-xs text-zinc-600">{idx + 1}</span>
+                                <span className="w-5 shrink-0 tabular-nums text-xs text-zinc-600">{idx + 1}</span>
                                 <PlayCircle size={14} className="shrink-0 text-zinc-500" />
                                 <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-400" title={item.label}>{item.label}</span>
                                 {canManageQueue && (

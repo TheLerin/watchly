@@ -22,7 +22,7 @@
 .appearance-panel-header p { margin: 4px 0 0; color: #71717a; font-size: 11px; }
 .appearance-panel-body { min-height: 0; padding: 0 20px 12px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #333 transparent; }
 .appearance-section + .appearance-section { margin-top: 20px; }
-.appearance-section h3 { margin: 0 0 9px; font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgb(255 255 255 / 45%); }
+.appearance-section h3 { margin: 0 0 9px; font-family: inherit; font-size: 10px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; color: rgb(255 255 255 / 45%); }
 .appearance-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .appearance-choice { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 64px; padding: 12px; padding-right: 25px; text-align: left; border: 1px solid rgb(255 255 255 / 8%); border-radius: 11px; background: rgb(255 255 255 / 2.5%); transition: background 160ms ease, border-color 160ms ease; }
 .appearance-choice:hover { background: rgb(255 255 255 / 5%); }
