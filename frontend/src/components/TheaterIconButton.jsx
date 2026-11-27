@@ -8,7 +8,6 @@ const TheaterIconButton = ({ icon, label, active = false, onClick, controls, cla
         aria-expanded={active}
         aria-controls={controls}
         data-tooltip={label}
-        title={label}
         onClick={onClick}
     >
         <GradientIcon>{icon}</GradientIcon>

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Check, MessageSquare } from 'lucide-react';
+import { Send, Check, MessageSquare, X } from 'lucide-react';
 import { useRoom } from '../context/RoomContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import GradientIcon from './GradientIcon';
+import ControlIconButton from './ControlIconButton';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -35,7 +36,7 @@ const Avatar = ({ nickname, role }) => {
     );
 };
 
-const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visible = true }) => {
+const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visible = true, onClose }) => {
     const { messages, sendMessage, currentUser } = useRoom();
     const [input, setInput] = useState('');
     const [sent, setSent] = useState(false);
@@ -68,20 +69,22 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visib
             data-room-variant={variant}
         >
             {!hideHeader && (
-                <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-3">
+                <div className="chat-panel-header flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-3">
                     <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-zinc-400">
                         <MessageSquare size={15} />
                     </span>
-                    <h3 className="text-sm font-bold text-white">Live Chat</h3>
-                    <span className="ml-auto rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-zinc-400">
+                    <div className="chat-panel-title"><h3 className="text-sm font-bold text-white">Live Chat</h3><p>A little closer, wherever you are.</p></div>
+                    <span className="chat-message-count ml-auto rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-zinc-400" aria-label={`${msgList.filter(m => !m.isSystem).length} messages`}>
                         {msgList.filter(m => !m.isSystem).length}
                     </span>
+                    {onClose && <ControlIconButton label="Close chat" icon={<X size={16} />} onClick={onClose} />}
                 </div>
             )}
 
             <div
                 ref={listRef}
-                className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-x-hidden overflow-y-auto p-3"
+                className="chat-message-list flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-x-hidden overflow-y-auto p-3"
+                aria-label="Chat messages"
                 onScroll={event => {
                     const list = event.currentTarget;
                     nearBottomRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 64;
@@ -91,14 +94,13 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visib
                     <MotionDiv
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="flex h-full flex-col items-center justify-center gap-3 text-center"
+                        className="chat-empty flex h-full flex-col items-center justify-center gap-3 text-center"
                     >
                         <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-zinc-500">
                             <MessageSquare size={20} />
                         </span>
-                        <p className="max-w-[180px] text-xs leading-5 text-zinc-500">
-                            Chat opens when someone sends the first message.
-                        </p>
+                        <strong>Share the moment</strong>
+                        <p>Reactions, plot twists, or just a hello. Start the conversation.</p>
                     </MotionDiv>
                 )}
 
@@ -113,7 +115,7 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visib
                             transition={{ type: 'spring', damping: 20, stiffness: 300 }}
                         >
                             {msg.isSystem ? (
-                                <div className="my-1 flex items-center gap-2">
+                                <div className="chat-system-message my-1 flex items-center gap-2">
                                     <div className="h-px flex-1 bg-white/10" />
                                     <p className="px-2 text-[10px] italic text-zinc-600">{msg.text}</p>
                                     <div className="h-px flex-1 bg-white/10" />
@@ -127,29 +129,10 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visib
                                                 {msg.nickname}
                                             </span>
                                         )}
-                                        <div
-                                            className="relative max-w-full break-words px-3 py-2 text-sm leading-relaxed"
-                                            style={isMe(msg)
-                                                ? {
-                                                    overflowWrap: 'anywhere',
-                                                    background: 'rgba(38,38,38,0.78)',
-                                                    color: '#f4f4f5',
-                                                    border: '1px solid rgba(255,255,255,0.11)',
-                                                    borderRadius: 14,
-                                                    borderBottomRightRadius: 4,
-                                                }
-                                                : {
-                                                    overflowWrap: 'anywhere',
-                                                    background: 'rgba(255,255,255,0.04)',
-                                                    color: '#fff',
-                                                    border: '1px solid rgba(255,255,255,0.10)',
-                                                    borderRadius: 14,
-                                                    borderBottomLeftRadius: 4,
-                                                }}
-                                        >
+                                        <div className="chat-message-bubble relative max-w-full break-words px-3 py-2 text-sm leading-relaxed" data-own={isMe(msg)}>
                                             {msg.text}
                                         </div>
-                                        <span className="px-1 text-[9px] text-zinc-600">{msg.time}</span>
+                                        <span className="chat-message-time px-1 text-[9px] text-zinc-600">{msg.time}</span>
                                     </div>
                                 </div>
                             )}
@@ -158,7 +141,7 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visib
                 </AnimatePresence>
             </div>
 
-            <div className="shrink-0 border-t border-white/10 p-3">
+            <div className="chat-composer shrink-0 border-t border-white/10 p-3">
                 <form onSubmit={handleSend} className="flex min-w-0 items-center gap-2">
                     <input
                         type="text"
@@ -166,6 +149,7 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visib
                         onChange={e => setInput(e.target.value)}
                         maxLength={500}
                         placeholder="Type a message..."
+                        aria-label="Message"
                         className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-white/30"
                     />
                     <MotionButton

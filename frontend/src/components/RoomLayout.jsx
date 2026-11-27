@@ -614,7 +614,7 @@ const RoomPresentation = () => {
                                 ref={roomAppearance === 'cinematic' && activePanel === 'chat' ? panelRef : undefined}
                                 role={isDesktop && roomAppearance === 'classic' ? 'tabpanel' : undefined}
                                 aria-labelledby={isDesktop && roomAppearance === 'classic' ? 'classic-chat-tab' : undefined}>
-                                <ChatUI variant={roomAppearance} hideHeader={roomAppearance === 'classic'}
+                                <ChatUI variant={roomAppearance} hideHeader={roomAppearance === 'classic'} onClose={isDesktop && roomAppearance === 'cinematic' ? closePanel : undefined}
                                     className={isDesktop ? '' : 'mobile-classic-chat-ui'} visible={roomAppearance !== 'classic' || mobileTab === 'chat'} />
                             </div>
                         </aside>

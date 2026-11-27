@@ -4,7 +4,8 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import ReactPlayer from 'react-player/lazy'; // FIX #3: lazy import loads only the needed adapter, not all adapters
 import { useRoom } from '../context/RoomContext';
 import { useRoomSession } from '../context/RoomSessionContext';
-import { Play, Link as LinkIcon, Lock, AlertCircle, FolderOpen, RefreshCw, FileVideo, ShieldCheck, Clapperboard, Info, Captions } from 'lucide-react';
+import { Play, Link as LinkIcon, Lock, AlertCircle, FolderOpen, RefreshCw, FileVideo, ShieldCheck, Clapperboard, Info, Captions, X } from 'lucide-react';
+import ControlIconButton from './ControlIconButton';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { fingerprintLocalFile, formatFileSize, readLocalVideoDuration } from '../utils/localMedia';
@@ -1252,10 +1253,16 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             </nav>
             <div ref={panelRef} {...panelEvents} id="watchly-left-panel" className="video-player-controls flex min-h-0 flex-col gap-3"
                 role={controlsTabLabel ? 'tabpanel' : undefined} aria-labelledby={controlsTabLabel}>
+                <div className="player-tool-header">
+                    <span className="player-tool-symbol" aria-hidden="true">{activeTheaterTool === 'info' ? <Info size={18} /> : activeTheaterTool === 'tracks' ? <Captions size={18} /> : <Clapperboard size={18} />}</span>
+                    <div><h2>{activeTheaterTool === 'info' ? 'Now watching' : activeTheaterTool === 'tracks' ? 'Audio & subtitles' : 'Watch controls'}</h2><p>{activeTheaterTool === 'info' ? 'Your room’s current movie' : activeTheaterTool === 'tracks' ? 'Make it your kind of movie night' : 'Choose what plays for everyone'}</p></div>
+                    <ControlIconButton label="Close player tools" icon={<X size={16} />} onClick={closeTheaterTool} />
+                </div>
                 <div className="cinematic-now-watching" aria-live="polite">
                     <span>Now Watching</span>
+                    {!hasContent && <div className="player-tool-empty-icon" aria-hidden="true"><Clapperboard size={25} /></div>}
                     <strong title={nowWatchingLabel}>{nowWatchingLabel}</strong>
-                    <small>{hasContent ? 'Synchronized for everyone' : 'Choose a source to begin'}</small>
+                    <small>{hasContent ? 'Synchronized for everyone' : 'Add a link or choose a local file in Watch controls.'}</small>
                 </div>
                 <div className="cinematic-watch-controls-heading">
                     <span>Watch Controls</span>
@@ -1266,18 +1273,19 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             {canControlPlayback && (
                 <div className="watch-source-controls flex flex-shrink-0 flex-wrap gap-2">
                     <form onSubmit={handleLoad} className="flex min-w-0 basis-full items-center gap-1.5 rounded-2xl border border-white/10 bg-black/80 p-1.5 shadow-xl shadow-black/30 transition-all lg:basis-auto lg:flex-1">
-                        <label htmlFor="room-link-input" className="cinematic-link-label">Watch from Link · YouTube or video URL</label>
-                        <div className="relative flex flex-1 items-center">
+                        <label htmlFor="room-link-input" className="cinematic-link-label">Watch from Link</label>
+                        <div className="player-link-field relative flex flex-1 items-center">
                             <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                             <input
                                 id="room-link-input"
                                 type="text"
                                 value={inputUrl}
                                 onChange={e => setInputUrl(e.target.value)}
-                                placeholder={appearance === 'cinematic' ? 'Paste a link here...' : 'Watch from Link — YouTube, Vimeo, Google Drive, or direct URL...'}
+                                placeholder={appearance === 'cinematic' ? 'Paste a video URL' : 'Watch from Link - YouTube, Vimeo, Google Drive, or direct URL...'}
                                 className="w-full bg-transparent py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-600 outline-none"
                             />
                         </div>
+                        <p className="player-link-hint">YouTube, Drive or a direct video link.</p>
                         <div className="flex shrink-0 items-center gap-1.5">
                             <button type="submit" disabled={!roomActionsEnabled || !inputUrl.trim()}
                                 className="watchly-action rounded-xl px-4 py-2 text-xs font-bold transition active:scale-95 disabled:opacity-40"><GradientLabel>Play Now</GradientLabel></button>
@@ -1292,11 +1300,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             localFileInputRef.current?.click();
                         }}
                         disabled={isFingerprinting}
-                        className="flex shrink-0 items-center gap-2 rounded-2xl border border-white/10 bg-black/80 px-3 text-xs font-bold text-white transition hover:bg-white/[0.06] disabled:opacity-50"
+                        className="player-local-action flex shrink-0 items-center gap-2 rounded-2xl border border-white/10 bg-black/80 px-3 text-xs font-bold text-white transition hover:bg-white/[0.06] disabled:opacity-50"
                         title="Play a file that stays on each person’s device"
                     >
                         <GradientIcon><FileVideo size={15} /></GradientIcon>
-                        <span><GradientLabel>Watch Local File</GradientLabel></span>
+                        <span><GradientLabel>Watch Local File</GradientLabel><small className="player-local-hint">Stays on your device</small></span>
                     </button>
                     {/* Source badge */}
                     {(() => {
@@ -1448,7 +1456,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                 />
                 </div>
             )}
-            {!hasContent && <p className="cinematic-no-media text-sm text-zinc-400">Play a video to choose audio and subtitles.</p>}
+            {!hasContent && <div className="cinematic-no-media"><span className="player-tool-empty-icon" aria-hidden="true"><Captions size={25} /></span><strong>Languages, your way</strong><p>Play a video to choose audio and subtitles.</p></div>}
             </div>
 
             {/* ── Player ────────────────────────────────────────────────── */}

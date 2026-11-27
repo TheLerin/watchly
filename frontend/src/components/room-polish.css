@@ -72,6 +72,83 @@
 .room-shell[data-ui-theme="glass-light"] .watchly-icon-button { color: #3c3c47; background: rgb(0 0 0 / 3%); border-color: rgb(0 0 0 / 12%); }
 .room-shell[data-ui-theme="glass-light"] :is(.landing-nav-gradient, .watchly-icon-gradient) { filter: brightness(.5) saturate(1.5); }
 .room-shell[data-ui-theme="glass-light"] :is(.appearance-panel, .watchly-action, .account-primary, .cinema-primary-action, .screen-share-stage, .call-camera-tile, .watch-source-controls button[type="submit"]) :is(.landing-nav-gradient, .watchly-icon-gradient) { filter: none; }
+
+/* Player drawers share one hierarchy without nesting a card around every field. */
+.player-tool-header, .player-link-hint, .player-local-hint { display: none; }
+.room-shell .theater-icon-button[aria-expanded="true"]::after { display: none; }
+.room-shell .theater-icon-button::after { transition-delay: 250ms; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] > .video-player-controls {
+    width: min(342px, calc(100vw - var(--theater-dock-width) - 42px));
+    padding: 20px; gap: 16px; border-radius: 22px; backdrop-filter: none;
+}
+.room-shell .room-video-player[data-room-appearance="cinematic"] .player-tool-header {
+    display: flex; align-items: center; gap: 10px; padding-bottom: 17px; border-bottom: 1px solid var(--panel-line);
+}
+.player-tool-header > div { flex: 1; min-width: 0; }
+.player-tool-header h2 { margin: 0; color: var(--panel-copy); font-size: 14px; font-weight: 650; line-height: 1.5; }
+.player-tool-header p { margin-top: 3px; color: var(--panel-muted); font-size: 11px; line-height: 1.55; }
+.player-tool-symbol { display: grid; flex: none; place-items: center; width: 34px; height: 34px; color: var(--watchly-cyan); border: 1px solid var(--panel-line); border-radius: 11px; background: rgb(66 204 236 / 4%); }
+.player-tool-header .watchly-icon-button { width: 36px; height: 36px; border: 0; background: transparent; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .cinematic-watch-controls-heading { display: none; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .watch-source-controls { gap: 16px; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .watch-source-controls form {
+    padding: 0; gap: 10px; border: 0; background: transparent; backdrop-filter: none;
+}
+.room-shell .room-video-player[data-room-appearance="cinematic"] .cinematic-link-label { padding: 0; font-size: 12px; font-weight: 600; color: var(--panel-copy); }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .player-link-field { flex: none; min-height: 48px; border: 1px solid var(--panel-line); border-radius: 12px; background: var(--panel-field); }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .player-link-field:focus-within { border-color: var(--watchly-cyan); box-shadow: 0 0 0 3px rgb(66 204 236 / 8%); }
+.room-shell .room-video-player[data-room-appearance="cinematic"] #room-link-input { font-size: 13px; color: var(--panel-copy); }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .player-link-hint { display: block; margin: -2px 0 4px; font-size: 11px; line-height: 1.5; color: var(--panel-muted); }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .watch-source-controls form button { min-height: 44px; border-radius: 12px; font-size: 12px; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .watch-source-controls form button:disabled { opacity: .6; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .player-local-action { min-height: 66px; gap: 12px; padding: 12px 14px; background: rgb(255 255 255 / 2%); color: var(--panel-copy); }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .player-local-action > .watchly-gradient-icon { color: var(--watchly-cyan); }
+.player-local-action > span:last-child { min-width: 0; text-align: left; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .player-local-hint { display: block; margin-top: 4px; color: var(--panel-muted); font-size: 11px; font-weight: 400; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .watch-source-controls > div { align-self: flex-start; border: 0; padding: 0 2px; background: transparent; color: var(--panel-muted); font-size: 11px; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .cinematic-now-watching { padding: 8px 4px 14px; border: 0; gap: 10px; align-items: center; text-align: center; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .cinematic-now-watching > span { display: none; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .cinematic-now-watching strong { max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: 17px; line-height: 1.45; color: var(--panel-copy); }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .cinematic-now-watching small { font-size: 12px; line-height: 1.7; color: var(--panel-muted); }
+.player-tool-empty-icon { display: grid; place-items: center; flex: none; width: 58px; height: 58px; margin: 9px auto 5px; border: 1px solid var(--panel-line); border-radius: 18px; background: rgb(66 204 236 / 4%); color: var(--watchly-cyan); }
+.room-shell .room-video-player[data-room-appearance="cinematic"][data-open-tool="tracks"] .cinematic-no-media { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 4px 14px; text-align: center; }
+.cinematic-no-media strong { font-size: 15px; font-weight: 600; color: var(--panel-copy); }
+.cinematic-no-media p { font-size: 12px; line-height: 1.7; color: var(--panel-muted); }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-track-controls { border: 0; border-radius: 0; background: transparent; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-controls-body { padding: 0; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-controls-title:not(:has(small)) { display: none; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-controls-title > span { display: none; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-controls-grid { gap: 16px; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-control-field { gap: 8px; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-control-field > span:first-child { color: var(--panel-muted); font-size: 12px; font-weight: 500; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-control-field select { min-height: 44px; padding: 10px; color: var(--panel-copy); background: var(--panel-field); border-color: var(--panel-line); font-size: 12px; }
+.room-shell .room-video-player[data-room-appearance="cinematic"] .media-add-subtitle { margin-top: 16px; min-height: 44px; border-radius: 12px; justify-content: center; color: var(--panel-copy); }
+
+/* Keep the conversation scroll area independent from the header and composer. */
+.room-shell .room-chat { border-color: var(--panel-line); background: var(--panel-surface); color: var(--panel-copy); backdrop-filter: none; box-shadow: none; }
+.room-shell .chat-panel-header { gap: 10px; padding: 18px 16px; border-color: var(--panel-line); }
+.room-shell .chat-panel-header > span:first-child { color: var(--watchly-cyan); border-color: var(--panel-line); border-radius: 11px; }
+.chat-panel-title { min-width: 0; flex: 1; }
+.room-shell .chat-panel-title h3 { color: var(--panel-copy); font-size: 14px; font-weight: 650; }
+.chat-panel-title p { margin-top: 3px; font-size: 10px; line-height: 1.6; color: var(--panel-muted); }
+.chat-panel-header .watchly-icon-button { width: 36px; height: 36px; border: 0; background: transparent; }
+.room-shell .chat-message-count { margin-left: 0; color: var(--panel-muted); border-color: var(--panel-line); }
+.chat-message-list { padding: 16px; gap: 14px; scrollbar-width: thin; scrollbar-color: rgb(157 145 188 / 30%) transparent; overscroll-behavior: contain; }
+.chat-empty { gap: 12px; padding: 24px 10px; }
+.room-shell .chat-empty > span { width: 58px; height: 58px; color: var(--watchly-cyan); border-color: var(--panel-line); border-radius: 18px; background: rgb(66 204 236 / 4%); }
+.chat-empty strong { margin-top: 3px; color: var(--panel-copy); font-size: 15px; font-weight: 600; }
+.chat-empty p { max-width: 220px; font-size: 12px; line-height: 1.8; color: var(--panel-muted); }
+.chat-message-bubble { overflow-wrap: anywhere; border: 1px solid var(--panel-line); border-radius: 15px 15px 15px 5px; background: rgb(157 145 188 / 5%); color: var(--panel-copy); font-size: 13px; line-height: 1.7; }
+.chat-message-bubble[data-own="true"] { border-color: rgb(66 204 236 / 18%); border-radius: 15px 15px 5px 15px; background: rgb(66 204 236 / 7%); }
+.room-shell .chat-message-time, .room-shell .chat-system-message p { color: var(--panel-muted); font-size: 10px; }
+.room-shell .chat-message-list .text-zinc-400 { color: var(--panel-muted); }
+.room-shell .chat-composer { padding: 14px; border-color: var(--panel-line); }
+.chat-composer form { padding: 5px; border: 1px solid var(--panel-line); border-radius: 15px; background: var(--panel-field); }
+.chat-composer form:focus-within { border-color: rgb(66 204 236 / 45%); }
+.room-shell .chat-composer input { padding: 8px 10px; min-width: 0; height: 42px; border: 0; background: transparent; color: var(--panel-copy); font-size: 13px; }
+.room-shell .chat-composer input::placeholder { color: var(--panel-muted); }
+.room-shell .chat-composer button { width: 42px; height: 42px; border-color: rgb(66 204 236 / 20%); background: rgb(66 204 236 / 7%); color: var(--watchly-cyan); backdrop-filter: none; }
+.room-shell[data-room-appearance="cinematic"] .room-right-rail > .room-chat-group { max-height: calc(100dvh - 110px); min-height: min(300px, calc(100dvh - 110px)); overflow: hidden; }
 @media (max-width: 700px) {
     .room-shell .appearance-panel { max-width: calc(100vw - 24px); }
     .room-shell .room-video-call, .room-shell .room-screen-share { padding: 18px; }
