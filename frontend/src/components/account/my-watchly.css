@@ -1,0 +1,163 @@
+.my-watchly-page {
+    --bg: var(--bg-base);
+    --home-panel: color-mix(in srgb, var(--bg-base) 96%, var(--text));
+    --home-border: color-mix(in srgb, var(--text) 8%, transparent);
+    --home-divider: color-mix(in srgb, var(--text) 6%, transparent);
+    background:
+        radial-gradient(ellipse 800px 460px at 10% 0%, rgb(66 204 236 / 6%), transparent 75%),
+        radial-gradient(ellipse 700px 460px at 85% 4%, rgb(157 145 188 / 5%), transparent 75%),
+        var(--bg-base);
+}
+
+.my-watchly-page .account-header {
+    position: fixed;
+    z-index: 60;
+    top: max(16px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(1320px, calc(100% - 32px));
+    min-height: 60px;
+    margin: 0;
+    padding: 7px 12px 7px 14px;
+    border: 1px solid var(--home-border);
+    border-radius: 21px;
+    background: color-mix(in srgb, var(--bg-base) 78%, transparent);
+    backdrop-filter: blur(16px) saturate(125%);
+    -webkit-backdrop-filter: blur(16px) saturate(125%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%), 0 12px 36px rgb(0 0 0 / 10%);
+}
+
+.my-watchly-page .account-brand { gap: 10px; font-size: 16px; letter-spacing: -0.02em; }
+.my-watchly-page .account-brand img { width: 38px; height: 38px; }
+.my-watchly-page .account-avatar-button { width: 44px; height: 44px; border-radius: 50%; }
+.my-watchly-page .account-main { width: min(1200px, calc(100% - 48px)); padding: 144px 0 80px; }
+.my-watchly-page .account-muted { color: var(--text-sub); }
+
+.my-watchly-page .my-watchly-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    margin-bottom: 32px;
+}
+
+.my-watchly-heading > div:first-child { min-width: 0; }
+.my-watchly-heading .account-eyebrow { margin: 0 0 12px; color: var(--text-sub); }
+.my-watchly-heading h1 { margin: 0 0 12px; font-size: clamp(28px, 3.2vw, 38px); line-height: 1.2; overflow-wrap: anywhere; }
+.my-watchly-heading .account-muted { margin: 0; font-size: 14px; }
+
+.my-watchly-page .my-watchly-room-actions { display: flex; flex-direction: row; flex-shrink: 0; gap: 10px; min-width: 0; }
+.my-watchly-room-actions > button { min-height: 44px; padding: 10px 17px; gap: 8px; }
+.my-watchly-room-actions svg { flex: none; }
+.my-watchly-page .account-secondary { background: color-mix(in srgb, var(--text) 3%, transparent); border-color: var(--home-border); }
+.my-watchly-page .account-secondary:not(:disabled):hover { background: color-mix(in srgb, var(--text) 7%, transparent); filter: none; }
+
+.my-watchly-sections { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
+.my-watchly-sections > *, .my-watchly-alerts > * { min-width: 0; }
+.my-watchly-friends { grid-column: 1; }
+.my-watchly-recent { grid-column: 2; }
+.my-watchly-alerts, .my-watchly-blocked { grid-column: 1 / -1; }
+.my-watchly-alerts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.my-watchly-alerts > :only-child { grid-column: 1 / -1; }
+
+.my-watchly-page .account-card {
+    position: relative;
+    padding: 24px;
+    border-color: var(--home-border);
+    border-radius: 20px;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--watchly-cyan) 2%, transparent), transparent 55%), var(--home-panel);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%), 0 8px 32px rgb(0 0 0 / 8%);
+}
+
+.my-watchly-page .my-watchly-friends:has(.person-menu[open]) { z-index: 1; }
+.my-watchly-page .account-section-heading { margin-bottom: 12px; gap: 12px; }
+.my-watchly-section-title { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; min-width: 0; }
+.account-section-heading .my-watchly-section-title { margin-bottom: 0; }
+.my-watchly-section-title > svg { flex: none; color: var(--watchly-cyan); }
+.my-watchly-section-title h2 { margin: 0; font-size: 17px; }
+.my-watchly-page .account-section-heading > button { min-height: 44px; font-size: 12px; padding: 9px 12px; }
+.my-watchly-page .my-watchly-invite-hint { margin: -2px 0 12px; font-size: 12px; line-height: 1.6; }
+
+.my-watchly-page .person-row { min-height: 76px; flex-wrap: nowrap; gap: 12px; padding: 10px 0; border-color: var(--home-divider); }
+.my-watchly-page .person-name strong { font-size: 14px; font-weight: 600; line-height: 1.4; }
+.my-watchly-page .person-name > span { margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--text-sub); }
+.my-watchly-page .person-name .person-presence { margin-top: 4px; font-size: 11px; white-space: normal; }
+.my-watchly-page .person-presence::before { width: 5px; height: 5px; background: var(--text-sub); }
+.my-watchly-page .person-presence.is-online::before { background: var(--watchly-turquoise); }
+.my-watchly-page .person-presence.is-in_room::before { background: var(--watchly-lavender); }
+.my-watchly-page .person-actions { gap: 6px; flex-shrink: 0; }
+.my-watchly-page .person-actions .account-secondary { background: transparent; }
+.my-watchly-page .person-actions > button { min-height: 44px; padding: 8px 12px; font-size: 12px; }
+.my-watchly-page .person-menu summary { width: 44px; height: 44px; border-radius: 11px; color: var(--text-sub); }
+.my-watchly-page .person-menu summary::-webkit-details-marker { display: none; }
+.my-watchly-page .person-menu summary:hover, .my-watchly-page .person-menu button:hover { background: var(--accent-soft); }
+.my-watchly-page .person-menu > div { z-index: 2; border-color: var(--home-border); box-shadow: 0 12px 24px rgb(0 0 0 / 20%); }
+.my-watchly-page .account-menu { border-color: var(--home-border); }
+.my-watchly-page .account-menu hr { border-color: var(--home-divider); }
+
+.my-watchly-page .my-watchly-empty { margin: 0; padding: 26px 0 12px; max-width: 320px; font-size: 13px; line-height: 1.7; }
+.my-watchly-search { margin: 12px 0; padding: 16px; border: 1px solid var(--home-border); border-radius: 14px; background: color-mix(in srgb, var(--text) 2%, transparent); }
+.my-watchly-search[hidden] { display: none; }
+.my-watchly-search .search-people-label { max-width: 520px; }
+.my-watchly-search .search-people-label > svg { flex: none; color: var(--text-sub); }
+.my-watchly-search input { min-width: 0; background: var(--home-panel); border-color: var(--home-border); }
+.my-watchly-search input::placeholder { color: var(--text-sub); }
+.my-watchly-search input:focus { border-color: var(--watchly-cyan); }
+.my-watchly-search .small { margin: 10px 0 0; line-height: 1.6; }
+.my-watchly-page .invite-row { min-height: 76px; gap: 12px; padding: 12px 0; border-color: var(--home-divider); }
+.my-watchly-page .invite-row p { min-width: 0; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.my-watchly-page .invite-row p strong { font-weight: 600; }
+.my-watchly-page .invite-row p span { margin-top: 4px; font-size: 12px; color: var(--text-sub); }
+.my-watchly-page .invite-row:first-of-type { border-top: 0; }
+.my-watchly-page .invite-row:last-child { padding-bottom: 0; }
+.my-watchly-recent .invite-row > button { min-height: 44px; padding: 8px 12px; font-size: 12px; background: transparent; }
+.my-watchly-recent strong { font-variant-numeric: tabular-nums; }
+.my-watchly-blocked > details > summary { display: flex; align-items: center; min-height: 44px; font-size: 13px; cursor: pointer; }
+.my-watchly-error { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; }
+.my-watchly-error > svg { flex: none; color: var(--watchly-gold); }
+.my-watchly-error > span { flex: 1; min-width: 0; }
+.my-watchly-page .room-launcher-close { z-index: 2; min-width: 44px; min-height: 44px; }
+
+.my-watchly-skeleton-row { display: flex; align-items: center; gap: 12px; min-height: 76px; }
+.my-watchly-skeleton-row .account-skeleton { display: block; min-height: 0; margin: 0; }
+.my-watchly-skeleton-row .skeleton-avatar { width: 40px; height: 40px; border-radius: 50%; }
+.my-watchly-skeleton-row .skeleton-name { width: 130px; height: 12px; }
+.my-watchly-skeleton-row .skeleton-detail { width: 85px; height: 9px; margin-top: 9px; }
+
+@media (max-width: 900px) {
+    .my-watchly-page .account-main { padding-top: 128px; }
+    .my-watchly-sections { grid-template-columns: minmax(0, 1fr); }
+    .my-watchly-recent { grid-column: 1; }
+    .my-watchly-alerts { grid-template-columns: minmax(0, 1fr); }
+    .my-watchly-heading { flex-wrap: wrap; }
+}
+
+@media (max-width: 700px) {
+    .my-watchly-page .account-header { top: max(9px, env(safe-area-inset-top)); width: calc(100% - 20px); min-height: 56px; padding: 5px 7px 5px 10px; border-radius: 18px; }
+    .my-watchly-page .account-brand { font-size: 14px; gap: 7px; }
+    .my-watchly-page .account-brand img { width: 33px; height: 33px; }
+    .my-watchly-page .account-main { width: calc(100% - 32px); padding: 118px 0 48px; }
+    .my-watchly-page .my-watchly-heading { align-items: stretch; flex-direction: column; gap: 22px; margin-bottom: 26px; }
+    .my-watchly-heading h1 { font-size: 29px; }
+    .my-watchly-page .my-watchly-room-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+    .my-watchly-room-actions > button { padding-inline: 10px; font-size: 12px; }
+    .my-watchly-sections, .my-watchly-alerts { gap: 18px; }
+    .my-watchly-page .account-card { padding: 18px; border-radius: 18px; }
+    .my-watchly-page .person-row { gap: 10px; }
+    .my-watchly-page .person-actions > button { padding-inline: 10px; }
+    .my-watchly-page .account-section-heading > button { padding-inline: 10px; }
+    .my-watchly-search { padding: 12px; }
+    .my-watchly-error { align-items: flex-start; }
+    .my-watchly-error > .account-text-action { padding-block: 0; }
+}
+
+@media (max-width: 600px) {
+    .my-watchly-alerts .person-row { flex-wrap: wrap; }
+    .my-watchly-alerts .person-row > .person-actions { flex-basis: calc(100% - 50px); margin-left: 50px; justify-content: flex-end; }
+    .my-watchly-alerts .invite-row { flex-wrap: wrap; }
+    .my-watchly-alerts .invite-row > .person-actions { margin-left: auto; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .my-watchly-page .account-header { background: var(--bg-base); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
