@@ -70,3 +70,35 @@ test('acknowledgement timeout releases the operation and ignores late callbacks'
     sent[1][2](null, { ok: true });
     await second;
 });
+
+test('account handshake rejection fails promptly and cannot create a room after a later connection', async () => {
+    const { socket, requester, sent, timers } = fixture();
+    const pending = requester.request('room:create', { nickname: 'Host' });
+    const rejected = assert.rejects(pending, error => error.code === 'ACCOUNT_UNAVAILABLE' && error.message === 'Secure account verification is unavailable.');
+    socket.emit('connect_error', Object.assign(new Error('Secure account verification is unavailable.'), { data: { code: 'ACCOUNT_UNAVAILABLE' } }));
+    await rejected;
+    assert.equal(requester.isPending(), false);
+    assert.equal(timers.size, 0);
+    assert.equal(socket.listenerCount('connect_error'), 0);
+    socket.connected = true; socket.emit('connect');
+    assert.equal(sent.length, 0);
+    const retry = requester.request('room:create', { nickname: 'Host' });
+    sent[0][2](null, { ok: true, roomId: 'ABCDEFG' });
+    assert.equal((await retry).roomId, 'ABCDEFG');
+});
+
+test('temporary transport errors keep waiting for a connection and cancellation removes rejection listeners', async () => {
+    const { socket, requester, sent } = fixture();
+    const result = requester.request('room:create', {});
+    socket.emit('connect_error', new Error('Temporary network outage'));
+    assert.equal(requester.isPending(), true);
+    socket.connected = true; socket.emit('connect');
+    sent[0][2](null, { ok: true });
+    await result;
+    assert.equal(socket.listenerCount('connect_error'), 0);
+    socket.connected = false;
+    const canceled = requester.request('room:create', {});
+    const rejected = assert.rejects(canceled, /canceled/);
+    requester.cancel(); await rejected;
+    assert.equal(socket.listenerCount('connect_error'), 0);
+});

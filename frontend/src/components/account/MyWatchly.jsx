@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, History, LogIn, Mail, MoreHorizontal, Plus, Search, UserPlus, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -10,6 +10,7 @@ import { RoomLauncher } from '../LandingPage';
 import { AccountGate } from './AuthPages';
 import AccountShell from './AccountShell';
 import Avatar from './Avatar';
+import GradientLabel from '../GradientLabel';
 import './my-watchly.css';
 
 export const Person = ({ person, children, status }) => (
@@ -26,15 +27,49 @@ export const Person = ({ person, children, status }) => (
     </div>
 );
 
+function FriendMenu({ username, disabled, onRemove, onBlock }) {
+    const root = useRef(null);
+    const [open, setOpen] = useState(false);
+    useLayoutEffect(() => {
+        const details = root.current, trigger = details.querySelector('summary'), menu = details.querySelector('div');
+        if (!open) { menu.style.visibility = 'hidden'; return; }
+        const bounds = trigger.getBoundingClientRect();
+        const height = menu.getBoundingClientRect().height;
+        menu.style.left = `${Math.max(8, Math.min(bounds.right - 150, window.innerWidth - 158))}px`;
+        menu.style.top = `${bounds.bottom + height + 8 > window.innerHeight ? Math.max(8, bounds.top - height - 6) : bounds.bottom + 6}px`;
+        menu.style.visibility = 'visible';
+        const close = event => {
+            if (event.type === 'pointerdown' && details.contains(event.target)) return;
+            if (event.type === 'keydown' && event.key !== 'Escape') return;
+            details.open = false;
+            if (event.type === 'keydown') trigger.focus();
+        };
+        window.addEventListener('scroll', close, true); window.addEventListener('resize', close);
+        document.addEventListener('pointerdown', close); document.addEventListener('keydown', close);
+        return () => {
+            window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close);
+            document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close);
+        };
+    }, [open]);
+    return <details ref={root} className="person-menu" onToggle={event => setOpen(event.currentTarget.open)}>
+        <summary aria-label={`Options for @${username}`}><MoreHorizontal size={19} aria-hidden="true" /></summary>
+        <div>
+            <button disabled={disabled} onClick={onRemove}><GradientLabel>Remove friend</GradientLabel></button>
+            <button disabled={disabled} onClick={onBlock}><GradientLabel>Block</GradientLabel></button>
+        </div>
+    </details>;
+}
+
 function MyWatchlyContent() {
     const { profile } = useAuth(), room = useRoom(), social = useSocial(), navigate = useNavigate();
     const [query, setQuery] = useState(''), [results, setResults] = useState([]), [searchError, setSearchError] = useState(''), [searching, setSearching] = useState(false);
     const [pending, setPending] = useState(new Set()), [launcher, setLauncher] = useState(false), [tab, setTab] = useState('create'), [code, setCode] = useState('');
+    const [launchError, setLaunchError] = useState('');
     const searchPeople = social.search;
     const busyRef = useRef(new Set());
     const [searchOpen, setSearchOpen] = useState(false);
     const searchInputRef = useRef(null), findFriendsRef = useRef(null);
-    const [recent] = useState(() => readRecentRooms(localStorage));
+    const [recent] = useState(() => readRecentRooms(localStorage).sort((a, b) => b.visitedAt - a.visitedAt).slice(0, 5));
     useEffect(() => {
         let active = true;
         const timer = setTimeout(async () => {
@@ -54,8 +89,12 @@ function MyWatchlyContent() {
         finally { busyRef.current.delete(key); setPending(new Set(busyRef.current)); }
     };
     const launch = async action => run('launch', async () => {
-        const response = action === 'create' ? await room.createRoom(profile.display_name) : await room.joinRoom(code.trim().toUpperCase(), profile.display_name);
-        setLauncher(false); navigate(`/room/${response.roomId}`);
+        if (action === 'join' && !/^[A-Z0-9]{7}$/.test(code.trim())) return;
+        setLaunchError('');
+        try {
+            const response = action === 'create' ? await room.createRoom(profile.display_name) : await room.joinRoom(code.trim().toUpperCase(), profile.display_name);
+            setLauncher(false); navigate(`/room/${response.roomId}`);
+        } catch (error) { setLaunchError(error.message); }
     });
     const closeLauncher = useCallback(() => setLauncher(false), []);
     const friends = new Set(social.friends.map(friend => friend.id));
@@ -80,18 +119,18 @@ function MyWatchlyContent() {
                     <p className="account-muted">Your people, rooms and watch nights.</p>
                 </div>
                 <div className="my-watchly-room-actions" role="group" aria-label="Room actions">
-                    <button className="account-primary" onClick={() => { setTab('create'); setLauncher(true); }}>
-                        <Plus size={17} aria-hidden="true" />Create room
+                    <button className="account-primary" onClick={() => { setTab('create'); setLaunchError(''); setLauncher(true); }}>
+                        <Plus size={17} aria-hidden="true" /><GradientLabel>Create room</GradientLabel>
                     </button>
-                    <button className="account-secondary" onClick={() => { setTab('join'); setLauncher(true); }}>
-                        <LogIn size={17} aria-hidden="true" />Join room
+                    <button className="account-secondary" onClick={() => { setTab('join'); setLaunchError(''); setLauncher(true); }}>
+                        <LogIn size={17} aria-hidden="true" /><GradientLabel>Join room</GradientLabel>
                     </button>
                 </div>
             </div>
 
             {social.error && <div className="account-notice my-watchly-error" role="alert">
                 <AlertCircle size={18} aria-hidden="true" /><span>{social.error}</span>
-                <button className="account-text-action" onClick={social.load}>Retry</button>
+                <button className="account-text-action" onClick={social.load}><GradientLabel>Retry</GradientLabel></button>
             </div>}
 
             <div className="my-watchly-sections">
@@ -106,16 +145,16 @@ function MyWatchlyContent() {
                                     const response = await room.joinRoom(roomCode, profile.display_name);
                                     await social.mutate('respond_room_invite', { invite_id: invite.id, accept: true }).catch(() => {});
                                     navigate(`/room/${response.roomId}`);
-                                })}>Join</button>
-                                <button className="account-secondary" disabled={pending.has(invite.id)} onClick={() => run(invite.id, () => social.mutate('respond_room_invite', { invite_id: invite.id, accept: false }))}>Decline</button>
+                                })}><GradientLabel>Join</GradientLabel></button>
+                                <button className="account-secondary" disabled={pending.has(invite.id)} onClick={() => run(invite.id, () => social.mutate('respond_room_invite', { invite_id: invite.id, accept: false }))}><GradientLabel>Decline</GradientLabel></button>
                             </div>
                         </div>)}
                     </section>}
                     {social.requests.length > 0 && <section className="account-card" aria-labelledby="requests-heading">
                         <div className="my-watchly-section-title"><UserPlus size={18} aria-hidden="true" /><h2 id="requests-heading">Friend requests</h2></div>
                         {social.requests.map(request => <Person key={request.id} person={request.sender}>
-                            <button className="account-primary" disabled={pending.has(request.id)} onClick={() => run(request.id, () => social.mutate('respond_friend_request', { request_id: request.id, accept: true }))}>Accept</button>
-                            <button className="account-secondary" disabled={pending.has(request.id)} onClick={() => run(request.id, () => social.mutate('respond_friend_request', { request_id: request.id, accept: false }))}>Decline</button>
+                            <button className="account-primary" disabled={pending.has(request.id)} onClick={() => run(request.id, () => social.mutate('respond_friend_request', { request_id: request.id, accept: true }))}><GradientLabel>Accept</GradientLabel></button>
+                            <button className="account-secondary" disabled={pending.has(request.id)} onClick={() => run(request.id, () => social.mutate('respond_friend_request', { request_id: request.id, accept: false }))}><GradientLabel>Decline</GradientLabel></button>
                         </Person>)}
                     </section>}
                 </div>}
@@ -124,7 +163,7 @@ function MyWatchlyContent() {
                     <div className="account-section-heading">
                         <div className="my-watchly-section-title"><Users size={18} aria-hidden="true" /><h2 id="friends-heading">Friends</h2></div>
                         <button ref={findFriendsRef} className="account-secondary" aria-expanded={searchOpen} aria-controls="find-people" onClick={toggleSearch}>
-                            <Search size={15} aria-hidden="true" />Find friends
+                            <Search size={15} aria-hidden="true" /><GradientLabel>Find friends</GradientLabel>
                         </button>
                     </div>
                     {social.friends.length > 0 && inviteHint && <p className="account-muted my-watchly-invite-hint" id="friends-invite-hint">{inviteHint}</p>}
@@ -143,7 +182,7 @@ function MyWatchlyContent() {
                             <button className="account-secondary" disabled={pending.has(person.id) || friends.has(person.id) || social.outgoing.includes(person.id)} onClick={() => run(person.id, async () => {
                                 const status = await social.mutate('request_friend', { target_id: person.id });
                                 toast.success(status === 'friends' ? 'You’re now friends.' : 'Friend request sent.');
-                            })}><UserPlus size={15} aria-hidden="true" />{friends.has(person.id) ? 'Friends' : social.outgoing.includes(person.id) ? 'Requested' : 'Add Friend'}</button>
+                            })}><UserPlus size={15} aria-hidden="true" /><GradientLabel>{friends.has(person.id) ? 'Friends' : social.outgoing.includes(person.id) ? 'Requested' : 'Add Friend'}</GradientLabel></button>
                         </Person>)}
                         {!searching && !searchError && query.trim().length >= 3 && !visibleResults.length && <p className="account-muted">No people found.</p>}
                     </div>
@@ -152,18 +191,12 @@ function MyWatchlyContent() {
                         {[0, 1, 2].map(row => <div className="my-watchly-skeleton-row" key={row} aria-hidden="true">
                             <span className="account-skeleton skeleton-avatar" /><div><span className="account-skeleton skeleton-name" /><span className="account-skeleton skeleton-detail" /></div>
                         </div>)}
-                    </div> : social.friends.length ? <div className="my-watchly-friend-list">
+                    </div> : social.friends.length ? <div className="my-watchly-friend-list" role={social.friends.length > 4 ? 'region' : undefined} aria-label={social.friends.length > 4 ? 'Friends list' : undefined} tabIndex={social.friends.length > 4 ? 0 : undefined}>
                         {social.friends.map(friend => <Person key={friend.id} person={friend} status={social.presence[friend.id] || 'unavailable'}>
                             <button className="account-secondary" disabled={!canInvite || pending.has(friend.id)} aria-describedby={inviteHint ? 'friends-invite-hint' : undefined} onClick={() => run(friend.id, async () => {
                                 await social.invite(friend.id); toast.success('Invite sent.');
-                            })}>Invite</button>
-                            <details className="person-menu">
-                                <summary aria-label={`Options for @${friend.username}`}><MoreHorizontal size={19} aria-hidden="true" /></summary>
-                                <div>
-                                    <button disabled={pending.has(friend.id)} onClick={() => run(friend.id, () => social.mutate('remove_friend', { target_id: friend.id }))}>Remove friend</button>
-                                    <button disabled={pending.has(friend.id)} onClick={() => run(friend.id, () => social.mutate('block_person', { target_id: friend.id }))}>Block</button>
-                                </div>
-                            </details>
+                            })}><GradientLabel>Invite</GradientLabel></button>
+                            <FriendMenu username={friend.username} disabled={pending.has(friend.id)} onRemove={() => run(friend.id, () => social.mutate('remove_friend', { target_id: friend.id }))} onBlock={() => run(friend.id, () => social.mutate('block_person', { target_id: friend.id }))} />
                         </Person>)}
                     </div> : <p className="account-muted my-watchly-empty">
                         {social.error ? 'Your friends are temporarily unavailable.' : 'No friends yet. Find someone by username.'}
@@ -176,21 +209,21 @@ function MyWatchlyContent() {
                         <p><strong>Room {item.code}</strong><span>Last joined {new Date(item.visitedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></p>
                         <button className="account-secondary" disabled={pending.has(item.code)} onClick={() => run(item.code, async () => {
                             const response = await room.joinRoom(item.code, profile.display_name); navigate(`/room/${response.roomId}`);
-                        })}>Rejoin</button>
+                        })}><GradientLabel>Rejoin</GradientLabel></button>
                     </div>) : <p className="account-muted my-watchly-empty">Rooms you join will appear here.</p>}
                 </section>
 
                 {social.blocks.length > 0 && <section className="account-card my-watchly-blocked">
                     <details>
-                        <summary>Blocked people ({social.blocks.length})</summary>
+                        <summary><GradientLabel>Blocked people ({social.blocks.length})</GradientLabel></summary>
                         {social.blocks.map(person => <Person key={person.id} person={person}>
-                            <button className="account-secondary" disabled={pending.has(person.id)} onClick={() => run(person.id, () => social.mutate('unblock_person', { target_id: person.id }))}>Unblock</button>
+                            <button className="account-secondary" disabled={pending.has(person.id)} onClick={() => run(person.id, () => social.mutate('unblock_person', { target_id: person.id }))}><GradientLabel>Unblock</GradientLabel></button>
                         </Person>)}
                     </details>
                 </section>}
             </div>
 
-            <RoomLauncher activeTab={tab} setActiveTab={setTab} open={launcher} onClose={closeLauncher} nickname={profile.display_name} setNickname={() => {}} joinCode={code} setJoinCode={setCode} canSubmit={!pending.has('launch') && (tab === 'create' || /^[A-Z0-9]{7}$/.test(code.trim()))} handleCreate={() => launch('create')} handleJoin={() => launch('join')} handleKey={event => { if (event.key === 'Enter') void launch(tab); }} />
+            <RoomLauncher activeTab={tab} setActiveTab={setTab} open={launcher} busy={pending.has('launch')} error={launchError} onClose={closeLauncher} nickname={profile.display_name} setNickname={() => {}} joinCode={code} setJoinCode={setCode} canSubmit={tab === 'create' || /^[A-Z0-9]{7}$/.test(code.trim())} handleCreate={() => launch('create')} handleJoin={() => launch('join')} handleKey={event => { if (event.key === 'Enter') void launch(tab); }} />
         </AccountShell>
     );
 }

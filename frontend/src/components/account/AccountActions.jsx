@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { useRoom } from '../../context/RoomContext';
 import Avatar from './Avatar';
+import GradientLabel from '../GradientLabel';
 import './account.css';
 
 export default function AccountActions({ onCreate, compact = false }) {
@@ -19,23 +20,23 @@ export default function AccountActions({ onCreate, compact = false }) {
         return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
     }, [open]);
     if (isAuthLoading || (user && isProfileLoading)) return <div className="account-nav-skeleton" aria-label="Loading account" />;
-    if (!user) return <div className="account-nav-actions"><Link className="account-text-action" to="/auth">Sign in</Link><Link className="account-primary" to="/auth">Get started</Link></div>;
+    if (!user) return <div className="account-nav-actions"><Link className="account-text-action" to="/auth"><GradientLabel>Sign in</GradientLabel></Link><Link className="account-primary" to="/auth"><GradientLabel>Get started</GradientLabel></Link></div>;
     const name = profile?.display_name || 'Your account';
     return <div className="account-nav-actions" ref={root}>
-        {!compact && <Link className="account-text-action" to="/my-watchly">My Watchly</Link>}
-        {!compact && onCreate && <button className="account-primary" onClick={onCreate}><Plus size={16} />Create room</button>}
+        {!compact && <Link className="account-text-action" to="/my-watchly"><GradientLabel>My Watchly</GradientLabel></Link>}
+        {!compact && onCreate && <button className="account-primary" onClick={onCreate}><Plus size={16} /><GradientLabel>Create room</GradientLabel></button>}
         <div className="account-menu-anchor">
             <button className="account-avatar-button" aria-label="Account menu" aria-expanded={open} onClick={() => setOpen(!open)}><Avatar name={name} url={profile?.avatar_url} /></button>
             {open && <div className="account-menu" aria-label="Your account">
                 <strong>{name}</strong><span>{profile ? `@${profile.username}` : 'Finish setting up your profile'}</span>
-                <Link to="/my-watchly" onClick={() => setOpen(false)}>My Watchly</Link>
-                <Link to={profile ? '/profile' : '/setup-profile'} onClick={() => setOpen(false)}><UserRound size={15} />Profile</Link>
+                <Link to="/my-watchly" onClick={() => setOpen(false)}><GradientLabel>My Watchly</GradientLabel></Link>
+                <Link to={profile ? '/profile' : '/setup-profile'} onClick={() => setOpen(false)}><UserRound size={15} /><GradientLabel>Profile</GradientLabel></Link>
                 <hr />
                 <button disabled={busy} onClick={async () => {
                     setBusy(true);
                     try { if (roomId) leaveRoom(); await signOut(); setOpen(false); navigate('/'); } catch (error) { toast.error(error.message); }
                     finally { setBusy(false); }
-                }}><LogOut size={15} />{roomId ? 'Leave room & sign out' : 'Sign out'}</button>
+                }}><LogOut size={15} /><GradientLabel>{roomId ? 'Leave room & sign out' : 'Sign out'}</GradientLabel></button>
             </div>}
         </div>
     </div>;

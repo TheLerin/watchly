@@ -2,7 +2,7 @@
 
 Use the confirmed staging Worker, a staging Supabase project and staging LiveKit credentials. Schedule the checks with the project owner so the provider costs, test accounts and affected rooms are known. Record the commit, device/browser, check outcome and request IDs. Keep session proofs and service secrets out of the results.
 
-The owner supplied `https://watchly-staging.wchly.workers.dev` as the staging Worker. The corresponding Supabase redirect allowlist entry is `https://watchly-staging.wchly.workers.dev/auth/callback`. Confirm the isolated Supabase project reference from its dashboard before any writes. The owner approved `202611260001_watchly_session_check.sql` for isolated staging only. Live reachability and provider bindings were not verified from this workspace.
+The owner supplied `https://watchly-staging.wchly.workers.dev` as the staging Worker. The corresponding Supabase redirect allowlist entry is `https://watchly-staging.wchly.workers.dev/auth/callback`. Confirm the isolated Supabase project reference from its dashboard before any writes. The owner approved `202611260001_watchly_session_check.sql` for isolated staging only. On 2026-11-27, a read-only check confirmed `/api/health` returns HTTP 200 and the published frontend references Supabase project `mvysatsidaxfmfvxlfhz`. Its session-check RPC returned HTTP 404 / `PGRST202`; see SUPABASE_SESSION_MIGRATION.md. The project's isolation and the Worker's private provider bindings remain unverified. No live database writes were made.
 
 | Gate | Procedure and evidence |
 |---|---|

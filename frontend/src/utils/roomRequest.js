@@ -14,12 +14,19 @@ export function createRoomRequester(socket, { schedule = setTimeout, cancelTimer
             settled = true;
             cancelTimer(timer);
             socket.off('connect', send);
+            socket.off('connect_error', rejectedConnection);
             socket.io.off('reconnect_failed', failed);
             pending = null;
             if (error) rejectPromise(error);
             else resolvePromise(value);
         };
         const failed = () => finish(new Error('Could not connect to the room server. Please try again.'));
+        const rejectedConnection = error => {
+            if (!['AUTH_REQUIRED', 'ACCOUNT_UNAVAILABLE', 'PROTOCOL_MISMATCH'].includes(error?.data?.code)) return;
+            const failure = new Error(error.message || 'The room server rejected the connection. Please retry.');
+            failure.code = error.data.code;
+            finish(failure);
+        };
         const send = () => {
             cancelTimer(timer);
             timer = schedule(() => finish(new Error('The room request timed out. Please try again.')), ackTimeoutMs);
@@ -40,6 +47,7 @@ export function createRoomRequester(socket, { schedule = setTimeout, cancelTimer
         else {
             timer = schedule(failed, connectTimeoutMs);
             socket.once('connect', send);
+            socket.on('connect_error', rejectedConnection);
             socket.io.once('reconnect_failed', failed);
             socket.connect();
         }

@@ -15,3 +15,11 @@ Staging acceptance:
 5. Confirm a different session cannot validate the revoked one. Verify refresh, private/account-only room disconnection, OAuth/email callbacks and normal guest creation.
 
 Do not delete `auth.sessions` manually to test this against production. Do not remove the function while production server checks depend on it. Record project/environment, migration application and acceptance results in the release-gate report; never record access/refresh tokens.
+
+## Room creation diagnostic — 2026-11-27
+
+A read-only check of `https://watchly-staging.wchly.workers.dev` returned a healthy Worker. Its published frontend references Supabase project `mvysatsidaxfmfvxlfhz`. That project's zero-argument session RPC returned HTTP 404 / `PGRST202`: `public.watchly_session_active` was not found in the API schema cache. This indicates a missing or uncached function; it does not establish whether this database is staging or production. No database writes were performed.
+
+This RPC is required for production-mode account handshakes. If it is unavailable to the Worker, signed-in room entry fails closed. The browser now reports typed handshake rejections immediately rather than waiting for its 90-second connection deadline, and the launcher shows pending progress and an inline retryable error.
+
+Before making a database change, confirm this project's environment and the Worker's configured Supabase project. The existing approval covers an isolated staging project only. If the function exists with the exact signature and grants above, an authorized database operator can reload the API schema cache with `NOTIFY pgrst, 'reload schema';`. If it is absent, apply the additive migration after the target is approved, then verify the authenticated RPC returns true and complete the revocation checks above. Never bypass the check or silently create a guest membership for a signed-in user to work around this failure.

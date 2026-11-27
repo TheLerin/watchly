@@ -10,6 +10,10 @@
   --font-sans: 'Manrope Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', 'Nirmala UI', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
   --lk-font-family: var(--font-sans);
   --watchly-carbon: #0a0b10;
+  --watchly-page-background: linear-gradient(180deg, #070709 0%, #030304 56%, #010102 100%);
+  --watchly-navbar-background:
+    linear-gradient(115deg, rgb(var(--video-left-rgb, 24 24 24) / 7%), rgb(var(--video-center-rgb, 24 24 24) / 4%) 48%, rgb(var(--video-right-rgb, 24 24 24) / 7%)),
+    rgb(5 5 8 / 13%);
   --watchly-midnight: #171226;
   --watchly-blue: #0975b6;
   --watchly-cyan: #42ccec;

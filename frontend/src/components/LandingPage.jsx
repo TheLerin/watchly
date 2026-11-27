@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import { useRoom } from '../context/RoomContext';
 import useStageNavigation, { STAGE_TRANSITION } from '../hooks/useStageNavigation';
 import useVideoAmbientLight from '../hooks/useVideoAmbientLight';
@@ -24,6 +23,7 @@ import { loadRoomLayout } from '../roomRoute';
 import './cinema-hero.css';
 import AccountActions from './account/AccountActions';
 import { useAuth } from '../context/AuthContext';
+import GradientLabel from './GradientLabel';
 
 export { BackgroundLayers };
 
@@ -136,10 +136,7 @@ const LandingNavbar = ({ onBrand, onCreate, onNavigate, storyActive }) => (
     <nav className="landing-nav-links" aria-label="Landing page">
       {['Experience', 'Features', 'Voice', 'Trust'].map((label, index) => (
         <button type="button" key={label} onClick={() => onNavigate(index + 1)}>
-          <span className="landing-nav-label">
-            <span className="landing-nav-text">{label}</span>
-            <span className="landing-nav-gradient" aria-hidden="true">{label}</span>
-          </span>
+          <GradientLabel>{label}</GradientLabel>
         </button>
       ))}
     </nav>
@@ -316,6 +313,8 @@ const CinematicExperience = ({
 
 export const RoomLauncher = ({
   activeTab,
+  busy = false,
+  error = '',
   canSubmit,
   handleCreate,
   handleJoin,
@@ -382,14 +381,14 @@ export const RoomLauncher = ({
         <h2 id="room-launcher-title">Start your Watchly room.</h2>
         <p className="room-launcher-copy">Create a private room or enter a code from a friend. No account required.</p>
         <div className="room-launcher-tabs" role="tablist" aria-label="Room action">
-          <button type="button" role="tab" aria-selected={activeTab === 'create'} className={activeTab === 'create' ? 'is-active' : ''} onClick={() => setActiveTab('create')}>Create room</button>
-          <button type="button" role="tab" aria-selected={activeTab === 'join'} className={activeTab === 'join' ? 'is-active' : ''} onClick={() => setActiveTab('join')}>Join room</button>
+          <button type="button" role="tab" disabled={busy} aria-selected={activeTab === 'create'} className={activeTab === 'create' ? 'is-active' : ''} onClick={() => setActiveTab('create')}><GradientLabel>Create room</GradientLabel></button>
+          <button type="button" role="tab" disabled={busy} aria-selected={activeTab === 'join'} className={activeTab === 'join' ? 'is-active' : ''} onClick={() => setActiveTab('join')}><GradientLabel>Join room</GradientLabel></button>
         </div>
         <label className="room-launcher-field">
           <span>Nickname</span>
           <span className="room-launcher-input-wrap">
             <User aria-hidden="true" />
-            <input autoFocus type="text" value={nickname} maxLength={24} placeholder="Your nickname" onChange={event => setNickname(event.target.value)} onKeyDown={handleKey} />
+            <input autoFocus type="text" value={nickname} disabled={busy} maxLength={24} placeholder="Your nickname" onChange={event => setNickname(event.target.value)} onKeyDown={handleKey} />
           </span>
         </label>
         {activeTab === 'join' && (
@@ -397,15 +396,17 @@ export const RoomLauncher = ({
             <span>Room code</span>
             <span className="room-launcher-input-wrap">
               <Hash aria-hidden="true" />
-              <input type="text" value={joinCode} maxLength={10} placeholder="ROOM CODE" onChange={event => setJoinCode(event.target.value.toUpperCase())} onKeyDown={handleKey} />
+              <input type="text" value={joinCode} disabled={busy} maxLength={10} placeholder="ROOM CODE" onChange={event => setJoinCode(event.target.value.toUpperCase())} onKeyDown={handleKey} />
             </span>
           </label>
         )}
-        <button type="button" className="room-launcher-submit" onClick={activeTab === 'create' ? handleCreate : handleJoin} disabled={!canSubmit}>
+        <button type="button" className="room-launcher-submit" onClick={activeTab === 'create' ? handleCreate : handleJoin} disabled={busy || !canSubmit} aria-busy={busy}>
           {activeTab === 'create' ? <Play fill="currentColor" aria-hidden="true" /> : <Users aria-hidden="true" />}
-          {activeTab === 'create' ? 'Create room' : 'Join room'}
+          <GradientLabel>{busy ? (activeTab === 'create' ? 'Creating room…' : 'Joining room…') : (activeTab === 'create' ? 'Create room' : 'Join room')}</GradientLabel>
           <ArrowRight aria-hidden="true" />
         </button>
+        {busy && <p className="room-launcher-copy" role="status">Connecting securely to your room. This can take a moment.</p>}
+        {error && <p className="room-launcher-error" role="alert">{error}</p>}
       </section>
     </div>
   );
@@ -420,6 +421,9 @@ const LandingPage = () => {
   const [joinCode, setJoinCode] = useState('');
   const [activeTab, setActiveTab] = useState('create');
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const [entering, setEntering] = useState(false);
+  const [entryError, setEntryError] = useState('');
+  const entryPending = useRef(false);
   const effectiveNickname = profile?.display_name || nickname;
 
   useEffect(() => {
@@ -431,13 +435,19 @@ const LandingPage = () => {
   }, []);
 
   const handleCreate = async () => {
-    if (!effectiveNickname.trim()) return;
-    try { await createRoom(effectiveNickname.trim()); } catch (error) { toast.error(error.message); }
+    if (!effectiveNickname.trim() || entryPending.current) return;
+    entryPending.current = true; setEntering(true); setEntryError('');
+    try { await createRoom(effectiveNickname.trim()); }
+    catch (error) { setEntryError(error.message); }
+    finally { entryPending.current = false; setEntering(false); }
   };
 
   const handleJoin = async () => {
-    if (!effectiveNickname.trim() || !joinCode.trim()) return;
-    try { await joinRoom(joinCode.trim().toUpperCase(), effectiveNickname.trim()); } catch (error) { toast.error(error.message); }
+    if (!effectiveNickname.trim() || !joinCode.trim() || entryPending.current) return;
+    entryPending.current = true; setEntering(true); setEntryError('');
+    try { await joinRoom(joinCode.trim().toUpperCase(), effectiveNickname.trim()); }
+    catch (error) { setEntryError(error.message); }
+    finally { entryPending.current = false; setEntering(false); }
   };
 
   const handleKey = event => {
@@ -448,6 +458,7 @@ const LandingPage = () => {
   const openLauncher = useCallback(tab => {
     void loadRoomLayout().catch(() => {});
     setActiveTab(tab);
+    setEntryError('');
     setLauncherOpen(true);
   }, []);
   const closeLauncher = useCallback(() => setLauncherOpen(false), []);
@@ -464,6 +475,8 @@ const LandingPage = () => {
       />
       <RoomLauncher
         activeTab={activeTab}
+        busy={entering}
+        error={entryError}
         canSubmit={canSubmit}
         handleCreate={handleCreate}
         handleJoin={handleJoin}
