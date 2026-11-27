@@ -4,7 +4,7 @@ import { PresenceDirectory } from './PresenceDirectory.mjs';
 import { buildIceConfig, mediaProvider } from './media.mjs';
 import { boundedJson, boundedBytes, json } from './runtime.mjs';
 import { createMediaCookie, verifyTicket, streamDrive, validDriveId } from './drive.mjs';
-import { roomPreviewHtml } from '../../frontend/social-preview/metadata.js';
+import { pageMetadataHtml, pageMetadata, cleanOrigin } from '../../frontend/social-preview/siteMetadata.js';
 import { AbuseGuard, actorKey, consume } from './AbuseGuard.mjs';
 export { WatchRoom, PresenceDirectory, AbuseGuard };
 
@@ -96,12 +96,21 @@ const app = {
         });
       }
       if (path.startsWith('/api/') || path.startsWith('/ws/')) return json({ error: 'Not found' }, 404);
-      if (/^\/room\/[A-Z0-9]{7}\/?$/.test(path) && ['GET', 'HEAD'].includes(request.method)) {
+      if (['GET', 'HEAD'].includes(request.method) && (!/\.[a-z0-9]{1,8}$/i.test(path) || (path.endsWith('.html') && !/^\/google[A-Za-z0-9_-]+\.html$/.test(path)))) {
+        const route = path === '/404.html' ? '/404' : path === '/index.html' ? '/' : path;
+        const origin = /^\/room\/[A-Z0-9]{7}\/?$/i.test(route) ? url.origin : cleanOrigin(env.SITE_ORIGIN);
+        const data = pageMetadata(route, origin);
         const shell = await env.ASSETS.fetch(new Request(new URL('/index.html', url)));
-        const html = roomPreviewHtml(await shell.text(), path.split('/')[2], url.origin);
-        return new Response(request.method === 'HEAD' ? null : html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' } });
+        const deploymentNoindex = url.origin !== cleanOrigin(env.SITE_ORIGIN) || env.NODE_ENV !== 'production';
+        const noindex = data.noindex || deploymentNoindex;
+        const html = pageMetadataHtml(await shell.text(), route, origin, { noindex: deploymentNoindex });
+        return new Response(request.method === 'HEAD' ? null : html, { status: data.status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': data.noindex ? 'no-store' : 'no-cache', ...(noindex ? { 'X-Robots-Tag': 'noindex, nofollow' } : {}) } });
       }
-      return env.ASSETS.fetch(request);
+      const asset = await env.ASSETS.fetch(request);
+      if (/\.[a-z0-9]{1,8}$/i.test(path) && asset.headers.get('Content-Type')?.includes('text/html') && !/^\/google[A-Za-z0-9_-]+\.html$/.test(path)) {
+        await asset.body?.cancel(); return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      }
+      return asset;
     } catch (error) {
       if (!error.status || error.status >= 500) console.error(JSON.stringify({ code: 'REQUEST_FAILED', requestId, status: error.status || 500 }));
       return json({ error: error.status === 413 ? 'Request too large' : error.status === 400 ? 'Invalid request' : 'Request could not be completed' }, error.status || 500);

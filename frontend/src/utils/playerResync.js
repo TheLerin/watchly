@@ -7,7 +7,7 @@ export function createPlayerResync({ getPlayer, getTarget, isReady, youtube = fa
     let lastSeekAt = -Infinity;
     const started = now();
     const cleanup = [];
-    const complete = () => { if (!disposed) { dispose(); onComplete(); } };
+    const complete = result => { if (!disposed) { dispose(); onComplete(result); } };
     const pump = () => {
         if (disposed) return;
         if (now() - started > 30000) { dispose(); onTimeout(); return; }
@@ -27,6 +27,14 @@ export function createPlayerResync({ getPlayer, getTarget, isReady, youtube = fa
             let state = player.getPlayerState();
             const duration = player.getDuration?.() || Infinity;
             const position = Math.min(target.position, duration);
+            // A playing snapshot may outlive the actual video. playVideo() on
+            // ENDED restarts YouTube at zero; seeking it back to the expired
+            // target then creates an end/replay loop while room writes are gated.
+            if (target.playing && Number.isFinite(duration) && duration > 0 &&
+                target.position >= duration && state === 0 && Math.abs((player.getCurrentTime?.() || 0) - duration) <= 1.25) {
+                complete({ ended: true, position: duration });
+                return;
+            }
             if (state !== 3 && (!seekIssued || (Math.abs((player.getCurrentTime?.() || 0) - position) > 1.25 && now() - lastSeekAt >= 1000)) && Math.abs((player.getCurrentTime?.() || 0) - position) > 0.15) {
                 seekIssued = true; lastSeekAt = now(); onSeek(position);
                 player.seekTo(position, true);

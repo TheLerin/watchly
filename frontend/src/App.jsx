@@ -9,6 +9,9 @@ import { SocialProvider } from './context/SocialContext';
 import PwaUpdateNotice from './components/PwaUpdateNotice';
 import { SoundEffectsProvider } from './context/SoundEffectsContext';
 import { cleanDeploymentRetryUrl, deploymentRetryUrl, isAssetLoadError } from './utils/deploymentRecovery';
+import { ConsentProvider } from './context/ConsentContext';
+import PrivacyControls, { PrivacyFooter } from './components/PrivacyControls';
+import PageMetadata from './components/PageMetadata';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const RoomLayout = lazy(loadRoomLayout);
@@ -17,6 +20,7 @@ const AuthCallback = lazy(() => import('./components/account/AuthPages').then(mo
 const ProfilePage = lazy(() => import('./components/account/AuthPages').then(module => ({ default: module.ProfilePage })));
 const MyWatchly = lazy(() => import('./components/account/MyWatchly'));
 const LegalPage = lazy(() => import('./components/account/LegalPage'));
+const NotFound = lazy(() => import('./components/NotFound'));
 
 // BUG-25: Error boundary catches any render-time errors and shows a recovery UI
 class ErrorBoundary extends React.Component {
@@ -116,7 +120,8 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <SoundEffectsProvider>
-        <Router>
+        <ConsentProvider><Router>
+          <PageMetadata />
           <AuthProvider>
           <SocialProvider>
           <RoomProvider>
@@ -131,6 +136,8 @@ function App() {
               <Route path="/my-watchly" element={<MyWatchly />} />
               <Route path="/terms" element={<LegalPage kind="terms" />} />
               <Route path="/privacy" element={<LegalPage kind="privacy" />} />
+              <Route path="/cookies" element={<LegalPage kind="cookies" />} />
+              <Route path="*" element={<NotFound />} />
             </Routes><ClearDeploymentRetry /></Suspense></ProtocolGuard>
             {/* ISSUE-26: Toaster must be inside the tree so toasts render */}
             <PwaUpdateNotice />
@@ -159,7 +166,8 @@ function App() {
           </RoomProvider>
           </SocialProvider>
           </AuthProvider>
-        </Router>
+          <PrivacyFooter /><PrivacyControls />
+        </Router></ConsentProvider>
         </SoundEffectsProvider>
       </ThemeProvider>
     </ErrorBoundary>

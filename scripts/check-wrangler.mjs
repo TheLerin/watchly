@@ -16,7 +16,7 @@ export function checkWrangler(config) {
       if (binding?.class_name !== className || binding.script_name || binding.environment) throw new Error(`Foreign or missing ${name} binding for ${namespace}`);
     }
     if (environment.assets?.binding !== 'ASSETS' || typeof environment.assets.directory !== 'string' || path.posix.normalize(environment.assets.directory) !== 'frontend/dist') throw new Error(`Missing assets binding for ${namespace}`);
-    for (const route of ['/api/*', '/ws/*', '/room/*', '/auth/callback*']) if (!environment.assets.run_worker_first?.includes(route)) throw new Error(`Missing Worker route ${route} for ${namespace}`);
+    for (const route of ['/api/*', '/ws/*', '/room/*', '/auth/callback*']) if (environment.assets.run_worker_first !== true && !environment.assets.run_worker_first?.includes('/*') && !environment.assets.run_worker_first?.includes(route)) throw new Error(`Missing Worker route ${route} for ${namespace}`);
     const classes = (environment.migrations || []).flatMap(value => value.new_sqlite_classes || []);
     for (const className of Object.values(expected)) if (!classes.includes(className)) throw new Error(`Missing SQLite migration for ${namespace}:${className}`);
     summaries.push({ namespace, worker: environment.name, durableObjects: Object.keys(expected), assets: 'ASSETS', mediaPrefix: `watchly-${namespace}-voice-` });

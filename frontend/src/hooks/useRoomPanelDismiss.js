@@ -12,6 +12,7 @@ export default function useRoomPanelDismiss({ activePanel, onClose, panelRef, tr
         if (!activePanel) return;
         const pendingEscapes = new Set();
         const outside = event => {
+            if (event.target.closest?.('.cookie-dialog[open]')) return;
             if (ownedEvents.current.has(event) || panelRef.current?.contains(event.target)
                 || triggerRefs.some(ref => {
                     const button = event.target.closest?.('button');

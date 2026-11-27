@@ -1,5 +1,6 @@
 import GradientIcon from './GradientIcon';
 import GradientLabel from './GradientLabel';
+import { useConsent } from '../context/ConsentContext';
 import { useId } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Check, RotateCcw } from 'lucide-react';
@@ -40,6 +41,7 @@ function ToggleRow({ label, setting, description }) {
 }
 
 export default function AppearancePanel({ supportsTheater, panelRef, panelEvents }) {
+    const { openPreferences } = useConsent();
     const { appearanceSettings: settings, setTheme, setRoomAppearance, setCinemaPreset, updateAppearance, resetAppearance } = useTheme();
     const systemReduceMotion = useReducedMotion();
     const cinematic = settings.roomStyle === 'cinematic';
@@ -111,6 +113,7 @@ export default function AppearancePanel({ supportsTheater, panelRef, panelEvents
                     </section>
                 </>}
                 <SoundSettings />
+                <button type="button" className="appearance-reset" onClick={openPreferences}><GradientLabel>Privacy & cookie settings</GradientLabel></button>
                 <button type="button" className="appearance-reset" onClick={resetAppearance}><GradientIcon><RotateCcw size={13} aria-hidden="true" /></GradientIcon><GradientLabel>Reset appearance</GradientLabel></button>
             </div>
         </MotionDiv>

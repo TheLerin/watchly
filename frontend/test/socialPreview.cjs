@@ -5,15 +5,16 @@ const { readFile, stat } = require('node:fs/promises');
 const { existsSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { HOME_TITLE, HOME_DESCRIPTION, DEFAULT_SITE_ORIGIN } = require('../social-preview/siteMetadata.js');
 
-const expectedImage = 'https://wchly.vercel.app/og/watchly-room-v2.png';
+const expectedImage = `${DEFAULT_SITE_ORIGIN}/og/watchly-room-v2.png`;
 const keys = ['og:title', 'og:description', 'og:url', 'og:image', 'twitter:card', 'twitter:title', 'twitter:description', 'twitter:image'];
 function checkHtml(html, route) {
   const room = route.startsWith('/room/');
   const expected = {
-    'og:title': room ? 'Join my Watchly room' : 'Watchly — Watch Together',
-    'og:description': room ? 'Watch together in perfect sync.' : 'Watch videos together in perfect sync.',
-    'og:url': `https://wchly.vercel.app${route}`,
+    'og:title': room ? 'Join my Watchly room' : HOME_TITLE,
+    'og:description': room ? 'Watch together in perfect sync.' : HOME_DESCRIPTION,
+    'og:url': `${DEFAULT_SITE_ORIGIN}${route}`,
     'og:image': expectedImage,
     'twitter:card': 'summary_large_image',
     'twitter:image': expectedImage,

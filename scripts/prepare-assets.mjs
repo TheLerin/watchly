@@ -20,10 +20,13 @@ console.log('Static assets validated; every file is below 25 MiB.');
 
 // Public metadata should not retain a dependency on the previous frontend host.
 const { loadEnv } = await import('../frontend/node_modules/vite/dist/node/index.js');
-const origin = process.env.VITE_SITE_ORIGIN || loadEnv('production', path.resolve('frontend'), 'VITE_').VITE_SITE_ORIGIN || '';
-for (const name of ['robots.txt', 'sitemap.xml']) {
-  const file = path.join(root, name), source = await readFile(file, 'utf8');
-  const content = origin ? source.replaceAll('https://wchly.vercel.app', new URL(origin).origin)
-    : name === 'robots.txt' ? source.replace(/^Sitemap:.*$/m, '') : '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>\n';
-  await writeFile(file, content);
+const { cleanOrigin, PUBLIC_PAGES, pageMetadataHtml } = await import('../frontend/social-preview/siteMetadata.js');
+const origin = cleanOrigin(process.env.VITE_SITE_ORIGIN || loadEnv('production', path.resolve('frontend'), 'VITE_').VITE_SITE_ORIGIN);
+await writeFile(path.join(root, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`);
+await writeFile(path.join(root, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${Object.keys(PUBLIC_PAGES).map(route => `<url><loc>${origin}${route}</loc></url>`).join('')}</urlset>\n`);
+await writeFile(path.join(root, '404.html'), pageMetadataHtml(html, '/404', origin));
+const { mkdir } = await import('node:fs/promises');
+for (const route of [...Object.keys(PUBLIC_PAGES).filter(route => route !== '/'), '/auth', '/auth/callback', '/my-watchly', '/profile', '/setup-profile']) {
+  const directory = path.join(root, route.slice(1)); await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, 'index.html'), pageMetadataHtml(html, route, origin));
 }

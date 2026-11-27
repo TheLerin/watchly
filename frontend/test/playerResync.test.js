@@ -60,3 +60,37 @@ test('YouTube restoration waits for the right item, seeks, and explicitly preser
     assert.deepEqual(calls, []); id = 'new'; resync.pump(); assert.deepEqual(calls, [['seek', 85], ['pause']]);
     assert.equal(completed, 0); resync.pump(); assert.equal(completed, 1); assert.equal(state, 2);
 });
+
+test('YouTube recovery at the end completes without replaying an expired playing snapshot', () => {
+    let position = 268, state = 0, completed; const calls = [];
+    const player = { getVideoData: () => ({ video_id: 'movie' }), getPlayerState: () => state,
+        getCurrentTime: () => position, getDuration: () => 268,
+        seekTo: value => { calls.push(['seek', value]); position = value; state = value >= 268 ? 0 : 2; },
+        pauseVideo: () => { calls.push(['pause']); state = 2; },
+        playVideo: () => { calls.push(['play']); if (state === 0) position = 0; state = 1; } };
+    const resync = createPlayerResync({ youtube: true, getPlayer: () => player,
+        getTarget: () => ({ videoId: 'movie', position: 270, playing: true }), isReady: () => true,
+        onComplete: result => { completed = result; }, schedule: () => 1, cancel: () => {} });
+    for (let i = 0; i < 8; i++) resync.pump();
+    assert.deepEqual(calls, []);
+    assert.deepEqual(completed, { ended: true, position: 268 });
+});
+
+test('YouTube recovery can seek to the end but explicit replay and mid-video recovery still play', () => {
+    let position = 0, state = 5, completed = 0; const calls = [];
+    const target = { videoId: 'movie', position: 270, playing: true };
+    const player = { getVideoData: () => ({ video_id: 'movie' }), getPlayerState: () => state,
+        getCurrentTime: () => position, getDuration: () => 268,
+        seekTo: value => { calls.push(['seek', value]); position = value; state = value >= 268 ? 0 : 2; },
+        pauseVideo: () => { state = 2; }, playVideo: () => { calls.push(['play']); if (state === 0) position = 0; state = 1; } };
+    const make = () => createPlayerResync({ youtube: true, getPlayer: () => player, getTarget: () => target,
+        isReady: () => true, onComplete: () => completed++, schedule: () => 1, cancel: () => {} });
+    const ended = make(); ended.pump();
+    assert.equal(completed, 1); assert.deepEqual(calls, [['seek', 268]]);
+    for (const next of [0, 85]) {
+        position = 268; state = 0; target.position = next;
+        const replay = make(); replay.pump();
+        assert.equal(position, next); assert.equal(state, 1);
+    }
+    assert.equal(completed, 3);
+});

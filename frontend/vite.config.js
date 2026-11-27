@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { deploymentRetryNavigation } from './src/utils/deploymentRecovery.js'
+import { pageMetadataHtml, cleanOrigin } from './social-preview/siteMetadata.js'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -18,11 +19,16 @@ export default defineConfig({
       name: 'cloudflare-public-metadata',
       apply: 'build',
       transformIndexHtml(html) {
-        if (process.env.VITE_REALTIME_TRANSPORT !== 'native') return html;
-        const supplied = process.env.VITE_SITE_ORIGIN || loadEnv('production', process.cwd(), 'VITE_').VITE_SITE_ORIGIN || '';
-        const origin = supplied ? new URL(supplied).origin : '';
-        if (origin && !/^https?:\/\//.test(origin)) throw new Error('VITE_SITE_ORIGIN must be an HTTP(S) origin');
-        return html.replaceAll('https://wchly.vercel.app', origin);
+        const values = { ...loadEnv('production', process.cwd(), 'VITE_'), ...process.env };
+        const origin = cleanOrigin(values.VITE_SITE_ORIGIN);
+        let result = pageMetadataHtml(html, '/', origin);
+        for (const [key, name] of [['VITE_GOOGLE_SITE_VERIFICATION', 'google-site-verification'], ['VITE_BING_SITE_VERIFICATION', 'msvalidate.01']]) {
+          if (values[key]) {
+            if (!/^[A-Za-z0-9_-]{8,256}$/.test(values[key])) throw new Error(`Invalid ${key}`);
+            result = result.replace(new RegExp(`<meta\\b[^>]*name="${name}"[^>]*>`, 'g'), '').replace('</head>', `<meta name="${name}" content="${values[key]}" />\n</head>`);
+          }
+        }
+        return result;
       },
     },
     react(),

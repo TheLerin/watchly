@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createYouTubePlaylistSession } from '../utils/youtubePlaylistSession';
 
-export default function useYouTubePlaylist({ state, playerRef, isController, getPosition, send, onError, resyncId }) {
+export default function useYouTubePlaylist({ state, playerRef, isController, getPosition, send, onError, resyncId, enabled = true }) {
     const latest = useRef({ state, isController, getPosition, send, onError });
     const [readyItem, setReadyItem] = useState(null);
     useEffect(() => { latest.current = { state, isController, getPosition, send, onError }; });
@@ -25,9 +25,9 @@ export default function useYouTubePlaylist({ state, playerRef, isController, get
     const session = useMemo(() => ({ tick, ready, canEmit, fail }), [tick, ready, canEmit, fail]);
     useEffect(() => { if (resyncId != null) runtime.current?.resync(); }, [resyncId]);
     useEffect(() => {
-        if (state.sourceType !== 'youtube-playlist') return;
+        if (!enabled || state.sourceType !== 'youtube-playlist') return;
         const timer = setInterval(session.tick, 200);
         return () => clearInterval(timer);
-    }, [session, state.sourceType, state.sourceId]);
-    return { session, ready: state.playlistStatus === 'ready' && readyItem === `${state.sourceId}:${state.sourceRevision}` };
+    }, [session, state.sourceType, state.sourceId, enabled]);
+    return { session, ready: enabled && state.playlistStatus === 'ready' && readyItem === `${state.sourceId}:${state.sourceRevision}` };
 }

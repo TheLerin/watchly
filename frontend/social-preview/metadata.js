@@ -1,4 +1,4 @@
-export const siteOrigin = 'https://wchly.vercel.app';
+export const siteOrigin = 'https://wchly.pages.dev';
 
 // Only the head changes. Vite's app root, scripts, styles and PWA tags survive.
 export function roomPreviewHtml(html, roomCode, origin = siteOrigin) {
@@ -12,5 +12,7 @@ export function roomPreviewHtml(html, roomCode, origin = siteOrigin) {
     .replace(/(<meta\b[^>]*(?:name|property)="(?:description|og:description|twitter:description)"[^>]*content=")[^"]*("[^>]*>)/gi, `$1${description}$2`)
     .replace(/(<meta\b[^>]*(?:name|property)="(?:og:url|twitter:url)"[^>]*content=")[^"]*("[^>]*>)/gi, `$1${url}$2`)
     .replace(/(<meta\b[^>]*(?:name|property)="(?:og:image|og:image:secure_url|twitter:image)"[^>]*content=")[^"]*("[^>]*>)/gi, `$1${safeOrigin}/og/watchly-room-v2.png$2`)
-    .replace(/(<link\b[^>]*rel="canonical"[^>]*href=")[^"]*("[^>]*>)/gi, `$1${url}$2`));
+    .replace(/(<link\b[^>]*rel="canonical"[^>]*href=")[^"]*("[^>]*>)/gi, `$1${url}$2`)
+    .replace(/<script\b[^>]*id="watchly-structured-data"[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/(<meta\b[^>]*name="robots"[^>]*content=")[^"]*("[^>]*>)/gi, '$1noindex, nofollow$2'));
 }

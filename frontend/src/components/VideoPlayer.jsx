@@ -6,6 +6,8 @@ import { useRoom } from '../context/RoomContext';
 import { useRoomSession } from '../context/RoomSessionContext';
 import { Play, Link as LinkIcon, Lock, AlertCircle, FolderOpen, RefreshCw, FileVideo, ShieldCheck, Clapperboard, Info, Captions, X } from 'lucide-react';
 import ControlIconButton from './ControlIconButton';
+import { useConsent } from '../context/ConsentContext';
+import { ExternalMediaConsent } from './PrivacyControls';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { fingerprintLocalFile, formatFileSize, readLocalVideoDuration } from '../utils/localMedia';
@@ -76,6 +78,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
     // ── Refs ─────────────────────────────────────────────────────────────────
     const playerRef          = useRef(null);
+    const { externalMediaAllowed, canLoadExternalMedia } = useConsent();
     const { active: screenShareActive } = useRoomScreenShare();
     const readinessReporter = useMemo(() => createReadinessReporter({ send: markLocalMediaStatus }), [markLocalMediaStatus]);
     useEffect(() => () => readinessReporter.dispose(), [readinessReporter]);
@@ -201,7 +204,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     const hasContent    = isLocal || !!(videoState.url || videoState.magnetURI);
     const isPlaylist    = videoState.sourceType === 'youtube-playlist';
     const isYouTube     = source.kind === 'youtube' || source.kind === 'youtube-playlist';
-    const playlist = useYouTubePlaylist({ state: videoState, playerRef, isController: isPlaybackCoordinator,
+    const playlist = useYouTubePlaylist({ state: videoState, playerRef, isController: isPlaybackCoordinator, enabled: externalMediaAllowed,
         getPosition: getExpectedPosition, send: updatePlaylist, onError: setPlayerError, resyncId: resyncRequest?.id });
     const isArchive     = !!(playerUrl && playerUrl.includes('archive.org'));
     const { serverNow } = clock;
@@ -232,19 +235,19 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         action, position, expectedPosition: getExpectedPosition(videoStateRef.current),
         authoritativePlaying: videoStateRef.current.isPlaying,
         canControl: canPerformRoomAction('canControlPlayback'), canSeek: canPerformRoomAction('canSeek'),
-        applyingState: !canSendRoomAction() || resyncSuppressionRef.current || localPlaybackSwitchRef.current,
+        applyingState: !canSendRoomAction() || resyncSuppressionRef.current || localPlaybackSwitchRef.current || (!isNativePlayer && !canLoadExternalMedia()),
         programmaticSeek: resyncSeekTargetRef.current != null && Math.abs(position - resyncSeekTargetRef.current) < 0.75,
-    }), [canPerformRoomAction, canSendRoomAction, getExpectedPosition]);
+    }), [canPerformRoomAction, canSendRoomAction, getExpectedPosition, isNativePlayer, canLoadExternalMedia]);
     useEffect(() => {
         if (connectionPhase === 'connected' && !resyncRequest) setViewerDiverged(false);
     }, [connectionPhase, resyncRequest]);
     useEffect(() => {
-        if (!hasContent || isPlayerReady || playerError || isPlaylist || (isLocal && !isLocalReady)) return undefined;
+        if (!hasContent || isPlayerReady || playerError || isPlaylist || (isLocal && !isLocalReady) || (!isNativePlayer && !externalMediaAllowed)) return undefined;
         const timeout = window.setTimeout(() => {
             setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.');
         }, 20000);
         return () => window.clearTimeout(timeout);
-    }, [hasContent, isLocal, isLocalReady, isPlayerReady, playerError, playerUrl, isPlaylist]);
+    }, [hasContent, isLocal, isLocalReady, isPlayerReady, playerError, playerUrl, isPlaylist, isNativePlayer, externalMediaAllowed]);
     const nowWatchingLabel = isLocal
         ? videoState.localMedia?.displayName
         : isPlaylist ? videoState.playlistTitles?.[videoState.currentVideoId] || 'YouTube Playlist' : rawUrl
@@ -742,6 +745,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
     // ── 5. ReactPlayer onReady ────────────────────────────────────────────────
     const handleReady = useCallback(() => {
+        if (!isNativePlayer && !canLoadExternalMedia()) return;
         if (videoStateRef.current.sourceType === 'youtube-playlist') {
             playlist.session.tick();
             return;
@@ -755,7 +759,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         }
         const internal = playerRef.current?.getInternalPlayer?.();
         setActiveMediaElement(internal instanceof HTMLMediaElement ? internal : null);
-    }, [getExpectedPosition, playlist.session]);
+    }, [getExpectedPosition, playlist.session, isNativePlayer, canLoadExternalMedia]);
 
     useEffect(() => {
         if (!isPlaylist) return;
@@ -782,7 +786,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
     useEffect(() => {
         if (!resyncRequest || !isConnected) return;
         const id = resyncRequest.id;
-        if (!hasContent) { completeResync(id); return; }
+        if (!hasContent || (!isNativePlayer && !externalMediaAllowed)) { completeResync(id); return; }
         // The room snapshot is restored even when this device still needs to
         // choose its copy. File readiness remains a separate server gate.
         if (isLocal && !isLocalReady) { completeResync(id); return; }
@@ -801,13 +805,19 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                 return { position: getExpectedPosition(state), playing: state.isPlaying, videoId: state.currentVideoId || source.videoId, version: state.seekVersion };
             },
             applyLocal: isLocal ? () => applySynchronizedState(nativeVideoRef.current, playbackRef.current, { force: true }) : undefined,
-            onComplete: () => completeResync(id), onPlayError: handleSyncPlayError,
+            onComplete: result => {
+                completeResync(id);
+                // Finish recovery before announcing the end so the normal
+                // membership/authority gates remain in force. Viewers never write.
+                if (result?.ended && canLoadExternalMedia() && isPlaybackCoordinator && videoStateRef.current.sourceId === videoState.sourceId &&
+                    videoStateRef.current.sourceRevision === videoState.sourceRevision) void endVideo(result.position);
+            }, onPlayError: handleSyncPlayError,
             onSeek: position => { resyncSeekTargetRef.current = position; },
             onTimeout: () => { setPlayerError('Playback could not resync. Check the source or retry the connection.'); failResync(id); },
         });
         return resync.dispose;
     }, [resyncRequest, isConnected, hasContent, isLocal, isLocalReady, isNativePlayer, isYouTube, isPlaylist, isPlayerReady, playlist.session,
-        videoState.sourceId, videoState.sourceRevision, source.videoId, getExpectedPosition, serverNow, applySynchronizedState, completeResync, failResync, handleSyncPlayError]);
+        videoState.sourceId, videoState.sourceRevision, source.videoId, getExpectedPosition, serverNow, applySynchronizedState, completeResync, failResync, handleSyncPlayError, isPlaybackCoordinator, endVideo, externalMediaAllowed, canLoadExternalMedia]);
 
     // ── 6. Host progress sync interval (ReactPlayer + GDrive host) ───────────
     // BUG-G FIX: syncProgress is ONLY called here (every 2s), not in onProgress.
@@ -1486,7 +1496,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
                             {/* ── Loading Skeleton ─────────────────────────────── */}
                             <AnimatePresence>
-                                {!playerError && (!isLocal || isLocalReady) && (
+                                {!playerError && (isNativePlayer || externalMediaAllowed) && (!isLocal || isLocalReady) && (
                                     !isPlayerReady || (isBuffering && videoState.isPlaying && !autoplayBlocked)
                                 ) && (
                                     <MotionDiv
@@ -1795,7 +1805,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             )}
 
                             {/* ── YouTube / Vimeo / Archive / direct URL: ReactPlayer ──────── */}
-                            {!isNativePlayer && playerUrl && (
+                            {!isNativePlayer && playerUrl && !externalMediaAllowed && <ExternalMediaConsent />}
+                            {!isNativePlayer && playerUrl && externalMediaAllowed && (
                                 <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                                     <ReactPlayer
                                         ref={playerRef}
@@ -1811,7 +1822,16 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             setAutoplayBlocked(false);
                                             if (isPlaylist && !playlist.session.canEmit()) return;
                                             const intent = classifyInteraction('play');
-                                            if (intent === 'resync') resumeViewerSync(); else if (intent === 'shared') debouncePlay();
+                                            if (intent === 'resync') resumeViewerSync(); else if (intent === 'shared') {
+                                                const duration = playerRef.current?.getDuration?.(), position = playerRef.current?.getCurrentTime?.();
+                                                // Native YouTube Replay rewinds the iframe, but PLAY alone
+                                                // resumes the room's old end position. Share that rewind first.
+                                                if (isYouTube && !isPlaylist && Number.isFinite(duration) && duration > 0 &&
+                                                    Number.isFinite(position) && position < duration - 1.25 && getExpectedPosition(videoStateRef.current) >= duration) {
+                                                    resyncSeekTargetRef.current = position; seekVideo(position);
+                                                }
+                                                debouncePlay();
+                                            }
                                         }}
                                         onPause={() => {
                                             if (isPlaylist && !playlist.session.canEmit()) return;
@@ -1824,15 +1844,16 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             if (intent === 'resync') resumeViewerSync(); else if (intent === 'shared') endSeekGuard(() => playerRef.current?.getCurrentTime?.() || 0);
                                         }}
                                         onError={() => isPlaylist ? playlist.session.fail('This playlist item is unavailable. Waiting for the room to select the next playable item.') : setPlayerError('This source cannot be played directly in the browser. Try a direct video or stream URL, or another supported source.')}
-                                        onEnded={() => { if (isPlaybackCoordinator && (!isPlaylist || (playlist.session.ready() && playerRef.current?.getInternalPlayer?.()?.getPlayerState?.() === 0))) endVideo(playerRef.current?.getCurrentTime?.()); }}
+                                        onEnded={() => { if (canLoadExternalMedia() && isPlaybackCoordinator && (!isPlaylist || (playlist.session.ready() && playerRef.current?.getInternalPlayer?.()?.getPlayerState?.() === 0))) endVideo(playerRef.current?.getCurrentTime?.()); }}
                                         onProgress={(p) => {
                                             lastSyncedPosRef.current = p.playedSeconds;
                                             const key = `${videoStateRef.current.sourceId}:${videoStateRef.current.sourceRevision}`;
                                             const previous = progressSampleRef.current;
                                             progressSampleRef.current = { key, position: p.playedSeconds, at: performance.now() };
-                                            if (!isYouTube || !canSendRoomAction() || resyncSuppressionRef.current || isBufferingRef.current || (isPlaylist && !playlist.session.canEmit())) return;
+                                            if (!isYouTube || !canLoadExternalMedia() || !canSendRoomAction() || resyncSuppressionRef.current || isBufferingRef.current || (isPlaylist && !playlist.session.canEmit())) return;
                                             if (resyncSeekTargetRef.current != null && Math.abs(p.playedSeconds - resyncSeekTargetRef.current) < 1.5) { resyncSeekTargetRef.current = null; return; }
-                                            const expected = getExpectedPosition(videoStateRef.current);
+                                            const duration = playerRef.current?.getDuration?.();
+                                            const expected = Math.min(getExpectedPosition(videoStateRef.current), Number.isFinite(duration) && duration > 0 ? duration : Infinity);
                                             if (!canControlPlayback && Math.abs(p.playedSeconds - expected) > HARD_DRIFT_THRESHOLD) { resumeViewerSync(); return; }
                                             // ReactPlayer 2's YouTube adapter does not forward onSeek.
                                             // A discontinuity in its existing progress callback identifies
@@ -1889,7 +1910,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             )}
 
                             {/* ── Error overlay ───────────────────────────────────── */}
-                            {playerError && (
+                            {playerError && (isNativePlayer || externalMediaAllowed) && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/90 px-6">
                                     <AlertCircle size={36} className="text-red-400 mb-3" />
                                     {isLocal && mediaInspection && (

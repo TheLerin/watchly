@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://wchly.vercel.app/sitemap.xml
+Sitemap: https://wchly.pages.dev/sitemap.xml

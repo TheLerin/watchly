@@ -24,6 +24,14 @@ try {
   assert.equal(callback.status, 200);
   assert.equal(callback.headers.get('cache-control'), 'no-store');
   assert.equal(callback.headers.get('referrer-policy'), 'no-referrer');
+  const home = await fetch(server.base + '/', { headers: { Accept: 'text/html' } });
+  assert.equal(home.status, 200); assert.ok((await home.text()).includes('Watch Together with Friends, in Sync'));
+  const missing = await fetch(server.base + '/missing-scene', { headers: { Accept: 'text/html' } });
+  assert.equal(missing.status, 404); assert.ok((await missing.text()).includes('Page not found | Watchly'));
+  const bing = await fetch(server.base + '/BingSiteAuth.xml'); assert.equal(bing.status, 200);
+  assert.ok((await bing.text()).includes('D076BA3A466F949A85D20E308F1132CA'));
+  const google = await fetch(server.base + '/google2fd6608b68053b8d.html'); assert.equal(google.status, 200);
+  assert.equal((await google.text()).trim(), 'google-site-verification: google2fd6608b68053b8d.html');
   assert.equal((await fetch(server.base + '/api/proxy/gdrive?id=abcdefghijk&roomId=' + code)).status, 401);
   assert.equal((await fetch(server.base + '/api/health', { headers: { Origin: 'https://evil.test' } })).status, 403);
   console.log('PASS real Wrangler/workerd: native room, chat, queue, source, host-only authorization, kick, media authorization, SPA and Origin checks.');

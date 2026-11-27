@@ -9,6 +9,8 @@
     "test:integration": "node workers/test/integration.mjs",
     "test:browser": "node workers/test/browser.cjs",
     "test:browser:harness": "node workers/test/browser-harness.mjs",
+    "test:browser:youtube-ended": "node workers/test/youtube-ended-browser.mjs",
+    "test:browser:privacy": "node workers/test/privacy-browser.mjs",
     "test:load": "node workers/test/load.mjs",
     "check:deploy": "wrangler deploy --dry-run --outdir .worker-build",
     "deploy:staging": "wrangler deploy --env staging",
