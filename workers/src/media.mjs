@@ -25,7 +25,7 @@ export function buildIceConfig(env, memberId) {
 }
 
 export class LiveKitProvider {
-  constructor(env, fetcher = fetch) {
+  constructor(env, fetcher = (...args) => fetch(...args)) {
     if (env.NODE_ENV === 'production' && !['staging', 'production'].includes(env.LIVEKIT_ROOM_NAMESPACE)) throw Object.assign(new Error('Set the Worker media deployment namespace.'), { status: 503 });
     this.env = { ...env, LIVEKIT_ROOM_NAMESPACE: env.LIVEKIT_ROOM_NAMESPACE || 'development' }; this.fetcher = fetcher; this.config = identity.livekitConfig(this.env);
   }
