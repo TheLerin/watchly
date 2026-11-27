@@ -1,10 +1,11 @@
 const crypto = require('node:crypto');
 const { Buffer } = require('node:buffer');
+const { normalizeRoomName } = require('../shared/room-name.mjs');
 
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const reject = (code, message) => ({ ok: false, error: { code, message, retryable: false } });
 const credential = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{32,128}$/.test(value);
-const defaults = () => ({ version: 1, revision: 0, visibility: 'public', locked: false, accountOnly: false, approvalRequired: false, password: null });
+const defaults = () => ({ version: 1, revision: 0, roomName: '', visibility: 'public', locked: false, accountOnly: false, approvalRequired: false, password: null });
 const validPassword = value => typeof value === 'string' && value.length >= 8 && value.length <= 128 && Buffer.byteLength(value) <= 512;
 async function passwordRecord(password) {
     if (!validPassword(password)) throw Object.assign(new Error('Use a password between 8 and 128 characters.'), { code: 'INVALID_PASSWORD_FORMAT' });
@@ -35,7 +36,7 @@ function createRoomAccess({ io, rooms, runtime = {}, now = Date.now }) {
         if (member.accountId && (socket.data.account?.id !== member.accountId || socket.data.account.expiresAt <= now())) return false;
         return true;
     };
-    const publicPolicy = room => ({ version: 1, revision: room.access.revision, visibility: room.access.visibility, locked: room.access.locked, accountOnly: room.access.accountOnly, approvalRequired: room.access.approvalRequired, hasPassword: Boolean(room.access.password) });
+    const publicPolicy = room => ({ version: 1, revision: room.access.revision, roomName: normalizeRoomName(room.access.roomName) || '', visibility: room.access.visibility, locked: room.access.locked, accountOnly: room.access.accountOnly, approvalRequired: room.access.approvalRequired, hasPassword: Boolean(room.access.password) });
     const state = (room, socket) => {
         if (!room?.access) return { policy: defaults() };
         const result = { policy: publicPolicy(room) };
@@ -107,6 +108,11 @@ function createRoomAccess({ io, rooms, runtime = {}, now = Date.now }) {
             init(room); const revision = room.access.revision;
             if (payload.revision !== revision) return ack(reject('ACCESS_CHANGED', 'Access settings changed. Refresh and retry.'));
             const next = { ...room.access };
+            if ('roomName' in payload) {
+                const name = normalizeRoomName(payload.roomName);
+                if (name === null) return ack(reject('INVALID_ROOM_NAME', 'Use a room name up to 48 characters without control characters.'));
+                next.roomName = name;
+            }
             for (const field of ['locked', 'accountOnly', 'approvalRequired']) if (field in payload) { if (typeof payload[field] !== 'boolean') return ack(reject('INVALID_ACCESS', 'Invalid access settings.')); next[field] = payload[field]; }
             if ('visibility' in payload) { if (!['public', 'private'].includes(payload.visibility)) return ack(reject('INVALID_ACCESS', 'Choose public or invitation-only entry.')); next.visibility = payload.visibility; }
             if (payload.clearPassword === true) next.password = null;

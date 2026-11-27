@@ -33,6 +33,22 @@ const receive = (client, event, matches = () => true) => new Promise((resolve, r
     client.on(event, handler);
 });
 
+test('legacy room creation and host rename share names without changing room codes or viewer permissions', async () => {
+    const host = await connect(), viewer = await connect();
+    const created = await emit(host, 'room:create', { nickname: 'Name host', roomName: 'Friday movie night', protocolVersion: 2 });
+    assert.equal(created.ok, true);
+    assert.equal(created.snapshot.access.policy.roomName, 'Friday movie night');
+    await emit(viewer, 'room:join', { roomId: created.roomId, nickname: 'Name viewer', protocolVersion: 2 });
+    assert.equal((await emit(viewer, 'room:access-update', { revision: 0, roomName: 'Unauthorized' })).error.code, 'FORBIDDEN');
+    const changed = receive(viewer, 'room:access-state', value => value.policy.roomName === 'Weekend watch party');
+    assert.equal((await emit(host, 'room:access-update', { revision: 0, roomName: 'Weekend watch party' })).ok, true);
+    await changed;
+    const state = (await emit(viewer, 'room:snapshot', {})).snapshot;
+    assert.equal(state.roomId, created.roomId);
+    assert.equal(state.access.policy.roomName, 'Weekend watch party');
+    host.close(); viewer.close();
+});
+
 test('existing membership events distinguish intentional departure from socket recovery', async () => {
     const host = await connect(), room = await emit(host, 'room:create', { nickname: 'Sound host', protocolVersion: 2 });
     const guest = await connect(), newMember = receive(host, 'user_joined');

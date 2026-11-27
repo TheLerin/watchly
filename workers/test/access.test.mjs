@@ -10,6 +10,27 @@ async function fixture() {
   const join = (client, fields = {}) => client.send('room:join', { roomId: 'ABCDEFG', nickname: 'Visitor', guestKey: 'v'.repeat(43), protocolVersion: 2, ...fields });
   return { setup, item, host, room, update, join };
 }
+
+test('room names are validated, host-only, shared with admitted members and retained through reconstruction', async () => {
+  const setup = environment(), item = await setup.room(), host = await connect(item);
+  assert.equal((await host.send('room:create', { nickname: 'Host', roomName: 'x'.repeat(49), protocolVersion: 2 })).error.code, 'INVALID_ROOM_NAME');
+  assert.equal(item.object.rooms.size, 0);
+  const created = await host.send('room:create', { nickname: 'Host', roomName: ' Friday   movie night ', protocolVersion: 2 });
+  assert.equal(created.snapshot.access.policy.roomName, 'Friday movie night');
+  const viewer = await connect(item);
+  const joined = await viewer.send('room:join', { roomId: 'ABCDEFG', nickname: 'Viewer', roomName: 'Forged name', protocolVersion: 2 });
+  assert.equal(joined.snapshot.access.policy.roomName, 'Friday movie night');
+  assert.equal((await viewer.send('room:access-update', { revision: 0, roomName: 'Forged rename' })).error.code, 'FORBIDDEN');
+  assert.equal((await host.send('room:access-update', { revision: 0, roomName: 'bad\u202ename' })).error.code, 'INVALID_ROOM_NAME');
+  assert.equal((await host.send('room:access-update', { revision: 0, roomName: 'Weekend watch party' })).ok, true);
+  assert.equal(viewer.ws.messages.findLast(frame => frame.event === 'room:access-state').args[0].policy.roomName, 'Weekend watch party');
+  assert.equal((await host.send('room:access-update', { revision: 0, roomName: 'Stale rename' })).error.code, 'ACCESS_CHANGED');
+  await setup.evict('ABCDEFG');
+  assert.equal((await viewer.send('room:snapshot')).snapshot.access.policy.roomName, 'Weekend watch party');
+  assert.equal(item.object.store.load().rooms.get('ABCDEFG').access.roomName, 'Weekend watch party');
+  assert.equal((await host.send('room:access-update', { revision: 1, roomName: '' })).ok, true);
+  assert.equal((await viewer.send('room:snapshot')).snapshot.access.policy.roomName, '');
+});
 test('locking/account-only access applies to new joins while valid admitted members can resume', async () => {
   const { setup, item, host, room, update, join } = await fixture(), visitor = await connect(item);
   assert.equal((await update({ locked: true })).ok, true);

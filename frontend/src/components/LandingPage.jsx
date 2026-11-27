@@ -24,6 +24,7 @@ import './cinema-hero.css';
 import AccountActions from './account/AccountActions';
 import { useAuth } from '../context/AuthContext';
 import GradientLabel from './GradientLabel';
+import { ROOM_NAME_MAX_LENGTH } from '../../../shared/room-name.mjs';
 
 export { BackgroundLayers };
 
@@ -321,6 +322,8 @@ export const RoomLauncher = ({
   handleKey,
   joinCode,
   nickname,
+  roomName,
+  setRoomName,
   onClose,
   open,
   setActiveTab,
@@ -391,6 +394,13 @@ export const RoomLauncher = ({
             <input autoFocus type="text" value={nickname} disabled={busy} maxLength={24} placeholder="Your nickname" onChange={event => setNickname(event.target.value)} onKeyDown={handleKey} />
           </span>
         </label>
+        {activeTab === 'create' && <label className="room-launcher-field">
+          <span>Room name <span className="room-launcher-optional">(optional)</span></span>
+          <span className="room-launcher-input-wrap">
+            <MonitorPlay aria-hidden="true" />
+            <input type="text" aria-label="Room name" value={roomName} disabled={busy} maxLength={ROOM_NAME_MAX_LENGTH} placeholder="Friday movie night" onChange={event => setRoomName(event.target.value)} onKeyDown={handleKey} />
+          </span>
+        </label>}
         {activeTab === 'join' && (
           <label className="room-launcher-field">
             <span>Room code</span>
@@ -418,6 +428,7 @@ const LandingPage = () => {
   const { createRoom, joinRoom, currentUser, roomId } = useRoom();
   const rootRef = useRef(null);
   const [nickname, setNickname] = useState('');
+  const [roomName, setRoomName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [activeTab, setActiveTab] = useState('create');
   const [launcherOpen, setLauncherOpen] = useState(false);
@@ -437,7 +448,7 @@ const LandingPage = () => {
   const handleCreate = async () => {
     if (!effectiveNickname.trim() || entryPending.current) return;
     entryPending.current = true; setEntering(true); setEntryError('');
-    try { await createRoom(effectiveNickname.trim()); }
+    try { await createRoom(effectiveNickname.trim(), roomName); }
     catch (error) { setEntryError(error.message); }
     finally { entryPending.current = false; setEntering(false); }
   };
@@ -483,6 +494,8 @@ const LandingPage = () => {
         handleKey={handleKey}
         joinCode={joinCode}
         nickname={effectiveNickname}
+        roomName={roomName}
+        setRoomName={setRoomName}
         onClose={closeLauncher}
         open={launcherOpen}
         setActiveTab={setActiveTab}

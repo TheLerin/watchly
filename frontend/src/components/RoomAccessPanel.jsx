@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRoom } from '../context/RoomContext';
+import { ROOM_NAME_MAX_LENGTH } from '../../../shared/room-name.mjs';
 
 const button = 'rounded-lg border border-white/15 px-3 py-2 text-xs text-zinc-200 disabled:opacity-40 hover:bg-white/10';
 export default function RoomAccessPanel() {
@@ -7,6 +8,8 @@ export default function RoomAccessPanel() {
     const [password, setPassword] = useState(''), [invite, setInvite] = useState('');
     const [busy, setBusy] = useState(false), [error, setError] = useState('');
     const [optimisticPolicy, setOptimisticPolicy] = useState(null);
+    const [roomName, setRoomName] = useState('');
+    useEffect(() => { setRoomName(roomAccess?.policy?.roomName || ''); }, [roomAccess?.policy?.roomName]);
     const managing = ['Host', 'Moderator'].includes(currentUser?.role), host = currentUser?.role === 'Host';
     useEffect(() => { if (managing) void accessRequest('room:access-get').catch(() => {}); }, [managing, accessRequest]);
     if (!managing || !roomAccess?.policy) return null;
@@ -25,6 +28,11 @@ export default function RoomAccessPanel() {
         <summary className="cursor-pointer font-semibold text-white">Room access</summary>
         <div className="mt-3 space-y-3">
             {host && <>
+                <form onSubmit={event => { event.preventDefault(); if (!busy) void update({ roomName }); }}>
+                    <label htmlFor="room-display-name">Room name</label>
+                    <input id="room-display-name" type="text" maxLength={ROOM_NAME_MAX_LENGTH} value={roomName} disabled={busy} onChange={event => setRoomName(event.target.value)} placeholder="Friday movie night" className="mt-2 w-full rounded-lg border border-white/15 bg-black/50 p-2" />
+                    <button type="submit" className={`${button} mt-2`} disabled={busy || roomName === (policy.roomName || '')}>Save room name</button>
+                </form>
                 <label className="flex items-center justify-between gap-2">Entry
                     <select aria-label="Room visibility" value={policy.visibility} disabled={busy} onChange={event => update({ visibility: event.target.value })} className="rounded-lg border border-white/15 bg-zinc-950 p-2">
                         <option value="public">Room code</option><option value="private">Invitation only</option>

@@ -104,15 +104,35 @@ try {
   assert.equal(fill.positions[0], fill.positions.at(-1));
   await createButton.click();
   assert.equal(await host.locator('.room-launcher-submit').evaluate(button => getComputedStyle(button).animationName), 'watchly-action-flow');
-  await host.getByPlaceholder('Your nickname').fill('Harness host'); await host.locator('.room-launcher-submit').click();
+  await host.getByPlaceholder('Your nickname').fill('Harness host');
+  await host.getByRole('textbox', { name: 'Room name', exact: true }).fill('Friday movie night');
+  await host.locator('.room-launcher-submit').click();
   await host.waitForURL('**/room/**');
   const code = host.url().split('/').pop(); await host.locator('.room-shell').waitFor();
   await viewer.goto(`https://watchly.test/room/${code}`); await viewer.getByRole('textbox', { name: 'Nickname' }).fill('Harness viewer');
   await viewer.getByRole('button', { name: 'Join room', exact: true }).click(); await viewer.locator('.room-shell').waitFor();
+  await viewer.locator('.room-header').getByText('Friday movie night', { exact: true }).waitFor();
   // Exercise access controls through the real UI and native transport.
   await host.mouse.move(1200, 200);
   await host.getByRole('button', { name: 'Members and queue', exact: true }).click();
   await host.locator('[data-testid="room-access-panel"] summary').click();
+  await host.getByRole('textbox', { name: 'Room name', exact: true }).fill('Weekend watch party');
+  await host.getByRole('button', { name: 'Save room name', exact: true }).click();
+  await viewer.locator('.room-header').getByText('Weekend watch party', { exact: true }).waitFor();
+  assert.equal(await viewer.evaluate(() => JSON.parse(localStorage.getItem('watchly-recent-rooms'))[0].name), 'Weekend watch party');
+  assert.equal(await viewer.getByRole('button', { name: 'Save room name', exact: true }).count(), 0);
+  await host.getByRole('textbox', { name: 'Room name', exact: true }).fill('W'.repeat(48));
+  await host.getByRole('button', { name: 'Save room name', exact: true }).click();
+  await viewer.locator('.room-header').getByText('W'.repeat(48), { exact: true }).waitFor();
+  for (const width of [320, 390, 820, 1440]) {
+    await viewer.setViewportSize({ width, height: width < 700 ? 700 : 960 });
+    assert.ok(await viewer.locator('.room-header').evaluate(element => element.scrollWidth <= innerWidth + 1), `Room name header overflow at ${width}px`);
+  }
+  await viewer.setViewportSize({ width: 1280, height: 720 });
+  await host.getByRole('textbox', { name: 'Room name', exact: true }).fill('Weekend watch party');
+  await host.getByRole('button', { name: 'Save room name', exact: true }).click();
+  await viewer.locator('.room-header').getByText('Weekend watch party', { exact: true }).waitFor();
+  console.log('PASS Chromium named room creation, host-only rename, live viewer header and local history updates.');
   await host.getByLabel('Approve new participants', { exact: true }).check();
   const pendingViewer = await context.newPage(); pages.push(pendingViewer);
   await pendingViewer.goto(`https://watchly.test/room/${code}`);

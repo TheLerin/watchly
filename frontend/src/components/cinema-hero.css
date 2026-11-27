@@ -883,6 +883,9 @@
   text-transform: uppercase;
 }
 
+.room-launcher-optional { opacity: 0.75; font-weight: 400; letter-spacing: normal; text-transform: none; }
+.room-launcher { max-height: calc(100dvh - 40px); overflow-y: auto; }
+
 .room-launcher-input-wrap {
   position: relative;
   display: block;

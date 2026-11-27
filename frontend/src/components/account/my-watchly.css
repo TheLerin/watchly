@@ -132,6 +132,9 @@
 .my-watchly-page .invite-row:last-child { padding-bottom: 0; }
 .my-watchly-recent .invite-row > button { min-height: 44px; padding: 8px 12px; font-size: 12px; background: transparent; }
 .my-watchly-recent strong { font-variant-numeric: tabular-nums; }
+.my-watchly-recent .invite-row p { flex: 1; }
+.my-watchly-recent .invite-row strong { display: block; overflow-wrap: anywhere; }
+.my-watchly-recent .my-watchly-recent-code { font-size: 10px; letter-spacing: 0.06em; }
 .my-watchly-blocked > details > summary { display: flex; align-items: center; min-height: 44px; font-size: 13px; cursor: pointer; }
 .my-watchly-error { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; }
 .my-watchly-error > svg { flex: none; color: var(--watchly-gold); }

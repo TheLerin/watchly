@@ -85,7 +85,7 @@ function useSupportsTheater() {
 
 const panelClass = 'rounded-3xl border border-white/10 bg-black/70 shadow-2xl shadow-black/30 backdrop-blur-xl';
 
-const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, isConnected, connectionPhase, retryConnection, networkPingMs, networkQuality, measurePing, currentUser, users, activePanel, togglePanel, panelRef, panelEvents, settingsTriggerRef }) => {
+const Header = ({ roomId, roomName, roomAppearance, supportsTheater, leaveRoom, navigate, isConnected, connectionPhase, retryConnection, networkPingMs, networkQuality, measurePing, currentUser, users, activePanel, togglePanel, panelRef, panelEvents, settingsTriggerRef }) => {
     const showSettings = activePanel === 'settings';
     const [showRoomInfo, setShowRoomInfo] = useState(false);
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -132,6 +132,7 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
                         <span className="hidden text-sm font-semibold tracking-tight text-white sm:block">Watchly</span>
                     </button>
 
+                    {roomAppearance === 'cinematic' && roomName && <span className="room-display-name" title={roomName}>{roomName}</span>}
                     {roomAppearance === 'cinematic' ? (
                         <div className="relative" ref={roomInfoRef}>
                             <TheaterIconButton
@@ -144,6 +145,7 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
                             />
                             {showRoomInfo && (
                                 <div id="watchly-room-details" className="room-header-popover room-info-popover">
+                                    {roomName && <p className="room-info-name">{roomName}</p>}
                                     <p className="room-header-popover-label">Room code</p>
                                     <div className="room-info-code-row">
                                         <code>{roomId}</code>
@@ -163,8 +165,11 @@ const Header = ({ roomId, roomAppearance, supportsTheater, leaveRoom, navigate, 
                                 title={`Copy room code ${roomId}`}
                                 aria-label="Copy room code"
                             >
-                                <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-600 sm:inline">Room</span>
-                                <span className="truncate tabular-nums text-xs font-semibold text-white">{roomId}</span>
+                                {!roomName && <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-600 sm:inline">Room</span>}
+                                <span className="room-code-label">
+                                    {roomName && <span className="room-display-name" title={roomName}>{roomName}</span>}
+                                    <span className={`truncate tabular-nums ${roomName ? 'text-[10px] text-zinc-400' : 'text-xs font-semibold text-white'}`}>{roomId}</span>
+                                </span>
                                 <AnimatePresence mode="wait">
                                     {copied ? (
                                         <MotionSpan key="copied" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
@@ -318,6 +323,7 @@ const RoomPresentation = () => {
         measurePing,
         joinRoom,
         createRoom,
+        roomName,
     } = useRoom();
     const { theme, roomAppearance: preferredRoomAppearance, appearanceSettings } = useTheme();
     const ambientTargetRef = useRef(null);
@@ -477,6 +483,7 @@ const RoomPresentation = () => {
             <div className="relative z-10 flex h-full w-full flex-col">
                 <Header
                     roomId={roomId}
+                    roomName={roomName}
                     roomAppearance={roomAppearance}
                     supportsTheater={supportsTheater}
                     leaveRoom={leaveRoom}

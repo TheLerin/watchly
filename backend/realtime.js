@@ -1,5 +1,6 @@
 const { safeEvents } = require('./safeEvents');
 const { createRoomAccess } = require('./roomAccess');
+const { normalizeRoomName } = require('../shared/room-name.mjs');
 const crypto = require('node:crypto');
 const process = require('node:process');
 const { playlistSource, currentPlaylistItem, resolvePlaylist, movePlaylist } = require('./youtubePlaylist');
@@ -510,6 +511,8 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
             if (suppliedVersion !== PROTOCOL_VERSION) {
                 return rejectRoom('PROTOCOL_MISMATCH', 'Watchly was updated. Refresh this page to continue.');
             }
+            const roomName = creating ? normalizeRoomName(payload.roomName) : '';
+            if (roomName === null) return rejectRoom('INVALID_ROOM_NAME', 'Use a room name up to 48 characters without control characters.');
             let roomId = creating ? (runtime.roomCode || newRoomCode()) : String(payload.roomId || '').toUpperCase();
             if (runtime.roomCode && roomId !== runtime.roomCode) return rejectRoom('FORBIDDEN', 'This connection belongs to another room.');
             if (creating && rooms.has(roomId)) return rejectRoom('ROOM_EXISTS', 'This room already exists.');
@@ -535,7 +538,11 @@ module.exports = function registerRealtime({ io, rooms, buildIceConfig = () => (
                 if (rooms.has(roomId)) return rejectRoom('ROOM_EXISTS', 'This room already exists.');
                 if (getUserBySocket(rooms.get(socket.data.roomId), socket.id)) return rejectRoom('ALREADY_IN_ROOM', 'Leave the current room first.');
             }
-            if (creating) rooms.set(roomId, createRoom(roomId));
+            if (creating) {
+                const created = createRoom(roomId);
+                accessControl.init(created); created.access.roomName = roomName;
+                rooms.set(roomId, created);
+            }
             const room = rooms.get(roomId);
             if (!room) {
                 return rejectRoom('ROOM_NOT_FOUND', 'This temporary room does not exist or has expired.');

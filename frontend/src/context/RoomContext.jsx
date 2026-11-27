@@ -20,7 +20,7 @@ import { acceptsVideoState, mergeChatHistory } from '../utils/roomState';
 import { useLocation } from 'react-router-dom';
 import { actionPermission, getRoomPermissions } from '../utils/roomPermissions';
 import { useAuth } from './AuthContext';
-import { rememberRoom } from '../utils/recentRooms';
+import { rememberRoom, updateRecentRoomName } from '../utils/recentRooms';
 import { useSoundEffects } from './SoundEffectsContext';
 import { createMembershipSounds, createCallPresenceSounds } from '../utils/soundNotifications';
 import { applyQueueDelta } from '../utils/queueState';
@@ -76,6 +76,9 @@ export const RoomProvider = ({ children }) => {
     const [localReadiness, setLocalReadiness] = useState(emptyReadiness);
     const [queue, setQueue] = useState([]);
     const [roomAccess, setRoomAccess] = useState(null);
+    useEffect(() => {
+        if (roomId && typeof roomAccess?.policy?.roomName === 'string') updateRecentRoomName(localStorage, roomId, roomAccess.policy.roomName);
+    }, [roomId, roomAccess?.policy?.roomName]);
     const queueStateRef = useRef({ queue: [], revision: 0 });
     const queueRecoveringRef = useRef(false);
     const [controllerMemberId, setControllerMemberId] = useState(null);
@@ -233,7 +236,7 @@ export const RoomProvider = ({ children }) => {
             }].slice(-200));
         };
 
-        const saveJoin = ({ roomId: joinedRoomId, resumeToken, memberId, user }) => {
+        const saveJoin = ({ roomId: joinedRoomId, resumeToken, memberId, user, snapshot }) => {
             setConnectionError('');
             isKicked.current = false;
             if (joinedRoomId && resumeToken) {
@@ -241,7 +244,7 @@ export const RoomProvider = ({ children }) => {
                 sessionRef.current = session;
                 try { sessionStorage.setItem('watchTogetherSession', JSON.stringify(session)); } catch { /* retained in memory */ }
                 setRoomId(joinedRoomId);
-                rememberRoom(localStorage, joinedRoomId);
+                rememberRoom(localStorage, joinedRoomId, Date.now(), snapshot?.access?.policy?.roomName);
             }
             setCurrentUser(user);
             currentUserRef.current = user;
@@ -580,8 +583,8 @@ export const RoomProvider = ({ children }) => {
         return requestRoom('room:join', { roomId: id, nickname: accountProfile?.display_name || nickname, guestKey: guestCredential(), ...options, ...resume });
     }, [requestRoom, accountProfile]);
 
-    const createRoom = useCallback(async nickname => {
-        const payload = { nickname: accountProfile?.display_name || nickname, guestKey: guestCredential() };
+    const createRoom = useCallback(async (nickname, roomName = '') => {
+        const payload = { nickname: accountProfile?.display_name || nickname, guestKey: guestCredential(), roomName };
         let token;
         for (let attempt = 0; attempt < 3; attempt++) {
             try { return await requestRoom('room:create', { ...payload, ...(token ? { turnstileToken: token } : {}) }); }
@@ -816,6 +819,7 @@ export const RoomProvider = ({ children }) => {
             localReadiness,
             queue,
             roomAccess,
+            roomName: roomAccess?.policy?.roomName || '',
             accessRequest,
             controllerMemberId,
             mediaDescriptor,

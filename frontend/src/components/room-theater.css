@@ -1200,3 +1200,7 @@
         transition: none;
     }
 }
+.room-display-name { display: block; min-width: 0; max-width: min(22vw, 260px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 1.4; color: #f8f8fa; }
+.room-code-label { display: flex; min-width: 0; max-width: min(22vw, 260px); flex-direction: column; align-items: flex-start; }
+.room-code-label > span { display: block; max-width: 100%; }
+.room-info-name { margin-bottom: 10px; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }

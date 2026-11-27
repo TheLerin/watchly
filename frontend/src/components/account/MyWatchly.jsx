@@ -65,6 +65,7 @@ function MyWatchlyContent() {
     const [query, setQuery] = useState(''), [results, setResults] = useState([]), [searchError, setSearchError] = useState(''), [searching, setSearching] = useState(false);
     const [pending, setPending] = useState(new Set()), [launcher, setLauncher] = useState(false), [tab, setTab] = useState('create'), [code, setCode] = useState('');
     const [launchError, setLaunchError] = useState('');
+    const [roomName, setRoomName] = useState('');
     const searchPeople = social.search;
     const busyRef = useRef(new Set());
     const [searchOpen, setSearchOpen] = useState(false);
@@ -92,7 +93,7 @@ function MyWatchlyContent() {
         if (action === 'join' && !/^[A-Z0-9]{7}$/.test(code.trim())) return;
         setLaunchError('');
         try {
-            const response = action === 'create' ? await room.createRoom(profile.display_name) : await room.joinRoom(code.trim().toUpperCase(), profile.display_name);
+            const response = action === 'create' ? await room.createRoom(profile.display_name, roomName) : await room.joinRoom(code.trim().toUpperCase(), profile.display_name);
             setLauncher(false); navigate(`/room/${response.roomId}`);
         } catch (error) { setLaunchError(error.message); }
     });
@@ -206,7 +207,7 @@ function MyWatchlyContent() {
                 <section className="account-card my-watchly-recent" aria-labelledby="recent-heading">
                     <div className="my-watchly-section-title"><History size={18} aria-hidden="true" /><h2 id="recent-heading">Recent rooms</h2></div>
                     {recent.length ? recent.map(item => <div className="invite-row" key={item.code}>
-                        <p><strong>Room {item.code}</strong><span>Last joined {new Date(item.visitedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></p>
+                        <p><strong>{item.name || `Room ${item.code}`}</strong>{item.name && <span className="my-watchly-recent-code">{item.code}</span>}<span>Last joined {new Date(item.visitedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></p>
                         <button className="account-secondary" disabled={pending.has(item.code)} onClick={() => run(item.code, async () => {
                             const response = await room.joinRoom(item.code, profile.display_name); navigate(`/room/${response.roomId}`);
                         })}><GradientLabel>Rejoin</GradientLabel></button>
@@ -223,7 +224,7 @@ function MyWatchlyContent() {
                 </section>}
             </div>
 
-            <RoomLauncher activeTab={tab} setActiveTab={setTab} open={launcher} busy={pending.has('launch')} error={launchError} onClose={closeLauncher} nickname={profile.display_name} setNickname={() => {}} joinCode={code} setJoinCode={setCode} canSubmit={tab === 'create' || /^[A-Z0-9]{7}$/.test(code.trim())} handleCreate={() => launch('create')} handleJoin={() => launch('join')} handleKey={event => { if (event.key === 'Enter') void launch(tab); }} />
+            <RoomLauncher activeTab={tab} setActiveTab={setTab} open={launcher} busy={pending.has('launch')} error={launchError} onClose={closeLauncher} nickname={profile.display_name} setNickname={() => {}} roomName={roomName} setRoomName={setRoomName} joinCode={code} setJoinCode={setCode} canSubmit={tab === 'create' || /^[A-Z0-9]{7}$/.test(code.trim())} handleCreate={() => launch('create')} handleJoin={() => launch('join')} handleKey={event => { if (event.key === 'Enter') void launch(tab); }} />
         </AccountShell>
     );
 }
