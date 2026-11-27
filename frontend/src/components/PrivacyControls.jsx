@@ -37,5 +37,5 @@ export default function PrivacyControls() {
 }
 export function ExternalMediaConsent() {
     const { saveChoice, openPreferences } = useConsent();
-    return <section className="external-media-consent" aria-label="External video permission"><MonitorPlay size={32} aria-hidden="true" /><h2>Allow this video player?</h2><p>Playing embedded videos connects to providers such as YouTube or Vimeo. They may use cookies and collect playback information. Your room and chat still work while this player is off.</p><button type="button" className="watchly-action" onClick={() => saveChoice(true)}>Allow external players</button><button type="button" onClick={openPreferences}>Cookie settings</button></section>;
+    return <section className="external-media-consent" aria-label="External video permission"><MonitorPlay size={32} aria-hidden="true" /><h2>Allow this video player?</h2><p>Playing embedded videos connects to providers such as YouTube or Vimeo. They may use cookies and collect playback information. Your room and chat still work while this player is off.</p><button type="button" className="watchly-action" onClick={() => saveChoice(true)}><GradientLabel>Allow external players</GradientLabel></button><button type="button" onClick={openPreferences}>Cookie settings</button></section>;
 }

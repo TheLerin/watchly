@@ -5,6 +5,7 @@
   --video-right-rgb: 63 48 70;
   --video-bottom-rgb: 57 64 71;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: clip;
   color: #f8f8fa;
   background: var(--watchly-carbon);
@@ -1089,6 +1090,10 @@
   .cinema-stage {
     --screen-top: 80px;
     --screen-width: calc(100vw - 20px);
+    --mobile-screen-bottom: calc(var(--screen-top) + var(--screen-width) * .5625);
+    --mobile-sofa-width: min(78vw, 440px);
+    --mobile-sofa-height: calc(var(--mobile-sofa-width) * .5368);
+    --mobile-sofa-top: calc(var(--mobile-screen-bottom) - var(--mobile-sofa-height) * .65);
   }
 
   .cinema-screen-shell {
@@ -1105,7 +1110,7 @@
   }
 
   .cinema-hero-copy {
-    top: min(53vh, 450px);
+    top: calc(var(--mobile-sofa-top) + var(--mobile-sofa-height) + 24px);
     left: 16px;
     width: calc(100% - 32px);
     text-align: center;
@@ -1139,20 +1144,20 @@
 
   .cinema-sofa,
   .cinema-sofa-reflection {
-    top: min(31vh, 268px);
+    top: var(--mobile-sofa-top);
     bottom: auto;
-    width: 94vw;
-    max-height: 25vh;
+    width: var(--mobile-sofa-width);
+    max-height: none;
   }
 
   .cinema-sofa-reflection {
-    top: 47vh;
+    top: calc(var(--mobile-sofa-top) + var(--mobile-sofa-height) * .8);
   }
 
   .cinema-sofa-contact-shadow {
-    top: min(48vh, 405px);
+    top: calc(var(--mobile-sofa-top) + var(--mobile-sofa-height) - 8px);
     bottom: auto;
-    width: 82vw;
+    width: var(--mobile-sofa-width);
     height: 7vh;
   }
 
@@ -1275,16 +1280,6 @@
 @media (max-width: 700px) and (max-height: 760px) {
   .cinema-stage {
     --screen-top: 72px;
-  }
-
-  .cinema-sofa,
-  .cinema-sofa-reflection {
-    top: 27vh;
-    max-height: 23vh;
-  }
-
-  .cinema-hero-copy {
-    top: 47vh;
   }
 
   .cinema-hero-copy > p:not(.cinema-kicker) {

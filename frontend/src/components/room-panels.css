@@ -1,4 +1,7 @@
 /* Sizing and dismissal only: preserve the existing room/dock geometry. */
+html:has(.room-shell), body:has(.room-shell) { background: #050505; min-height: 100dvh; }
+html.theme-glass-light:has(.room-shell[data-room-appearance="classic"]),
+body:has(.room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"]) { background: #f5f5f5; }
 .room-shell .room-settings-anchor[data-open="false"] .appearance-panel { visibility: hidden; pointer-events: none; }
 .room-shell :is(.room-right-rail, .room-members-group, .room-members-queue, .room-readiness, .mobile-classic-panels, .mobile-classic-panel, .mobile-classic-card) {
     min-width: 0;
@@ -56,6 +59,20 @@
 /* One session/player tree; only presentation changes at the breakpoint. */
 .room-mobile-tabs-slot { display: none; }
 @media (max-width: 1179px) {
+    /* The bounded workspace owns scrolling; its content cannot push the tab
+       bar below the phone's dynamic viewport. */
+    .room-shell > .relative.z-10 { height: 100%; min-height: 0; overflow: hidden; }
+    .room-mobile-workspace { min-height: 0; }
+    .room-mobile-workspace .mobile-classic-room { overflow: hidden; }
+    .mobile-classic-room > .mobile-classic-panel-heading { flex: none; }
+    .mobile-classic-room > .room-members-content { flex: 1 1 0%; min-height: 0; overflow-x: hidden; overflow-y: auto; border-radius: 18px; overscroll-behavior: contain; }
+    .room-mobile-workspace .cinematic-no-media { display: none; }
+    .mobile-classic-room .room-queue-item { display: grid; grid-template-columns: 18px 18px minmax(0, 1fr); gap: 6px 8px; padding: 12px; align-items: start; }
+    .mobile-classic-room .room-queue-item > :is(span:first-child, svg) { margin-top: 3px; }
+    .mobile-classic-room .room-queue-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.6; color: var(--panel-copy); }
+    .mobile-classic-room .room-queue-actions { grid-column: 3; justify-self: end; gap: 6px; }
+    .mobile-classic-room .room-queue-actions button { min-width: 44px; min-height: 44px; border: 1px solid var(--panel-line); border-radius: 11px; background: rgb(255 255 255 / 2%); }
+    .mobile-classic-room .room-queue-actions svg { width: 15px; height: 15px; }
     .room-mobile-tabs-slot { display: contents; }
     .room-mobile-workspace :is(.classic-player-heading, .cinematic-sofa, .video-ambient-light) { display: none; }
     .room-mobile-workspace :is(.mobile-classic-call, .mobile-classic-share) { flex: none; overflow: visible; }

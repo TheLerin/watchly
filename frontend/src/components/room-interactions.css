@@ -1,0 +1,71 @@
+/* Quiet controls leave the color to media, the logo and intentional hover. */
+.room-shell {
+    --room-control-copy: #d4d4d8;
+    --room-control-line: rgb(255 255 255 / 12%);
+    --room-control-active-line: rgb(255 255 255 / 30%);
+    --room-control-hover: rgb(255 255 255 / 3%);
+    --room-control-active: rgb(255 255 255 / 5%);
+    --room-motion-enter: 240ms;
+    --room-motion-exit: 150ms;
+    --room-ease-enter: cubic-bezier(.16, 1, .3, 1);
+    --room-ease-exit: cubic-bezier(.4, 0, 1, 1);
+}
+.room-shell :is(.theater-icon-button, .watchly-icon-button) { background: transparent; color: var(--room-control-copy); border-color: var(--room-control-line); }
+.room-shell :is(.theater-icon-button, .watchly-icon-button):is(:hover, :focus-visible, [aria-expanded="true"], [aria-pressed="true"]) { background: var(--room-control-hover); color: var(--panel-copy); border-color: var(--room-control-active-line); }
+.room-shell :is(.room-code-button, .room-settings-button, .room-ping-button) { background-color: transparent; }
+.room-shell .watchly-icon-button.is-danger { color: #fda4af; }
+.room-shell .appearance-choice[aria-pressed="true"] { border-color: var(--room-control-active-line); background: var(--room-control-active); }
+.room-shell .appearance-choice-check { color: var(--room-control-copy); }
+.room-shell .appearance-switch[aria-checked="true"] > span { background: #ded3c3; }
+.room-shell .appearance-brightness input { accent-color: #ded3c3; }
+.room-shell :is(.player-tool-symbol, .player-tool-empty-icon, .room-queue-empty-icon, .chat-empty > span, .chat-panel-header > span:first-child) { color: var(--room-control-copy); background: rgb(255 255 255 / 2%); }
+.room-shell :is(.room-panel-heading > svg, .player-local-action > .watchly-gradient-icon) { color: var(--room-control-copy); }
+.room-shell .chat-composer button { background: transparent; border-color: var(--room-control-line); color: var(--room-control-copy); }
+.room-shell[data-ui-theme="glass-light"] {
+    --room-control-copy: #43434c;
+    --room-control-line: rgb(0 0 0 / 14%);
+    --room-control-active-line: rgb(0 0 0 / 32%);
+    --room-control-hover: rgb(0 0 0 / 3%);
+    --room-control-active: rgb(0 0 0 / 5%);
+}
+.room-shell[data-ui-theme="glass-light"] .appearance-switch[aria-checked="true"] > span { background: #70675b; }
+.room-shell[data-ui-theme="glass-light"] .appearance-switch[aria-checked="true"] i { background: #fff; }
+
+/* State changes preserve mounted players, call tracks and draft form fields.
+   Browsers with discrete transitions also animate display:none on exit. */
+.room-shell .room-drawer { transform-origin: top right; }
+.room-shell .room-drawer[data-open="true"] { animation: room-surface-enter var(--room-motion-enter) var(--room-ease-enter) both; }
+.room-shell .room-drawer[data-open="false"] { pointer-events: none; }
+.room-shell .video-player-controls.room-drawer { transform-origin: top left; }
+.room-shell :is(.room-header-popover, .room-member-menu, .call-device-settings) { animation: room-surface-enter var(--room-motion-enter) var(--room-ease-enter) both; transform-origin: top right; }
+.room-shell .appearance-panel { transform-origin: top right; }
+@keyframes room-surface-enter {
+    from { opacity: 0; translate: 0 8px; scale: .985; }
+    to { opacity: 1; translate: 0 0; scale: 1; }
+}
+@supports (transition-behavior: allow-discrete) {
+    .room-shell .room-drawer {
+        animation: none;
+        opacity: 0; translate: 0 6px; scale: .985;
+        transition: opacity var(--room-motion-exit) var(--room-ease-exit), translate var(--room-motion-exit) var(--room-ease-exit), scale var(--room-motion-exit) var(--room-ease-exit), display var(--room-motion-exit) allow-discrete;
+    }
+    .room-shell .room-drawer[data-open="true"] {
+        animation: none; opacity: 1; translate: 0 0; scale: 1;
+        transition-duration: var(--room-motion-enter);
+        transition-timing-function: var(--room-ease-enter);
+    }
+    @starting-style {
+        .room-shell .room-drawer[data-open="true"] { opacity: 0; translate: 0 8px; scale: .985; }
+    }
+}
+/* Changing the left tool uses the same reveal without remounting its form. */
+.room-video-player[data-open-tool="watch"] :is(.player-tool-header, .watch-source-controls) { animation: room-tool-watch 240ms var(--room-ease-enter) both; }
+.room-video-player[data-open-tool="info"] :is(.player-tool-header, .cinematic-now-watching) { animation: room-tool-info 240ms var(--room-ease-enter) both; }
+.room-video-player[data-open-tool="tracks"] :is(.player-tool-header, .watch-media-tools, .cinematic-no-media) { animation: room-tool-tracks 240ms var(--room-ease-enter) both; }
+@keyframes room-tool-watch { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+@keyframes room-tool-info { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+@keyframes room-tool-tracks { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+.room-shell[data-cinema-reduce-motion="true"] :is(.room-drawer, .player-tool-header, .watch-source-controls, .cinematic-now-watching, .watch-media-tools, .cinematic-no-media, .room-header-popover, .room-member-menu, .call-device-settings) { animation: none !important; transition: none !important; translate: none; scale: none; }
+@media (prefers-reduced-motion: reduce) {
+    .room-shell :is(.room-drawer, .player-tool-header, .watch-source-controls, .cinematic-now-watching, .watch-media-tools, .cinematic-no-media, .room-header-popover, .room-member-menu, .call-device-settings) { animation: none !important; transition: none !important; translate: none; scale: none; }
+}

@@ -35,13 +35,13 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       workbox: { skipWaiting: false, clientsClaim: false, globPatterns: ['**/*.{js,wasm,css,html,woff2}'], globIgnores: ['**/bg-video*.mp4', '**/bg-video*.webm'], navigateFallbackDenylist: [/^\/api\//, /^\/ws\//, /^\/auth\/callback(?:\/|\?|$)/, deploymentRetryNavigation] },
-      includeAssets: ['logo.png', 'logo-512.png', 'bg-video-poster.jpg', 'assets/sofa-couple-mobile.webp'],
+      includeAssets: ['favicon.svg', 'logo.png', 'logo-512.png', 'bg-video-poster.jpg', 'assets/sofa-couple-mobile.webp'],
       manifest: {
         name: 'Watchly',
         short_name: 'Watchly',
         description: 'Watch videos together in perfect sync.',
-        theme_color: '#060612',
-        background_color: '#060612',
+        theme_color: '#050505',
+        background_color: '#050505',
         display: 'standalone',
         start_url: '/',
         icons: [

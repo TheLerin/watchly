@@ -97,7 +97,7 @@ export function AuthCallback() {
         sessionStorage.removeItem('watchly-auth-return');
         navigate(auth.profile ? destination : `/setup-profile?returnTo=${encodeURIComponent(destination)}`, { replace: true });
     }, [confirmed, auth.isAuthLoading, auth.isProfileLoading, auth.user, auth.profile, callbackError, navigate]);
-    return <AccountShell className="auth-page"><section className="account-card auth-card"><h1>{callbackError ? 'Sign-in needs another try' : 'Signing you in…'}</h1>{callbackError ? <><p role="alert" className="account-error">{callbackError}</p><Link className="account-primary" to="/auth">Try again</Link></> : <div className="account-skeleton" aria-label="Restoring sign-in" />}</section></AccountShell>;
+    return <AccountShell className="auth-page"><section className="account-card auth-card"><h1>{callbackError ? 'Sign-in needs another try' : 'Signing you in…'}</h1>{callbackError ? <><p role="alert" className="account-error">{callbackError}</p><Link className="account-primary" to="/auth"><GradientLabel>Try again</GradientLabel></Link></> : <div className="account-skeleton" aria-label="Restoring sign-in" />}</section></AccountShell>;
 }
 
 export function RoomAccountDialog({ onClose }) {

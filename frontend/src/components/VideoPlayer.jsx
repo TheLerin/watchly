@@ -66,7 +66,7 @@ const writeLanguagePreference = (key, value) => {
 };
 
 const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled = true, cinemaLuxe = false, className = '', controlsTabLabel,
-    activeTheaterTool = null, onTheaterToolChange, closeTheaterTool, dockRef, panelRef, panelEvents }) => {
+    activeTheaterTool = null, onTheaterToolChange, closeTheaterTool, dockRef, panelRef, panelEvents, controlsOpen = true }) => {
     const {
         videoState, currentUser, roomId, localReadiness, permissions, playback, clock, isConnected,
         connectionPhase, resyncRequest, completeResync, failResync, canSendRoomAction, canPerformRoomAction, retryConnection,
@@ -1261,7 +1261,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                     />
                 ))}
             </nav>
-            <div ref={panelRef} {...panelEvents} id="watchly-left-panel" className="video-player-controls flex min-h-0 flex-col gap-3"
+            <div ref={panelRef} {...panelEvents} id="watchly-left-panel" className="room-drawer video-player-controls flex min-h-0 flex-col gap-3" data-open={controlsOpen} inert={!controlsOpen}
                 role={controlsTabLabel ? 'tabpanel' : undefined} aria-labelledby={controlsTabLabel}>
                 <div className="player-tool-header">
                     <span className="player-tool-symbol" aria-hidden="true">{activeTheaterTool === 'info' ? <Info size={18} /> : activeTheaterTool === 'tracks' ? <Captions size={18} /> : <Clapperboard size={18} />}</span>
@@ -1291,7 +1291,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                 type="text"
                                 value={inputUrl}
                                 onChange={e => setInputUrl(e.target.value)}
-                                placeholder={appearance === 'cinematic' ? 'Paste a video URL' : 'Watch from Link - YouTube, Vimeo, Google Drive, or direct URL...'}
+                                placeholder="Paste a video URL"
                                 className="w-full bg-transparent py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-600 outline-none"
                             />
                         </div>

@@ -168,7 +168,7 @@ const CinemaScene = ({ onCreate, onJoin, videoRef }) => (
       <div className="cinema-hero-actions">
         <button type="button" className="cinema-primary-action" onClick={onCreate}>
           <Play fill="currentColor" aria-hidden="true" />
-          Create room
+          <GradientLabel>Create room</GradientLabel>
         </button>
         <button type="button" className="cinema-secondary-action" onClick={onJoin}>
           Join room
@@ -215,7 +215,7 @@ const StoryPanel = ({ onCreate, onJoin, panel }) => {
         </ul>
         {panel.actions && (
           <div className="story-panel-actions">
-            <button type="button" className="cinema-primary-action" onClick={onCreate}>Create room</button>
+            <button type="button" className="cinema-primary-action" onClick={onCreate}><GradientLabel>Create room</GradientLabel></button>
             <button type="button" className="cinema-secondary-action" onClick={onJoin}>Join room</button>
           </div>
         )}

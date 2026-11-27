@@ -48,10 +48,10 @@ export default function AppearancePanel({ supportsTheater, panelRef, panelEvents
     const reduceMotion = systemReduceMotion || (cinematic && settings.reduceMotion);
     return (
         <MotionDiv ref={panelRef} {...panelEvents} id="watchly-appearance" role="dialog" aria-labelledby="watchly-appearance-title"
-            initial={reduceMotion ? false : { opacity: 0, scale: 0.98, y: -6 }}
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.97, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.98, y: -6 }}
-            transition={{ duration: reduceMotion ? 0 : 0.16 }}
+            exit={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.985, y: -6, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
+            transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}
             className="room-settings-popover appearance-panel">
             <div className="appearance-panel-header">
                 <h2 id="watchly-appearance-title">Appearance</h2>

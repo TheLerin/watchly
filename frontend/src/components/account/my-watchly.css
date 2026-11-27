@@ -61,15 +61,6 @@
 .my-watchly-page .account-avatar-button { transition: box-shadow 650ms ease; }
 .my-watchly-page .account-avatar-button:is(:hover, :focus-visible) { box-shadow: 0 0 0 2px var(--watchly-cyan); }
 
-/* A dark face keeps gradient lettering readable over the existing multicolor fill. */
-.my-watchly-page :is(.account-primary, .room-launcher-submit, .room-launcher-tabs button.is-active) { position: relative; isolation: isolate; }
-.my-watchly-page :is(.account-primary, .room-launcher-submit, .room-launcher-tabs button.is-active)::before {
-    content: ''; position: absolute; inset: 1px; border-radius: inherit; background: #080809;
-    opacity: 0; transition: opacity 650ms ease; pointer-events: none; z-index: -1;
-}
-.my-watchly-page :is(.account-primary, .room-launcher-submit, .room-launcher-tabs button.is-active):not(:disabled):is(:hover, :focus-visible)::before { opacity: 1; }
-.my-watchly-page :is(.account-primary, .room-launcher-submit):not(:disabled):hover { filter: none; }
-
 .my-watchly-sections { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
 .my-watchly-sections > *, .my-watchly-alerts > * { min-width: 0; }
 .my-watchly-friends { grid-column: 1; }

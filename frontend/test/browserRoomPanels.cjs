@@ -18,12 +18,12 @@ const wait = async (fn, message) => { const end = Date.now() + 30000; while (Dat
         browser = await chromium.launch({ executablePath, headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
         host = await browser.newPage({ viewport: { width: 1366, height: 768 }, hasTouch: true }); host.on('pageerror', e => errors.push(e.message)); host.on('dialog', dialog => dialog.accept('Room panel movie'));
         await host.addInitScript(() => localStorage.setItem('watchly-appearance-settings', JSON.stringify({ uiTheme: 'glass-dark', roomStyle: 'cinematic', hideDelay: 'never', reduceMotion: true })));
-        await host.goto(`${base}/auth`); await host.getByLabel('Email', { exact: true }).fill('alice@example.test'); await host.getByRole('button', { name: 'Continue with email', exact: true }).click();
+        await host.goto(`${base}/auth`); await host.getByRole('button', { name: 'Necessary only', exact: true }).click(); await host.getByLabel('Email', { exact: true }).fill('alice@example.test'); await host.getByRole('button', { name: 'Continue with email', exact: true }).click();
         await host.getByLabel('Sign-in code', { exact: true }).fill('123456'); await host.getByRole('button', { name: 'Verify code', exact: true }).click(); await host.waitForURL('**/my-watchly');
         await host.getByRole('button', { name: 'Create room', exact: true }).click(); await host.locator('.room-launcher-submit').click(); await host.waitForURL('**/room/**');
         const code = host.url().split('/').pop();
         const guest = await browser.newPage(); guest.on('pageerror', e => errors.push(e.message));
-        await guest.goto(`${base}/room/${code}`); await guest.getByLabel('Nickname', { exact: true }).fill('GuestWWWWWWWWWWWWWWWWWWW'); await guest.getByRole('button', { name: 'Join room', exact: true }).click();
+        await guest.goto(`${base}/room/${code}`); await guest.getByRole('button', { name: 'Necessary only', exact: true }).click(); await guest.getByLabel('Nickname', { exact: true }).fill('GuestWWWWWWWWWWWWWWWWWWW'); await guest.getByRole('button', { name: 'Join room', exact: true }).click();
         await wait(async () => await host.locator('.room-ping-button').getAttribute('data-connection-phase') === 'connected', 'host not connected');
         const snapshot = () => host.evaluate(async () => { const { socket } = await import('/src/socket.js'); return new Promise(resolve => socket.emit('room:snapshot', {}, r => resolve(r.snapshot))); });
         await wait(async () => (await snapshot()).members.length === 2, 'guest did not join');
@@ -64,6 +64,16 @@ const wait = async (fn, message) => { const end = Date.now() + 30000; while (Dat
             assert.ok(ib.x >= pb.x && ib.x + ib.width <= pb.x + pb.width + 1);
             await panel.getByRole('region', { name: 'Local file readiness', exact: true }).scrollIntoViewIfNeeded();
             await panel.getByRole('heading', { name: 'Members', exact: true }).scrollIntoViewIfNeeded();
+            if (host.viewportSize().width < 1180) {
+                await wait(async () => host.locator('.mobile-classic-tabs').evaluate(el => {
+                    const rect = el.getBoundingClientRect();
+                    return rect.top >= 0 && rect.bottom <= innerHeight + 1;
+                }), 'mobile content pushed the room tabs outside the viewport');
+                for (const action of await panel.locator('.room-queue-actions button').all()) {
+                    const rect = await action.boundingBox();
+                    assert.ok(rect.width >= 44 && rect.height >= 44, 'queue action is too small for touch');
+                }
+            }
         };
         for (const style of ['Cinematic', 'Classic']) {
             await host.setViewportSize({ width: 1366, height: 768 }); await appearance(style);

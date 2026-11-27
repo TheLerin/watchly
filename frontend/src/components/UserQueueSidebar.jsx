@@ -214,13 +214,13 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: 8 }}
                                 transition={{ duration: 0.18 }}
-                                className="group/queue flex items-center gap-2 rounded-2xl border border-transparent px-2.5 py-2 transition hover:border-white/10 hover:bg-white/[0.04]"
+                                className="room-queue-item group/queue flex items-center gap-2 rounded-2xl border border-transparent px-2.5 py-2 transition hover:border-white/10 hover:bg-white/[0.04]"
                             >
                                 <span className="w-5 shrink-0 tabular-nums text-xs text-zinc-600">{idx + 1}</span>
                                 <PlayCircle size={14} className="shrink-0 text-zinc-500" />
-                                <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-400" title={item.label}>{item.label}</span>
+                                <span className="room-queue-title min-w-0 flex-1 truncate text-xs font-medium text-zinc-400" title={item.label}>{item.label}</span>
                                 {canManageQueue && (
-                                    <div className="flex shrink-0 items-center gap-1">
+                                    <div className="room-queue-actions flex shrink-0 items-center gap-1">
                                         <button type="button" aria-label={`Move queue item ${idx + 1} up`} disabled={!roomActionsEnabled || idx === 0} onClick={() => reorderQueue(item.id, 'up')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><GradientIcon><ArrowUp size={12} /></GradientIcon></button>
                                         <button type="button" aria-label={`Move queue item ${idx + 1} down`} disabled={!roomActionsEnabled || idx === queue.length - 1} onClick={() => reorderQueue(item.id, 'down')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><GradientIcon><ArrowDown size={12} /></GradientIcon></button>
                                     <button
