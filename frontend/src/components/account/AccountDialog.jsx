@@ -1,3 +1,4 @@
+import GradientIcon from '../GradientIcon';
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
@@ -17,5 +18,5 @@ export default function AccountDialog({ title, onClose, children, card = false }
         document.addEventListener('keydown', key);
         return () => { document.removeEventListener('keydown', key); document.body.style.overflow = overflow; previous?.focus(); };
     }, [onClose]);
-    return createPortal(<div className="account-overlay" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={root} className={`account-dialog ${card ? 'account-card' : ''}`} role="dialog" aria-modal="true" aria-label={title}><button className="account-dialog-close" aria-label={`Close ${title.toLowerCase()}`} onClick={onClose}><X size={20} /></button>{children}</section></div>, document.body);
+    return createPortal(<div className="account-overlay" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={root} className={`account-dialog ${card ? 'account-card' : ''}`} role="dialog" aria-modal="true" aria-label={title}><button className="account-dialog-close" aria-label={`Close ${title.toLowerCase()}`} onClick={onClose}><GradientIcon><X size={20} /></GradientIcon></button>{children}</section></div>, document.body);
 }

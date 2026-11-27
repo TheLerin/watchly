@@ -25,7 +25,7 @@ module.exports = async ({ host, browser, baseUrl, video, wait }) => {
  assert.equal(await panel.getByText('Cinema Luxe', { exact: true }).count(), 0);
  assert.equal(await panel.getByRole('heading').count(), 7);
  const bounds = await panel.boundingBox();
- assert.ok(bounds.width >= 390 && bounds.width <= 420);
+ assert.ok(bounds.width >= 370 && bounds.width <= 390);
  assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 720);
  await choice('Classic');
  assert.equal(await shell.getAttribute('data-room-appearance'), 'classic');
@@ -152,6 +152,7 @@ module.exports = async ({ host, browser, baseUrl, video, wait }) => {
  const idle = await browser.newPage({ viewport: { width: 390, height: 844 } });
  const errors = []; idle.on('pageerror', error => errors.push(error.message));
  await idle.goto(baseUrl);
+ await idle.getByRole('button', { name: 'Create room', exact: true }).first().waitFor();
  await idle.evaluate(saved => localStorage.setItem('watchly-appearance-settings', JSON.stringify(saved)), custom);
  await idle.reload();
  await idle.getByRole('button', { name: 'Create room', exact: true }).first().click();

@@ -1,3 +1,5 @@
+import GradientIcon from './GradientIcon';
+import GradientLabel from './GradientLabel';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,6 +45,7 @@ import './cinema-luxe.css';
 import './appearance-panel.css';
 import './classic-desktop.css';
 import './room-panels.css';
+import './room-polish.css';
 
 const MotionDiv = motion.div;
 const MotionSpan = motion.span;
@@ -129,7 +132,7 @@ const Header = ({ roomId, roomName, roomAppearance, supportsTheater, leaveRoom, 
                 <div className="flex min-w-0 items-center gap-3">
                     <button onClick={() => navigate('/')} className="room-brand flex shrink-0 items-center gap-2.5" title="Watchly home" aria-label="Watchly home">
                         <img src="/logo.png" alt="Watchly Logo" className="h-10 w-auto" />
-                        <span className="hidden text-sm font-semibold tracking-tight text-white sm:block">Watchly</span>
+                        <span className="hidden text-sm font-semibold tracking-tight text-white sm:block"><GradientLabel>Watchly</GradientLabel></span>
                     </button>
 
                     {roomAppearance === 'cinematic' && roomName && <span className="room-display-name" title={roomName}>{roomName}</span>}
@@ -150,7 +153,7 @@ const Header = ({ roomId, roomName, roomAppearance, supportsTheater, leaveRoom, 
                                     <div className="room-info-code-row">
                                         <code>{roomId}</code>
                                         <button type="button" onClick={copyCode} aria-label="Copy room code" title="Copy room code">
-                                            {copied ? <Check size={16} /> : <Copy size={16} />}
+                                            {copied ? <GradientIcon><Check size={16} /></GradientIcon> : <GradientIcon><Copy size={16} /></GradientIcon>}
                                         </button>
                                     </div>
                                     <p className="room-info-meta">{users.length} online · {currentUser?.role || 'Viewer'} · {connectionLabel}</p>
@@ -165,7 +168,7 @@ const Header = ({ roomId, roomName, roomAppearance, supportsTheater, leaveRoom, 
                                 title={`Copy room code ${roomId}`}
                                 aria-label="Copy room code"
                             >
-                                {!roomName && <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-600 sm:inline">Room</span>}
+                                {!roomName && <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-600 sm:inline"><GradientLabel>Room</GradientLabel></span>}
                                 <span className="room-code-label">
                                     {roomName && <span className="room-display-name" title={roomName}>{roomName}</span>}
                                     <span className={`truncate tabular-nums ${roomName ? 'text-[10px] text-zinc-400' : 'text-xs font-semibold text-white'}`}>{roomId}</span>
@@ -173,11 +176,11 @@ const Header = ({ roomId, roomName, roomAppearance, supportsTheater, leaveRoom, 
                                 <AnimatePresence mode="wait">
                                     {copied ? (
                                         <MotionSpan key="copied" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                                            <Check size={12} className="text-emerald-400" />
+                                            <GradientIcon><Check size={12} className="text-emerald-400" /></GradientIcon>
                                         </MotionSpan>
                                     ) : (
                                         <MotionSpan key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                                            <Copy size={12} className="text-zinc-500" />
+                                            <GradientIcon><Copy size={12} className="text-zinc-500" /></GradientIcon>
                                         </MotionSpan>
                                     )}
                                 </AnimatePresence>
@@ -202,7 +205,7 @@ const Header = ({ roomId, roomName, roomAppearance, supportsTheater, leaveRoom, 
                         style={roomAppearance === 'cinematic' ? undefined : { background: qualityMeta.bg, color: qualityMeta.color, border: `1px solid ${qualityMeta.border}` }}
                         title={connectionDetail}
                     >
-                        {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
+                        {isConnected ? <GradientIcon><Wifi size={12} /></GradientIcon> : <GradientIcon><WifiOff size={12} /></GradientIcon>}
                         <span role="status" aria-live="polite">{connectionLabel}</span>
                     </button>
 
@@ -216,7 +219,7 @@ const Header = ({ roomId, roomName, roomAppearance, supportsTheater, leaveRoom, 
                             aria-expanded={showSettings}
                             aria-controls="watchly-appearance"
                         >
-                            <Settings size={16} />
+                            <GradientIcon><Settings size={16} /></GradientIcon>
                         </button>
                         <AnimatePresence>
                             {showSettings && (
@@ -236,13 +239,13 @@ const Header = ({ roomId, roomName, roomAppearance, supportsTheater, leaveRoom, 
                             aria-label="Leave room"
                             aria-expanded={roomAppearance === 'cinematic' ? showLeaveConfirm : undefined}
                         >
-                            <LogOut size={14} />
-                            <span className="hidden sm:inline">Leave</span>
+                            <GradientIcon><LogOut size={14} /></GradientIcon>
+                            <span className="hidden sm:inline"><GradientLabel>Leave</GradientLabel></span>
                         </button>
                         {showLeaveConfirm && roomAppearance === 'cinematic' && (
                             <div className="room-header-popover room-leave-popover">
                                 <p>Leave this room?</p>
-                                <button type="button" onClick={() => { leaveRoom(); navigate('/'); }}>Leave room</button>
+                                <button type="button" onClick={() => { leaveRoom(); navigate('/'); }}><GradientLabel>Leave room</GradientLabel></button>
                             </div>
                         )}
                     </div>
@@ -258,15 +261,15 @@ const PanelHeader = ({ icon, title, count, open, onToggle }) => (
         className="flex w-full items-center justify-between border-b border-white/10 px-4 py-3 text-left transition hover:bg-white/[0.03]"
     >
         <span className="flex items-center gap-2 text-sm font-bold text-white">
-            {icon}
-            {title}
+            <GradientIcon>{icon}</GradientIcon>
+            <GradientLabel>{title}</GradientLabel>
             {count !== undefined && (
                 <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-zinc-400">
                     {count}
                 </span>
             )}
         </span>
-        {open ? <ChevronUp size={14} className="text-zinc-500" /> : <ChevronDown size={14} className="text-zinc-500" />}
+        {open ? <GradientIcon><ChevronUp size={14} className="text-zinc-500" /></GradientIcon> : <GradientIcon><ChevronDown size={14} className="text-zinc-500" /></GradientIcon>}
     </button>
 );
 
@@ -299,7 +302,7 @@ const RoomTabs = ({ activeTab, onChange, onSelect = onChange, desktop = false, t
                     onSelect(roomTabs[next].id);
                     event.currentTarget.parentElement.children[next].focus();
                 } : undefined}>
-                {icon}<span>{label}</span>
+                <GradientIcon>{icon}</GradientIcon><span><GradientLabel>{label}</GradientLabel></span>
             </button>
         ))}
     </nav>
@@ -386,7 +389,7 @@ const RoomPresentation = () => {
                     <div className="h-12 w-12 rounded-full border-4 border-white/10 border-t-white" style={{ animation: 'spin 0.9s linear infinite' }} />
                     <p className="text-sm font-semibold text-white">{connectionPhase === 'offline' ? 'Still offline' : 'Reconnecting to your room…'}</p>
                     <p className="max-w-xs text-center text-xs text-zinc-500">Watchly will reconnect automatically and restore the room when the server is available.</p>
-                    <button type="button" className="rounded-xl border border-white/10 px-4 py-2 text-xs text-zinc-300" onClick={retryConnection}>Retry now</button>
+                    <button type="button" className="rounded-xl border border-white/10 px-4 py-2 text-xs text-zinc-300" onClick={retryConnection}><GradientLabel>Retry now</GradientLabel></button>
                 </div>
             </div>
         );
@@ -419,10 +422,10 @@ const RoomPresentation = () => {
                 />
                 {joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{joinError}</p>}
                 {['PASSWORD_REQUIRED', 'INVALID_PASSWORD'].includes(joinErrorCode) && <label className="mt-3 block text-sm text-zinc-300">Room password<input type="password" autoComplete="current-password" maxLength={128} value={joinPassword} onChange={event => setJoinPassword(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white" /></label>}
-                {joinErrorCode === 'ACCOUNT_REQUIRED' && !accountUser && <button type="button" className="mt-3 text-sm text-white underline" onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`)}>Sign in to join</button>}
+                {joinErrorCode === 'ACCOUNT_REQUIRED' && !accountUser && <button type="button" className="mt-3 text-sm text-white underline" onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`)}><GradientLabel>Sign in to join</GradientLabel></button>}
                 {connectionError && !joinError && <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{connectionError}</p>}
-                {needsProfile && <button type="button" className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white" onClick={() => navigate(`/setup-profile?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`)}>Finish profile to join</button>}
-                {!accountUser && connectionError && <button type="button" className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white" onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`)}>Sign in to your account</button>}
+                {needsProfile && <button type="button" className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white" onClick={() => navigate(`/setup-profile?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`)}><GradientLabel>Finish profile to join</GradientLabel></button>}
+                {!accountUser && connectionError && <button type="button" className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white" onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(`/room/${roomId.toUpperCase()}`)}`)}><GradientLabel>Sign in to your account</GradientLabel></button>}
                 {joinErrorCode === 'ROOM_NOT_FOUND' && (
                     <button
                         type="button"
@@ -442,14 +445,12 @@ const RoomPresentation = () => {
                             }
                         }}
                         className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3 font-bold text-white disabled:opacity-40"
-                    >
-                        Create a new temporary room
-                    </button>
+                    ><GradientLabel>Create a new temporary room</GradientLabel></button>
                 )}
                 <button disabled={!effectiveJoinNickname.trim() || isJoining || needsProfile || isProfileLoading} className="watchly-action mt-5 w-full rounded-xl px-4 py-3 font-bold disabled:opacity-40">
-                    {isJoining ? 'Starting room server…' : 'Join room'}
+                    <GradientLabel>{isJoining ? 'Starting room server…' : 'Join room'}</GradientLabel>
                 </button>
-                <button type="button" onClick={() => navigate('/')} className="mt-3 w-full text-sm text-zinc-500 hover:text-white">Back home</button>
+                <button type="button" onClick={() => navigate('/')} className="mt-3 w-full text-sm text-zinc-500 hover:text-white"><GradientLabel>Back home</GradientLabel></button>
             </form>
         </div>
     );

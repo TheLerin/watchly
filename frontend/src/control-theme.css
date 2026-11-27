@@ -1,0 +1,39 @@
+.landing-nav-label { position: relative; display: inline-block; }
+.landing-nav-text, .landing-nav-gradient { transition: opacity 650ms ease; }
+.landing-nav-gradient { position: absolute; inset: 0; background-image: var(--watchly-action-gradient); background-size: var(--watchly-action-size); background-position: var(--watchly-action-origin); background-clip: text; -webkit-background-clip: text; color: transparent; opacity: 0; pointer-events: none; animation: watchly-action-flow 32s ease-in-out infinite; }
+.landing-nav-gradient { background-repeat: no-repeat; }
+.landing-nav-gradient::before { content: attr(data-label); }
+:is(.room-shell, .auth-page, .account-overlay, .floating-video-call) .landing-nav-gradient { animation-play-state: paused; }
+:is(.room-shell, .auth-page, .account-overlay, .floating-video-call) :is(button:not(:disabled), a, summary):is(:hover, :focus-visible) .landing-nav-gradient { animation-play-state: running; }
+:is(.room-shell, .auth-page, .account-overlay, .floating-video-call) :is(button:not(:disabled), a, summary):is(:hover, :focus-visible) .landing-nav-text { opacity: 0; }
+:is(.room-shell, .auth-page, .account-overlay, .floating-video-call) :is(button:not(:disabled), a, summary):is(:hover, :focus-visible) .landing-nav-gradient { opacity: 1; }
+.watchly-gradient-icon { display: inline-grid; flex: none; place-items: center; vertical-align: middle; line-height: 0; }
+.watchly-gradient-icon > svg { grid-area: 1 / 1; transition: opacity 650ms ease; pointer-events: none; }
+.watchly-icon-gradient { opacity: 0; }
+:is(button:not(:disabled), a, summary):is(:hover, :focus-visible) .watchly-icon-base { opacity: 0; }
+:is(button:not(:disabled), a, summary):is(:hover, :focus-visible) .watchly-icon-gradient { opacity: 1; }
+:is(button:not(:disabled), a, summary):is(:hover, :focus-visible) .watchly-icon-gradient stop { animation: watchly-icon-colors 12s ease-in-out infinite; }
+.watchly-icon-gradient stop:nth-child(2) { animation-delay: -3s !important; }
+.watchly-icon-gradient stop:nth-child(3) { animation-delay: -6s !important; }
+.watchly-icon-gradient stop:nth-child(4) { animation-delay: -9s !important; }
+@keyframes watchly-icon-colors { 0%,100% { stop-color: #42ccec; } 25% { stop-color: #18d8cb; } 50% { stop-color: #9d91bc; } 75% { stop-color: #f0e08b; } }
+.watchly-icon-button { position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 1px solid rgb(255 255 255 / 10%); border-radius: 13px; color: #d8d8de; background: rgb(255 255 255 / 3%); transition: border-color 650ms ease, background 650ms ease; cursor: pointer; }
+.watchly-icon-button:not(:disabled):hover { border-color: rgb(66 204 236 / 36%); background: rgb(255 255 255 / 5%); }
+.watchly-icon-button[aria-pressed="true"], .watchly-icon-button[aria-expanded="true"] { border-color: rgb(66 204 236 / 30%); color: var(--watchly-mint); background: rgb(66 204 236 / 6%); }
+.watchly-icon-button.is-danger { color: #fda4af; }
+.watchly-icon-button:disabled { opacity: .4; cursor: not-allowed; }
+:is(.room-shell, .auth-page, .account-overlay, .floating-video-call) :is(button, a, summary):focus-visible { outline: 2px solid var(--watchly-cyan); outline-offset: 3px; }
+:is(.auth-page, .account-overlay, .room-shell) :is(.account-primary, .watchly-action, .cinema-primary-action) { position: relative; isolation: isolate; }
+:is(.auth-page, .account-overlay, .room-shell) :is(.account-primary, .watchly-action, .cinema-primary-action)::before { content: ''; position: absolute; inset: 1px; z-index: -1; border-radius: inherit; background: #080809; opacity: 0; pointer-events: none; transition: opacity 650ms ease; }
+:is(.auth-page, .account-overlay, .room-shell) :is(.account-primary, .watchly-action, .cinema-primary-action):not(:disabled):is(:hover,:focus-visible)::before { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+    .watchly-gradient-icon > svg, .landing-nav-text, .landing-nav-gradient, .watchly-icon-button { transition: none; }
+    .landing-nav-gradient, .watchly-icon-gradient stop { animation: none !important; }
+    :is(.auth-page, .account-overlay, .room-shell) :is(.account-primary, .watchly-action, .cinema-primary-action)::before { transition: none; }
+}
+.room-shell[data-cinema-reduce-motion="true"] .watchly-icon-gradient stop { animation: none !important; }
+@media (forced-colors: active) {
+    .watchly-icon-gradient, .landing-nav-gradient { display: none !important; }
+    body :is(button,a,summary):is(:hover,:focus-visible) :is(.watchly-icon-base, .landing-nav-text) { opacity: 1 !important; }
+    .watchly-icon-button { border-color: ButtonText; }
+}

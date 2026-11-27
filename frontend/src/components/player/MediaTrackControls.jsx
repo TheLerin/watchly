@@ -1,3 +1,5 @@
+import GradientIcon from '../GradientIcon';
+import GradientLabel from '../GradientLabel';
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, FileText, Headphones, Languages, LoaderCircle, Plus, Trash2, X } from 'lucide-react';
@@ -68,7 +70,7 @@ export default function MediaTrackControls({
                 )}
                 {isCompact && (
                     <button type="button" className="media-controls-close" onClick={() => setMobileOpen(false)} aria-label="Close media controls">
-                        <X size={16} />
+                        <GradientIcon><X size={16} /></GradientIcon>
                     </button>
                 )}
             </div>
@@ -126,8 +128,7 @@ export default function MediaTrackControls({
             {capabilities.canUseExternalSubtitles && (
                 <>
                     <button type="button" className="media-add-subtitle" onClick={() => fileInputRef.current?.click()}>
-                        <Plus size={13} /> Add subtitle file
-                    </button>
+                        <GradientIcon><Plus size={13} /></GradientIcon><GradientLabel>Add subtitle file</GradientLabel></button>
                     <input
                         ref={fileInputRef}
                         className="hidden"
@@ -150,7 +151,7 @@ export default function MediaTrackControls({
                             <FileText size={11} />
                             <span title={`${track.formatLabel}${track.limited ? ' — basic timing and text only' : ''}`}>{track.label}</span>
                             <button type="button" onClick={() => onRemoveSubtitle(track.id)} aria-label={`Remove ${track.label} subtitles`}>
-                                <Trash2 size={11} />
+                                <GradientIcon><Trash2 size={11} /></GradientIcon>
                             </button>
                         </span>
                     ))}
@@ -159,7 +160,7 @@ export default function MediaTrackControls({
 
             {(capabilities.canInspectFile || inspection || inspectionError) && (
                 <details className="media-info-details">
-                    <summary>File Info <ChevronDown size={13} /></summary>
+                    <summary><GradientLabel>File Info</GradientLabel><GradientIcon><ChevronDown size={13} /></GradientIcon></summary>
                     <MediaInfoPanel inspection={inspection} inspectionError={inspectionError} />
                 </details>
             )}
@@ -175,9 +176,7 @@ export default function MediaTrackControls({
                 aria-controls={bodyId}
                 onClick={() => setMobileOpen(value => !value)}
             >
-                <Languages size={15} />
-                Media
-                <ChevronDown size={14} className={mobileOpen ? 'rotate-180' : ''} />
+                <GradientIcon><Languages size={15} /></GradientIcon><GradientLabel>Media</GradientLabel><GradientIcon><ChevronDown size={14} className={mobileOpen ? 'rotate-180' : ''} /></GradientIcon>
             </button>
             {isCompact
                 ? mobileOpen && createPortal(

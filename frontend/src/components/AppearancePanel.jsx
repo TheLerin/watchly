@@ -1,3 +1,5 @@
+import GradientIcon from './GradientIcon';
+import GradientLabel from './GradientLabel';
 import { useId } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Check, RotateCcw } from 'lucide-react';
@@ -11,9 +13,9 @@ function ChoiceCard({ label, description, selected, onClick, orb }) {
     return (
         <button type="button" className="appearance-choice" aria-pressed={selected} onClick={onClick}>
             {orb && <span className="appearance-orb" aria-hidden="true" style={{ background: `radial-gradient(circle at 40% 40%, ${orb[0]}, ${orb[1]})` }} />}
-            <span className="appearance-choice-label">{label}</span>
+            <span className="appearance-choice-label"><GradientLabel>{label}</GradientLabel></span>
             {description && <span className="appearance-choice-description">{description}</span>}
-            {selected && <Check className="appearance-choice-check" size={13} aria-hidden="true" />}
+            {selected && <GradientIcon><Check className="appearance-choice-check" size={13} aria-hidden="true" /></GradientIcon>}
         </button>
     );
 }
@@ -109,7 +111,7 @@ export default function AppearancePanel({ supportsTheater, panelRef, panelEvents
                     </section>
                 </>}
                 <SoundSettings />
-                <button type="button" className="appearance-reset" onClick={resetAppearance}><RotateCcw size={13} aria-hidden="true" />Reset appearance</button>
+                <button type="button" className="appearance-reset" onClick={resetAppearance}><GradientIcon><RotateCcw size={13} aria-hidden="true" /></GradientIcon><GradientLabel>Reset appearance</GradientLabel></button>
             </div>
         </MotionDiv>
     );

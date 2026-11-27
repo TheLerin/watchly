@@ -34,12 +34,15 @@ const ready = async url => {
  browser = await chromium.launch({ executablePath, headless: true, args: [
   '--autoplay-policy=no-user-gesture-required', '--disable-background-timer-throttling',
   '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
+  // Local-only peer transport must not depend on Windows multicast DNS discovery.
+  '--disable-features=WebRtcHideLocalIpsWithMdns',
  ] });
+ require('./localOnlyBrowser.cjs')(browser);
  const errors=[];
  const host=await browser.newPage(); const viewer=await browser.newPage();
  for(const page of [host,viewer]) page.on('pageerror',e=>errors.push(e.message));
  const wait=async(fn,label)=>{for(let i=0;i<100;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw new Error(label)};
- const video = page=>page.locator('.room-player-surface video');
+ const video = page=>page.locator('.room-player-surface video:not(.screen-share-video)');
  const values=page=>video(page).evaluate(v=>({time:v.currentTime,paused:v.paused,ready:v.readyState,duration:v.duration}));
  const openTool = async (page, name) => { const button = page.getByRole('button', { name, exact: true }); if (await button.getAttribute('aria-expanded') !== 'true') await button.click(); };
  try {
@@ -187,6 +190,7 @@ const ready = async url => {
   document.dispatchEvent(new Event('visibilitychange'));
  });
  await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').dataset.cinemaAmbient==='sampled'),'visible tab did not resume ambient sampling');
+ await wait(async()=>await host.locator('.room-ping-button').getAttribute('data-connection-phase')==='connected','foreground room resync did not finish');
  await video(host).evaluate(v=>v.pause());
  await wait(async()=> (await values(viewer)).paused,'remote pause did not synchronize');
  await wait(async()=>host.evaluate(()=>document.querySelector('.room-shell').dataset.cinemaAmbient==='neutral'),'video ambient light did not stop on pause');
@@ -205,19 +209,30 @@ const ready = async url => {
    canvas.width = 320; canvas.height = 180;
    canvas.getContext('2d').fillRect(0, 0, 320, 180);
    window.testScreenStream = canvas.captureStream(5);
+   const paint = canvas.getContext('2d'); let frame = 0;
+   const timer = setInterval(() => {
+    if (window.testScreenStream.getVideoTracks()[0].readyState === 'ended') { clearInterval(timer); return; }
+    paint.fillStyle = frame++ % 2 ? '#18d8cb' : '#0975b6'; paint.fillRect(0, 0, 320, 180);
+   }, 200);
    return window.testScreenStream;
   };
  });
  await host.getByRole('button', { name: 'Share screen' }).click();
  await host.getByRole('button', { name: 'Share Screen (Beta)' }).click();
  await host.getByRole('button', { name: 'Stop sharing' }).waitFor();
+  await host.locator('.room-player-surface .screen-share-stage video').waitFor();
+  await viewer.locator('.room-player-surface .screen-share-stage video').waitFor();
+  await wait(async()=>viewer.locator('.screen-share-stage video').evaluate(element=>element.readyState>=2&&element.srcObject?.getVideoTracks().some(track=>track.readyState==='live')),'shared screen did not decode in the main player');
+  assert.equal(await host.locator('.room-screen-share video').count(),0);
+  assert.equal(await viewer.locator('.room-screen-share video').count(),0);
+  assert.equal(await host.locator('.screen-share-stage video').evaluate(element=>element.muted),true,'local screen preview must not echo captured audio');
 
  host.on('dialog', dialog => dialog.accept('Browser regression movie'));
  await openTool(host, 'Watch controls');
  const chooser = host.waitForEvent('filechooser');
  await host.getByTitle('Play a file that stays on each person’s device').click();
  await (await chooser).setFiles(path.resolve(__dirname, '../public/bg-video.mp4'));
- await viewer.getByRole('heading',{name:'Choose the same local file'}).waitFor();
+ await viewer.getByText('Choose the same local file', { exact: true }).waitFor({ state: 'attached' });
  await host.getByRole('button', { name: 'Start anyway' }).click();
  await wait(async () => await video(host).count() && !(await values(host)).paused, 'Start anyway did not play for the host');
  await viewer.locator('input[type=file][accept^="video/"]').setInputFiles(path.resolve(__dirname, '../public/bg-video.mp4'));
@@ -233,6 +248,7 @@ const ready = async url => {
  await host.getByRole('button', { name: 'Stop sharing' }).click();
  await openTool(host, 'Watch controls');
  assert.equal(await host.evaluate(() => window.testScreenStream.getVideoTracks()[0].readyState), 'ended');
+  await wait(async()=>await host.locator('.screen-share-stage').count()===0&&await viewer.locator('.screen-share-stage').count()===0,'stopping sharing did not restore the movie stage');
  console.log('PASS screen sharing survives readiness updates and stops cleanly (synthetic capture)');
  await wait(async()=> (await values(host)).ready>=3&&(await values(viewer)).ready>=3,'local media not ready');
  assert.equal(await host.locator('.room-shell').getAttribute('data-cinema-ambient'), 'neutral');

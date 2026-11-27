@@ -38,6 +38,8 @@ export default function LiveKitMediaProvider({ children }) {
         return () => clearInterval(timer);
     }, [room]);
     const [view, setView] = useState({ joining: false, micBusy: false, cameraBusy: false, error: '', cameraError: '' });
+    const [mirrorPreview, setMirror] = useState(() => { try { return localStorage.getItem('watchly-camera-mirror') !== 'false'; } catch { return true; } });
+    const setMirrorPreview = useCallback(value => { setMirror(value); try { localStorage.setItem('watchly-camera-mirror', String(value)); } catch { /* Optional preference. */ } }, []);
     const latest = useRef({ watchly, session }), controllerRef = useRef(null);
     useEffect(() => { latest.current = { watchly, session }; }, [watchly, session]);
     useEffect(() => {
@@ -69,7 +71,7 @@ export default function LiveKitMediaProvider({ children }) {
         return () => { room.off(RoomEvent.ConnectionStateChanged, state).off(RoomEvent.ParticipantConnected, joined).off(RoomEvent.ParticipantDisconnected, left).off(RoomEvent.Disconnected, disconnected); };
     }, [room, playSound]);
     const onError = useCallback(error => setView(current => ({ ...current, error })), []);
-    return <RoomContext.Provider value={room}><MediaContext.Provider value={{ room, view, act, onError }}>
+    return <RoomContext.Provider value={room}><MediaContext.Provider value={{ room, view, act, onError, mirrorPreview, setMirrorPreview }}>
         {children}
         <div className="watchly-media-audio"><RoomAudioRenderer room={room} /><StartAudio label="Enable call audio" room={room} /></div>
     </MediaContext.Provider></RoomContext.Provider>;

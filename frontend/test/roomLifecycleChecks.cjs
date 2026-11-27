@@ -12,10 +12,10 @@ module.exports = async ({ a, b, open, wait, snapshot, evidence }) => {
     };
     for (const page of [a, b]) await page.evaluate(async () => {
         const { socket } = await import('/src/socket.js');
-        window.lifecycleSocket = socket; window.lifecycleConnections = 0; window.lifecycleReadiness = 0;
+        window.lifecycleSocket = socket; window.lifecycleConnections = 0; window.lifecycleReadiness = 0; window.lifecycleReadinessEvents = [];
         socket.on('connect', () => window.lifecycleConnections++);
         const emit = socket.emit; socket.emit = function (event, ...args) {
-            if (event === 'media:ready') window.lifecycleReadiness++;
+            if (event === 'media:ready') { window.lifecycleReadiness++; window.lifecycleReadinessEvents.push({ payload: args[0], at: performance.now() }); }
             return emit.call(this, event, ...args);
         };
         window.lifecycleFiles = new Map(); window.lifecycleRevoked = [];
@@ -56,12 +56,12 @@ module.exports = async ({ a, b, open, wait, snapshot, evidence }) => {
                     cameraLive: before.camera.readyState === 'live', micLive: before.mic.readyState === 'live',
                     connected: room.state === 'connected', socket: window.lifecycleSocket.connected && window.lifecycleSocket.id === before.socketId,
                     tokens: window.callTokenRequests - before.tokens, captures: window.callCaptures.length - before.captures,
-                    readiness: window.lifecycleReadiness - before.readiness, connections: window.lifecycleConnections - before.connections,
+                    readiness: window.lifecycleReadiness - before.readiness, readinessEvents: window.lifecycleReadinessEvents.slice(before.readiness), connections: window.lifecycleConnections - before.connections,
                     paused: video?.paused, ready: video?.readyState, time: video?.currentTime,
                     microphoneMuted: !room.localParticipant.isMicrophoneEnabled };
             });
             for (const field of ['sameVideo', 'sameURL', 'sameFile', 'sameRoom', 'sameParticipant', 'sameCamera', 'sameMic', 'cameraLive', 'micLive', 'connected', 'socket']) assert.equal(state[field], true, `${label}: ${field}: ${JSON.stringify(state)}`);
-            for (const field of ['loads', 'tokens', 'captures', 'connections', ...(unchangedReadiness ? ['readiness'] : [])]) assert.equal(state[field], 0, `${label}: ${field}`);
+            for (const field of ['loads', 'tokens', 'captures', 'connections', ...(unchangedReadiness ? ['readiness'] : [])]) assert.equal(state[field], 0, `${label}: ${field}: ${JSON.stringify(state)}`);
             assert.equal(state.revoked, false, `${label}: blob revoked`); assert.equal(state.paused, !playing, `${label}: playback changed`);
             assert.equal(state.microphoneMuted, page === a, `${label}: microphone state changed`); assert.ok(state.ready >= 2);
         }

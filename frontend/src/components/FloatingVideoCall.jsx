@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import GradientIcon from './GradientIcon';
 import { Maximize2, Minus, PanelRight, X, Mic, MicOff, Camera, CameraOff } from 'lucide-react';
 import { useConnectionState, useLocalParticipant } from '../media/provider';
 import { ConnectionState } from '../media/provider';
@@ -78,7 +79,7 @@ export default function FloatingVideoCall({ visible, onRestore }) {
     if (wasVisible !== visible) { setWasVisible(visible); setControlsVisible(false); setMinimized(false); }
     if (!visible) return null;
     const narrow = rect.width < 260, connected = connection === ConnectionState.Connected;
-    const iconButton = (label, action, icon, disabled = false) => <button type="button" aria-label={label} title={label} disabled={disabled} onClick={action}>{icon}</button>;
+    const iconButton = (label, action, icon, disabled = false) => <button type="button" aria-label={label} title={label} disabled={disabled} onClick={action}><GradientIcon>{icon}</GradientIcon></button>;
     return createPortal(<section ref={root} className="floating-video-call" role="region" aria-label="Floating video call" data-minimized={minimized} data-narrow={narrow}
         data-controls-visible={controlsVisible || minimized} style={{ left: rect.x, top: rect.y, width: rect.width, height: minimized ? 48 : rect.height }} onKeyDown={cancelDrag}
         onPointerDown={event => start(event, false)} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}

@@ -1,3 +1,5 @@
+import GradientIcon from './GradientIcon';
+import GradientLabel from './GradientLabel';
 import React, { useEffect, useState } from 'react';
 import {
     ArrowRight,
@@ -15,6 +17,7 @@ import {
     UserPlus,
     UserX,
     Video,
+    ListVideo,
 } from 'lucide-react';
 import { useRoom } from '../context/RoomContext';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -48,8 +51,8 @@ const ActionItem = ({ icon, label, danger, onClick }) => (
         onClick={onClick}
         className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${danger ? 'text-red-300 hover:bg-red-500/10' : 'text-zinc-200 hover:bg-white/[0.06]'}`}
     >
-        {icon}
-        {label}
+        <GradientIcon>{icon}</GradientIcon>
+        <GradientLabel>{label}</GradientLabel>
     </button>
 );
 
@@ -96,7 +99,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                 </div>
 
                 <div className="space-y-1 overflow-y-auto p-2">
-                    {canRequestControl && <button type="button" onClick={requestControl} className="mb-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-zinc-300">Take playback control</button>}
+                    {canRequestControl && <button type="button" onClick={requestControl} className="mb-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-zinc-300"><GradientLabel>Take playback control</GradientLabel></button>}
                     {users.map(user => {
                         const isMe = currentUser?.id === user.id;
                         const canManage = !isMe && canManageMember(currentUser, user);
@@ -127,13 +130,14 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                     </div>
                                     {canManage && (
                                         <button
+                                            aria-label={`Member options for ${user.nickname}`}
                                             onClick={e => {
                                                 e.stopPropagation();
                                                 setOpenMenuId(openMenuId === user.id ? null : user.id);
                                             }}
                                             className="room-member-menu-button flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-zinc-500 opacity-0 transition hover:bg-white/[0.06] hover:text-white group-hover:opacity-100 focus:opacity-100"
                                         >
-                                            <MoreVertical size={14} />
+                                            <GradientIcon><MoreVertical size={14} /></GradientIcon>
                                         </button>
                                     )}
                                 </div>
@@ -168,7 +172,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                 </div>
             </section>
 
-            <section
+            <section data-room-section="queue"
                 className={compact ? 'border-t border-white/10' : 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/70'}
             >
                 <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
@@ -183,9 +187,7 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                     </div>
                     {canManageQueue && queue.length > 0 && (
                         <button disabled={!roomActionsEnabled} onClick={playNext} className="flex items-center gap-1 text-xs font-bold text-white transition hover:text-zinc-300 disabled:opacity-40">
-                            <SkipForward size={12} />
-                            Play Next
-                        </button>
+                            <GradientIcon><SkipForward size={12} /></GradientIcon><GradientLabel>Play Next</GradientLabel></button>
                     )}
                 </div>
 
@@ -200,8 +202,10 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                     </div>}
                     <AnimatePresence>
                         {queue.length === 0 ? (
-                            <div className="rounded-2xl border border-dashed border-white/10 p-4 text-xs leading-5 text-zinc-600">
-                                {canManageQueue ? 'Add a video URL from the player controls to build the room queue.' : 'The queue is empty.'}
+                            <div className="room-queue-empty rounded-2xl border border-dashed border-white/10 p-4 text-xs leading-5 text-zinc-600">
+                                <span className="room-queue-empty-icon" aria-hidden="true"><ListVideo size={23} /></span>
+                                <strong>Nothing queued yet</strong>
+                                <p>{canManageQueue ? 'Add a video URL from the player controls to build the room queue.' : 'The queue is empty.'}</p>
                             </div>
                         ) : queue.map((item, idx) => (
                             <MotionDiv
@@ -217,14 +221,14 @@ const UserQueueSidebar = ({ compact = false, variant = 'classic', className = ''
                                 <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-400" title={item.label}>{item.label}</span>
                                 {canManageQueue && (
                                     <div className="flex shrink-0 items-center gap-1">
-                                        <button type="button" aria-label={`Move queue item ${idx + 1} up`} disabled={!roomActionsEnabled || idx === 0} onClick={() => reorderQueue(item.id, 'up')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><ArrowUp size={12} /></button>
-                                        <button type="button" aria-label={`Move queue item ${idx + 1} down`} disabled={!roomActionsEnabled || idx === queue.length - 1} onClick={() => reorderQueue(item.id, 'down')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><ArrowDown size={12} /></button>
+                                        <button type="button" aria-label={`Move queue item ${idx + 1} up`} disabled={!roomActionsEnabled || idx === 0} onClick={() => reorderQueue(item.id, 'up')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><GradientIcon><ArrowUp size={12} /></GradientIcon></button>
+                                        <button type="button" aria-label={`Move queue item ${idx + 1} down`} disabled={!roomActionsEnabled || idx === queue.length - 1} onClick={() => reorderQueue(item.id, 'down')} className="rounded-lg p-1 text-zinc-400 hover:bg-white/10 disabled:opacity-30"><GradientIcon><ArrowDown size={12} /></GradientIcon></button>
                                     <button
                                         type="button" aria-label={`Remove queue item ${idx + 1}`} disabled={!roomActionsEnabled}
                                         onClick={() => removeFromQueue(item.id)}
                                         className="rounded-lg p-1 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-300 disabled:opacity-30"
                                     >
-                                        <Trash2 size={12} />
+                                        <GradientIcon><Trash2 size={12} /></GradientIcon>
                                     </button>
                                     </div>
                                 )}

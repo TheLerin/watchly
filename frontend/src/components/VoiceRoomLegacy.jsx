@@ -1,3 +1,5 @@
+import GradientIcon from './GradientIcon';
+import GradientLabel from './GradientLabel';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ChevronDown,
@@ -621,24 +623,24 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                             }}
                         >
                             {isVoiceActive && !isMuted && <span className="absolute inset-0 rounded-2xl bg-green-400/20 animate-ping" />}
-                            <PhoneCall size={18} className="relative z-10" />
+                            <GradientIcon><PhoneCall size={18} className="relative z-10" /></GradientIcon>
                         </span>
 
                         <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-2 min-w-0">
-                                <span className="text-sm font-[650] truncate" style={{ color: 'var(--text)' }}>Voice Call</span>
+                                <span className="text-sm font-[650] truncate" style={{ color: 'var(--text)' }}><GradientLabel>Voice Call</GradientLabel></span>
                                 <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold" style={callStatusStyle}>{callStatus}</span>
-                                {FORCE_RELAY && <span className="shrink-0 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold text-violet-300">Relay test</span>}
+                                {FORCE_RELAY && <span className="shrink-0 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold text-violet-300"><GradientLabel>Relay test</GradientLabel></span>}
                             </span>
                             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                                <span className="flex items-center gap-1"><Users size={11} />{voiceUsers.length}/{MAX_VOICE_PARTICIPANTS}</span>
-                                {isVoiceActive && <span className="flex items-center gap-1"><Clock size={11} />{formatCallDuration(elapsedSeconds)}</span>}
+                                <span className="flex items-center gap-1"><GradientIcon><Users size={11} /></GradientIcon>{voiceUsers.length}<GradientLabel>/</GradientLabel>{MAX_VOICE_PARTICIPANTS}</span>
+                                {isVoiceActive && <span className="flex items-center gap-1"><GradientIcon><Clock size={11} /></GradientIcon>{formatCallDuration(elapsedSeconds)}</span>}
                                 <span className="flex items-center gap-1" style={{ color: qualityMeta.color }}>
-                                    {isConnected ? <Wifi size={11} /> : <WifiOff size={11} />}{pingText}
+                                    {isConnected ? <GradientIcon><Wifi size={11} /></GradientIcon> : <GradientIcon><WifiOff size={11} /></GradientIcon>}{pingText}
                                 </span>
                             </span>
                         </span>
-                        {isExpanded ? <ChevronUp size={15} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={15} style={{ color: 'var(--text-muted)' }} />}
+                        {isExpanded ? <GradientIcon><ChevronUp size={15} style={{ color: 'var(--text-muted)' }} /></GradientIcon> : <GradientIcon><ChevronDown size={15} style={{ color: 'var(--text-muted)' }} /></GradientIcon>}
                     </button>
 
                     <button
@@ -648,8 +650,8 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                         className="room-voice-ping h-10 shrink-0 rounded-2xl px-3 flex items-center justify-center gap-1.5 text-[10px] font-bold transition-all disabled:opacity-60"
                         style={variant === 'cinematic' ? undefined : { background: qualityMeta.bg, color: qualityMeta.color, border: `1px solid ${qualityMeta.border}` }}
                     >
-                        <RefreshCw size={14} className={isCheckingPing ? 'animate-spin' : ''} />
-                        <span className="hidden sm:inline">Ping</span>
+                        <GradientIcon><RefreshCw size={14} className={isCheckingPing ? 'animate-spin' : ''} /></GradientIcon>
+                        <span className="hidden sm:inline"><GradientLabel>Ping</GradientLabel></span>
                     </button>
                 </div>
 
@@ -666,16 +668,16 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                                     border: `1px solid ${isMuted ? 'rgba(239, 68, 68, 0.28)' : 'var(--glass-border)'}`,
                                 }}
                             >
-                                {isMuted ? <MicOff size={15} /> : <Mic size={15} />}
-                                {isMuted ? 'Unmute' : 'Mute'}
+                                {isMuted ? <GradientIcon><MicOff size={15} /></GradientIcon> : <GradientIcon><Mic size={15} /></GradientIcon>}
+                                <GradientLabel>{isMuted ? 'Unmute' : 'Mute'}</GradientLabel>
                             </button>
                             <button
                                 type="button"
                                 onClick={toggleVoice}
                                 className="flex items-center justify-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/15 px-3 py-2 text-xs font-bold text-red-400"
                             >
-                                <PhoneOff size={15} />
-                                <span className="hidden sm:inline">Leave</span>
+                                <GradientIcon><PhoneOff size={15} /></GradientIcon>
+                                <span className="hidden sm:inline"><GradientLabel>Leave</GradientLabel></span>
                             </button>
                         </>
                     ) : (
@@ -685,9 +687,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                             disabled={!roomActionsEnabled}
                             className="room-voice-join col-span-2 flex items-center justify-center gap-2 rounded-2xl border border-green-500/30 bg-green-500/15 px-3 py-2.5 text-xs font-bold text-green-400"
                         >
-                            <PhoneCall size={15} />
-                            Join Voice
-                        </button>
+                            <GradientIcon><PhoneCall size={15} /></GradientIcon><GradientLabel>Join Voice</GradientLabel></button>
                     )}
                 </div>
 
@@ -702,7 +702,7 @@ const VoiceRoom = ({ variant = 'classic', className = '' }) => {
                             <span className="flex items-center gap-2 text-xs font-semibold text-amber-200">
                                 <Headphones size={14} /> Tap to enable voice audio.
                             </span>
-                            <button type="button" onClick={enableVoiceAudio} className="watchly-action rounded-xl px-3 py-1.5 text-[10px] font-bold">Enable</button>
+                            <button type="button" onClick={enableVoiceAudio} className="watchly-action rounded-xl px-3 py-1.5 text-[10px] font-bold"><GradientLabel>Enable</GradientLabel></button>
                         </MotionDiv>
                     )}
                 </AnimatePresence>

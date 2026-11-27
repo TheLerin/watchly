@@ -16,11 +16,11 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
   const controls = await page.locator('.video-player-controls').boundingBox();
   return { player, rail, tabs, controls };
  };
- await host.evaluate(() => { window.classicVideo = document.querySelector('.room-player-surface video'); });
+ await host.evaluate(() => { window.classicVideo = document.querySelector('.room-player-surface video:not(.screen-share-video)'); });
  await appearance(host, 'Classic');
  await appearance(viewer, 'Classic');
  await tab(host, 'Watch');
- assert.ok(await host.evaluate(() => window.classicVideo === document.querySelector('.room-player-surface video')),
+ assert.ok(await host.evaluate(() => window.classicVideo === document.querySelector('.room-player-surface video:not(.screen-share-video)')),
   'changing desktop appearance must retain the player');
  for (const [width, height] of [[1920, 1080], [1600, 900], [1440, 900], [1366, 768], [1280, 800], [2560, 1440], [1920, 650]]) {
   await host.setViewportSize({ width, height });
@@ -96,8 +96,9 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
    assert.equal(await host.locator('.room-voice-group').isVisible(), name === 'Call');
    assert.equal(await host.locator('.room-share-group').isVisible(), name === 'Call');
    assert.equal(await host.locator('.room-chat-group').isVisible(), name === 'Chat');
-   assert.ok(await host.evaluate(() => window.classicVideo === document.querySelector('.room-player-surface video')));
-   assert.ok(await video(host).isVisible());
+   assert.ok(await host.evaluate(() => window.classicVideo === document.querySelector('.room-player-surface video:not(.screen-share-video)')));
+   assert.equal(await video(host).isVisible(), false, 'movie stays mounted behind the shared-screen stage');
+   assert.ok(await host.locator('.screen-share-stage video').isVisible());
   }
  }
  assert.equal(await host.evaluate(() => window.classicVoiceStream.getAudioTracks()[0].readyState), 'live');
@@ -106,6 +107,7 @@ module.exports = async ({ host, viewer, baseUrl, video, values, wait }) => {
  await host.getByRole('button', { name: 'Unmute', exact: true }).waitFor();
  await host.getByRole('button', { name: 'Stop sharing', exact: true }).click();
  assert.equal(await host.evaluate(() => window.classicScreenStream.getVideoTracks()[0].readyState), 'ended');
+ await wait(async () => await video(host).isVisible(), 'stopping screen share must restore the same movie');
  await host.locator('.room-voice').getByRole('button', { name: 'Leave', exact: true }).click();
  await host.getByRole('button', { name: 'Join Voice', exact: true }).waitFor();
  assert.equal(await host.evaluate(() => window.classicVoiceStream.getAudioTracks()[0].readyState), 'ended');

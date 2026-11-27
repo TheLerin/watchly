@@ -1,0 +1,80 @@
+.room-shell { --panel-line: rgb(255 255 255 / 9%); --panel-surface: #09090b; --panel-field: #050506; --panel-copy: #e8e8ee; --panel-muted: #a1a1ad; }
+.room-shell :is(.appearance-panel, .room-header-popover, .video-player-controls, .room-member-menu) { border-color: var(--panel-line); border-radius: 20px; background: var(--panel-surface); color: var(--panel-copy); box-shadow: 0 20px 60px rgb(0 0 0 / 30%); }
+.room-shell[data-room-appearance="cinematic"] .room-right-rail > :is(.room-members-group, .room-voice-group, .room-share-group, .room-video-group, .room-chat-group) { border-color: var(--panel-line); border-radius: 22px; background: linear-gradient(140deg, rgb(255 255 255 / 3%), transparent 60%), var(--panel-surface); backdrop-filter: none; box-shadow: 0 20px 60px rgb(0 0 0 / 28%); }
+.room-shell :is(.room-members-header, .room-member-row) { padding: 15px 16px; }
+.room-members-queue > section { min-width: 0; }
+.room-members-heading h3 { font-size: 14px; font-weight: 650; }
+.room-members-heading p { color: var(--panel-muted); font-size: 11px; margin-top: 3px; }
+.room-shell .room-member-row { margin: 3px 0; border-radius: 15px; align-items: center; }
+.room-member-row > .watchly-accent-badge { background: transparent; box-shadow: none; border-radius: 50%; }
+.room-member-row > .watchly-accent-badge { color: var(--panel-copy); }
+.room-member-row .text-zinc-500, .room-queue-empty { color: var(--panel-muted); }
+.room-queue-empty { font-size: 12px; line-height: 1.7; }
+.room-queue-empty { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 24px 20px; text-align: center; }
+.room-queue-empty strong { color: var(--panel-copy); font-size: 13px; font-weight: 600; }
+.room-queue-empty p { margin: 0; max-width: 240px; }
+.room-queue-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 3px; border: 1px solid var(--panel-line); border-radius: 13px; color: var(--watchly-cyan); background: rgb(66 204 236 / 4%); }
+.room-shell[data-room-appearance="cinematic"] .room-header :is(.room-ping-button, .room-leave-button, .room-code-button) > .watchly-gradient-icon { display: inline-grid; }
+.room-member-row .watchly-accent-badge { font-size: 9px; padding: 3px 7px; }
+.room-member-row .room-member-menu-button { opacity: 1; width: 40px; height: 40px; }
+.room-members-queue > details { padding: 15px 16px; background: rgb(255 255 255 / 2%); }
+.room-members-queue > details > summary { min-height: 32px; color: #c8c8d2; font-size: 12px; }
+.room-members-queue > details[open] > summary { margin-bottom: 12px; }
+.room-members-queue input:not([type="checkbox"]), .room-members-queue select { min-height: 44px; border-radius: 11px; border-color: var(--panel-line); background: var(--panel-field); color: var(--panel-copy); padding: 9px 11px; }
+.room-members-queue button, .room-members-queue summary { transition: border-color 650ms ease, background-color 650ms ease; }
+.room-members-queue :is(button:not(:disabled), summary):hover { border-color: rgb(66 204 236 / 30%); }
+.room-members-queue .group\/queue { min-height: 64px; border-radius: 13px; }
+.room-members-queue .group\/queue button { min-width: 36px; min-height: 40px; }
+.room-members-queue .room-member-menu { width: min(244px, calc(100vw - 64px)); }
+.room-member-menu button { min-height: 44px; font-size: 12px; }
+.room-shell .appearance-panel { --panel-copy: #e8e8ee; --panel-muted: #a1a1ad; --panel-line: rgb(255 255 255 / 9%); width: 380px; border-color: var(--panel-line); backdrop-filter: none; }
+.appearance-panel-header { padding: 23px 22px 16px; border-bottom: 1px solid var(--panel-line); margin-bottom: 18px; }
+.appearance-panel-header h2 { font-size: 17px; }
+.appearance-panel-header p { margin-top: 6px; color: var(--panel-muted); font-size: 12px; }
+.appearance-panel-body { padding: 0 22px 18px; }
+.appearance-section h3 { font-size: 10px; color: var(--panel-muted); }
+.appearance-choice { border-radius: 14px; padding: 14px; padding-right: 28px; min-height: 76px; background: rgb(255 255 255 / 2%); }
+.appearance-choice[aria-pressed="true"] { border-color: rgb(66 204 236 / 34%); background: rgb(66 204 236 / 5%); }
+.appearance-choice-description, .appearance-row-copy p { color: var(--panel-muted); font-size: 11px; }
+.appearance-choice-check { color: var(--watchly-cyan); }
+.appearance-switch[aria-checked="true"] > span { background: var(--watchly-mint); }
+.appearance-brightness input { accent-color: var(--watchly-cyan); }
+.room-shell .room-screen-share { border: 0; border-radius: 0; padding: 20px; }
+.room-panel-heading { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 20px; }
+.room-panel-heading > svg { flex: none; color: var(--watchly-cyan); margin-top: 3px; }
+.room-panel-heading h2 { font-size: 16px; font-weight: 650; margin: 0 0 6px; }
+.room-panel-heading p, .room-panel-hint { font-size: 12px; color: var(--panel-muted); line-height: 1.65; }
+.room-screen-share-action { min-height: 44px; border: 1px solid var(--panel-line); border-radius: 12px; padding: 10px 14px; background: rgb(255 255 255 / 3%); }
+.room-shell .room-video-call { padding: 20px; color: var(--panel-copy); }
+.room-video-call h2 { font-size: 16px; margin-bottom: 16px; }
+.room-shell .video-call-status { font-size: 11px; color: var(--panel-muted); margin-bottom: 3px; }
+.room-shell .video-call-status > span { color: var(--panel-copy); }
+.room-shell .call-empty { color: var(--panel-muted); }
+.room-shell .video-call-actions { gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.room-shell .video-call-actions .watchly-icon-button { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 13px; }
+.room-shell .call-camera-grid { gap: 10px; }
+.room-shell .call-camera-tile { border-radius: 16px; background: #111114; }
+.room-shell .call-camera-tile[data-speaking="true"] { border-color: rgb(66 204 236 / 65%); }
+.room-shell .call-camera-caption { padding: 10px; color: #f4f4f8; background: linear-gradient(transparent, rgb(0 0 0 / 80%)); }
+.room-shell .call-device-settings { padding: 16px; background: var(--panel-field); color: var(--panel-copy); border-color: var(--panel-line); border-radius: 16px; }
+.room-shell .call-device-settings label { font-size: 12px; gap: 7px; margin-bottom: 14px; }
+.room-shell .call-device-settings select { min-height: 44px; padding: 8px 10px; background: var(--panel-field); color: var(--panel-copy); border-color: var(--panel-line); border-radius: 10px; }
+.room-shell .call-device-preferences { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.room-shell .call-device-preferences label { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; }
+.room-shell .call-device-preferences input { accent-color: var(--watchly-cyan); width: 16px; height: 16px; }
+.screen-share-stage { position: absolute; inset: 0; z-index: 45; background: #000; color: #fff; }
+.screen-share-stage > video { width: 100%; height: 100%; object-fit: contain; transform: none; }
+.screen-share-stage-heading { position: absolute; inset: 0 0 auto; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 14px; background: linear-gradient(rgb(0 0 0 / 75%), transparent); font-size: 12px; pointer-events: none; }
+.screen-share-stage-heading > div { display: flex; gap: 8px; pointer-events: auto; }
+.screen-share-play { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgb(0 0 0 / 60%); color: #fff; font-size: 14px; }
+.room-player-surface[data-screen-sharing="true"] > :not(.screen-share-stage):not(.watchly-floating-root) { visibility: hidden; pointer-events: none; }
+.room-shell[data-ui-theme="glass-light"] { --panel-surface: #f7f7f9; --panel-field: #fff; --panel-copy: #17171e; --panel-muted: #60606c; --panel-line: rgb(0 0 0 / 12%); }
+.room-shell[data-ui-theme="glass-light"] .watchly-icon-button { color: #3c3c47; background: rgb(0 0 0 / 3%); border-color: rgb(0 0 0 / 12%); }
+.room-shell[data-ui-theme="glass-light"] :is(.landing-nav-gradient, .watchly-icon-gradient) { filter: brightness(.5) saturate(1.5); }
+.room-shell[data-ui-theme="glass-light"] :is(.appearance-panel, .watchly-action, .account-primary, .cinema-primary-action, .screen-share-stage, .call-camera-tile, .watch-source-controls button[type="submit"]) :is(.landing-nav-gradient, .watchly-icon-gradient) { filter: none; }
+@media (max-width: 700px) {
+    .room-shell .appearance-panel { max-width: calc(100vw - 24px); }
+    .room-shell .room-video-call, .room-shell .room-screen-share { padding: 18px; }
+    .screen-share-stage-heading { padding: 9px; }
+    .screen-share-stage-heading > span { max-width: 45%; font-size: 10px; }
+}

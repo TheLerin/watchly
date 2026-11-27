@@ -7,6 +7,7 @@ export default function useScreenShare(iceServers) {
     const localStream = useRef(null);
     const generation = useRef(0);
     const [remoteStream, setRemoteStream] = useState(null);
+    const [previewStream, setPreviewStream] = useState(null);
     const [sharing, setSharing] = useState(false);
     const [status, setStatus] = useState('idle');
     const [warning, setWarning] = useState('');
@@ -32,7 +33,7 @@ export default function useScreenShare(iceServers) {
         generation.current++;
         peers.current.forEach(peer => peer.close()); peers.current.clear();
         localStream.current?.getTracks().forEach(track => track.stop()); localStream.current = null;
-        setRemoteStream(null); setSharing(false); setStatus('idle'); if (notify && socket.connected) socket.emit('screen:stopped');
+        setRemoteStream(null); setPreviewStream(null); setSharing(false); setStatus('idle'); if (notify && socket.connected) socket.emit('screen:stopped');
     }, []);
     useEffect(() => {
         if (!sharing && !remoteStream) return undefined;
@@ -48,10 +49,11 @@ export default function useScreenShare(iceServers) {
     }, [sharing, remoteStream, close]);
     const connection = useCallback(target => {
         peers.current.get(target)?.close();
-        const peer = new RTCPeerConnection({ iceServers });
+        const peer = new RTCPeerConnection({ iceServers: iceServers.current || iceServers });
+        const token = generation.current;
         peer._watchlyIce = [];
         peer.onicecandidate = event => event.candidate && socket.connected && socket.emit('screen:ice', { targetSocketId: target, candidate: event.candidate });
-        peer.ontrack = event => setRemoteStream(event.streams[0]);
+        peer.ontrack = event => { if (token === generation.current && peers.current.get(target) === peer && socket.connected) setRemoteStream(event.streams[0] || new MediaStream([event.track])); };
         peer._watchlyRestarted = false;
         peer.oniceconnectionstatechange = async () => {
             if (peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed') reportConnectionType(peer);
@@ -95,7 +97,7 @@ export default function useScreenShare(iceServers) {
                 await offerViewer(viewer.socketId);
                 if (token !== generation.current || !socket.connected) throw new Error('Screen sharing was interrupted. Start sharing again when ready.');
             }
-            setSharing(true); setStatus(response.viewers.length ? 'connecting' : 'sharing');
+            setPreviewStream(stream); setSharing(true); setStatus(response.viewers.length ? 'connecting' : 'sharing');
         } catch (error) {
             if (token === generation.current) close(Boolean(localStream.current));
             throw error;
@@ -136,5 +138,5 @@ export default function useScreenShare(iceServers) {
         socket.on('screen:viewer-added', viewerAdded); socket.on('screen:viewer-left', viewerLeft);
         return () => { socket.off('screen:offer', offer); socket.off('screen:answer', answer); socket.off('screen:ice', ice); socket.off('screen:stopped', stopped); socket.off('screen:unavailable', unavailable); socket.off('disconnect', interrupted); socket.off('screen:viewer-added', viewerAdded); socket.off('screen:viewer-left', viewerLeft); close(false); };
     }, [close, connection, offerViewer]);
-    return { supported: Boolean(navigator.mediaDevices?.getDisplayMedia), sharing, remoteStream, status, warning, start, stop: close };
+    return { supported: Boolean(navigator.mediaDevices?.getDisplayMedia), sharing, previewStream, remoteStream, status, warning, start, stop: close };
 }

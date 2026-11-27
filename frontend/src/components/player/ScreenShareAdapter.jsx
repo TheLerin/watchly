@@ -1,39 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { MonitorUp, Square } from 'lucide-react';
-import useScreenShare from '../../hooks/useScreenShare';
+import { useRoomScreenShare } from '../../context/ScreenShareContext';
 import { useRoom } from '../../context/RoomContext';
-import { socket } from '../../socket';
+import GradientLabel from '../GradientLabel';
+import GradientIcon from '../GradientIcon';
 
 export default function ScreenShareAdapter({ variant = 'classic', className = '' }) {
-    const { currentUser, permissions, roomActionsEnabled } = useRoom();
-    const [iceServers, setIceServers] = useState([{ urls: 'stun:stun.l.google.com:19302' }]);
-    const [iceWarning, setIceWarning] = useState('');
-    const socketId = currentUser?.id;
-    useEffect(() => {
-        if (!socketId) return undefined;
-        let canceled = false;
-        socket.timeout(8000).emit('ice:config', {}, (error, value) => {
-            if (!canceled && !error && value?.ok && Array.isArray(value.iceServers)) {
-                setIceServers(value.iceServers);
-                setIceWarning(value.turnConfigured ? '' : 'TURN is not configured; restrictive networks may not connect.');
-            }
-        });
-        return () => { canceled = true; };
-    }, [socketId]);
-    const { supported, sharing, remoteStream, status, warning, start, stop } = useScreenShare(iceServers);
-    const [error, setError] = useState(''); const [playBlocked, setPlayBlocked] = useState(false); const videoRef = useRef(null);
-    useEffect(() => {
-        if (!videoRef.current) return;
-        videoRef.current.srcObject = remoteStream;
-        if (remoteStream) videoRef.current.play().catch(() => setPlayBlocked(true));
-    }, [remoteStream]);
-    if (!supported) return <p className={`room-screen-share p-3 text-xs text-zinc-500 ${className}`} data-room-variant={variant}>Screen sharing is not supported by this browser.</p>;
+    const { permissions, roomActionsEnabled } = useRoom();
+    const { supported, sharing, remoteStream, status, warning, iceWarning, start, stop } = useRoomScreenShare();
+    const [error, setError] = useState('');
     return <section className={`room-screen-share rounded-xl border border-white/10 p-3 ${className}`} data-room-variant={variant}>
-        {remoteStream && <div className="relative mb-2"><video ref={videoRef} autoPlay playsInline controls className="w-full rounded-lg" />
-            {playBlocked && <button onClick={() => videoRef.current?.play().then(() => setPlayBlocked(false))} className="absolute inset-0 bg-black/70 font-bold text-white">Click to enable shared playback</button>}</div>}
-        {(sharing || permissions.canShareScreen) && <button disabled={!roomActionsEnabled && !sharing} onClick={async () => { setError(''); try { if (sharing) stop(); else await start(); } catch (e) { setError(e.name === 'NotAllowedError' ? 'Screen permission was denied. Nothing was shared; try again only when ready.' : e.message); } }} className="flex items-center gap-2 text-xs font-bold text-zinc-300 disabled:opacity-40">
-            {sharing ? <Square size={14}/> : <MonitorUp size={14}/>} {sharing ? 'Stop sharing' : 'Share Screen (Beta)'}
+        <div className="room-panel-heading"><MonitorUp size={19} aria-hidden="true" /><div><h2>Screen share</h2><p>{sharing ? 'Your screen is on the main player.' : remoteStream ? 'Watching on the main player.' : 'Put a tab or screen on the big screen.'}</p></div></div>
+        {(sharing || permissions.canShareScreen) && <button disabled={status === 'requesting-permission' || (!supported && !sharing) || (!roomActionsEnabled && !sharing)} onClick={async () => { setError(''); try { if (sharing) stop(); else await start(); } catch (e) { setError(e.name === 'NotAllowedError' ? 'Screen permission was denied. Nothing was shared; try again only when ready.' : e.message); } }} className="room-screen-share-action flex items-center gap-2 text-xs font-bold text-zinc-300 disabled:opacity-40">
+            <GradientIcon>{sharing ? <Square size={17}/> : <MonitorUp size={17}/>}</GradientIcon><GradientLabel>{sharing ? 'Stop sharing' : 'Share Screen (Beta)'}</GradientLabel>
         </button>}
+        {!supported && <p className="room-panel-hint">This browser can watch shared screens but cannot start screen capture.</p>}
         {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
         {warning && <p className="mt-2 text-xs text-amber-400">{warning}</p>}
         {iceWarning && <p className="mt-2 text-xs text-amber-400">{iceWarning}</p>}

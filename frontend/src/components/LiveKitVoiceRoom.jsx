@@ -1,3 +1,5 @@
+import GradientIcon from './GradientIcon';
+import GradientLabel from './GradientLabel';
 import { useState } from 'react';
 import { ConnectionState } from '../media/provider';
 import { useConnectionState, useIsMuted, useIsSpeaking, useLocalParticipant, useParticipants } from '../media/provider';
@@ -30,11 +32,11 @@ export default function LiveKitVoiceRoom({ variant = 'classic', className = '' }
     const voiceUsers = active ? participants.filter(person => person.identity) : [];
     return <div className={`room-voice livekit-voice ${className}`} data-room-variant={variant} data-voice-provider="livekit" data-voice-state={connection}>
         <div className="livekit-voice-heading"><button type="button" className="livekit-voice-title" aria-expanded={expanded} aria-controls="livekit-voice-participants" onClick={() => setExpanded(!expanded)}>
-            <span className="livekit-voice-icon"><PhoneCall size={18} /></span><span><strong>Voice Call</strong><span className="livekit-voice-status" role="status">{joining ? 'Joining voice…' : mediaStateLabel(connection)}</span></span>
-            <span className="livekit-voice-count"><Users size={13} />{voiceUsers.length}</span>{expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            <span className="livekit-voice-icon"><GradientIcon><PhoneCall size={18} /></GradientIcon></span><span><strong><GradientLabel>Voice Call</GradientLabel></strong><span className="livekit-voice-status" role="status">{joining ? 'Joining voice…' : mediaStateLabel(connection)}</span></span>
+            <span className="livekit-voice-count"><GradientIcon><Users size={13} /></GradientIcon>{voiceUsers.length}</span>{expanded ? <GradientIcon><ChevronUp size={15} /></GradientIcon> : <GradientIcon><ChevronDown size={15} /></GradientIcon>}
         </button></div>
         <div className="livekit-voice-actions">
-            {active || joining ? <><button type="button" aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'} disabled={!connected || joining || micBusy} onClick={() => void act('toggleMicrophone')}>{isMicrophoneEnabled ? <Mic size={15} /> : <MicOff size={15} />}{isMicrophoneEnabled ? 'Mute' : 'Unmute'}</button><button type="button" className="livekit-voice-leave" onClick={() => void act('leave')}><PhoneOff size={15} />{isCameraEnabled ? 'Leave call' : 'Leave Voice'}</button></> : <button type="button" className="room-voice-join livekit-voice-join" disabled={!roomActionsEnabled} onClick={() => { setExpanded(true); void act('joinVoice'); }}><PhoneCall size={15} />Join Voice</button>}
+            {active || joining ? <><button type="button" aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'} disabled={!connected || joining || micBusy} onClick={() => void act('toggleMicrophone')}>{isMicrophoneEnabled ? <GradientIcon><Mic size={15} /></GradientIcon> : <GradientIcon><MicOff size={15} /></GradientIcon>}<GradientLabel>{isMicrophoneEnabled ? 'Mute' : 'Unmute'}</GradientLabel></button><button type="button" className="livekit-voice-leave" onClick={() => void act('leave')}><GradientIcon><PhoneOff size={15} /></GradientIcon><GradientLabel>{isCameraEnabled ? 'Leave call' : 'Leave Voice'}</GradientLabel></button></> : <button type="button" className="room-voice-join livekit-voice-join" disabled={!roomActionsEnabled} onClick={() => { setExpanded(true); void act('joinVoice'); }}><GradientIcon><PhoneCall size={15} /></GradientIcon><GradientLabel>Join Voice</GradientLabel></button>}
         </div>
         {error && <p className="livekit-voice-error" role="alert">{error}</p>}
         <div id="livekit-voice-participants" hidden={!expanded}>

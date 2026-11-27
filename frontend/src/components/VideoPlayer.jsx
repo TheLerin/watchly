@@ -1,3 +1,5 @@
+import GradientIcon from './GradientIcon';
+import GradientLabel from './GradientLabel';
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import ReactPlayer from 'react-player/lazy'; // FIX #3: lazy import loads only the needed adapter, not all adapters
 import { useRoom } from '../context/RoomContext';
@@ -16,6 +18,9 @@ import PlaylistControls from './player/PlaylistControls';
 import ViewerPlayerControls from './player/ViewerPlayerControls';
 import { playerEventIntent } from '../utils/playerInteraction';
 import TheaterIconButton from './TheaterIconButton';
+import ScreenShareStage from './player/ScreenShareStage';
+import { useRoomScreenShare } from '../context/ScreenShareContext';
+import { createReadinessReporter } from '../utils/readinessReporter';
 import { inspectLocalMedia } from '../utils/mediaInspector';
 import { parseSubtitleFileOffThread } from '../utils/subtitleWorker';
 import { extractMatroskaSubtitle } from '../utils/matroskaSubtitles';
@@ -70,6 +75,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
 
     // ── Refs ─────────────────────────────────────────────────────────────────
     const playerRef          = useRef(null);
+    const { active: screenShareActive } = useRoomScreenShare();
+    const readinessReporter = useMemo(() => createReadinessReporter({ send: markLocalMediaStatus }), [markLocalMediaStatus]);
+    useEffect(() => () => readinessReporter.dispose(), [readinessReporter]);
     const nativeVideoRef     = useRef(null);
     const playerContainerRef = useRef(null);
     const localFileInputRef  = useRef(null);
@@ -1206,6 +1214,23 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
         if (preferredTrack) void handleSubtitleChange(preferredTrack.id);
     }, [activeSubtitleId, handleSubtitleChange, isLocalReady, subtitleLoadingId, subtitleTracks]);
 
+    useEffect(() => { readinessReporter.reset(); }, [readinessReporter, videoState.localMedia?.sessionId]);
+    useEffect(() => { if (playerError) readinessReporter.reset(); }, [playerError, readinessReporter]);
+
+    // Keep the movie mounted/in sync while the shared screen owns the visible stage and audio.
+    useEffect(() => {
+        if (!screenShareActive) return;
+        const element = nativeVideoRef.current || (isYouTube ? playerRef.current?.getInternalPlayer?.() : null);
+        if (element && typeof element.muted === 'boolean') {
+            const muted = element.muted; element.muted = true;
+            return () => { element.muted = muted; };
+        }
+        if (element?.mute && element?.isMuted) {
+            const muted = element.isMuted(); element.mute();
+            return () => { if (!muted) element.unMute?.(); };
+        }
+    }, [screenShareActive, isPlayerReady, playerUrl, isYouTube]);
+
     // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div className={`room-video-player flex h-full w-full flex-col gap-3 ${className}`} data-room-appearance={appearance} data-open-tool={activeTheaterTool || ''}>
@@ -1255,13 +1280,9 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                             <button type="submit" disabled={!roomActionsEnabled || !inputUrl.trim()}
-                                className="watchly-action rounded-xl px-4 py-2 text-xs font-bold transition active:scale-95 disabled:opacity-40">
-                                Play Now
-                            </button>
+                                className="watchly-action rounded-xl px-4 py-2 text-xs font-bold transition active:scale-95 disabled:opacity-40"><GradientLabel>Play Now</GradientLabel></button>
                             <button type="button" disabled={!roomActionsEnabled || !inputUrl.trim()} onClick={handleQueueAdd}
-                                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/[0.06] active:scale-95 disabled:opacity-40">
-                                Queue
-                            </button>
+                                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/[0.06] active:scale-95 disabled:opacity-40"><GradientLabel>Queue</GradientLabel></button>
                         </div>
                     </form>
                     <button
@@ -1274,8 +1295,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                         className="flex shrink-0 items-center gap-2 rounded-2xl border border-white/10 bg-black/80 px-3 text-xs font-bold text-white transition hover:bg-white/[0.06] disabled:opacity-50"
                         title="Play a file that stays on each person’s device"
                     >
-                        <FileVideo size={15} />
-                        <span>Watch Local File</span>
+                        <GradientIcon><FileVideo size={15} /></GradientIcon>
+                        <span><GradientLabel>Watch Local File</GradientLabel></span>
                     </button>
                     {/* Source badge */}
                     {(() => {
@@ -1355,7 +1376,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             toast.success('Resynced to room time.');
                         }}
                         className="flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 font-bold text-zinc-300 hover:bg-white/[0.06]"
-                    ><RefreshCw size={12}/> Resync</button>}
+                    ><GradientIcon><RefreshCw size={12}/></GradientIcon><GradientLabel>Resync</GradientLabel></button>}
                     {isLocalReady && !canControlPlayback && <button
                         type="button"
                         onClick={async () => {
@@ -1372,7 +1393,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             }
                         }}
                         className="flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 font-bold text-zinc-300 hover:bg-white/[0.06]"
-                    ><Play size={12}/> Enable playback</button>}
+                    ><GradientIcon><Play size={12}/></GradientIcon><GradientLabel>Enable playback</GradientLabel></button>}
                     {canControlPlayback && !everyoneReady && !videoState.isPlaying && (
                         <button
                             type="button"
@@ -1384,7 +1405,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                             }}
                             className="watchly-action rounded-xl border border-white/10 px-3 py-1.5 font-bold transition disabled:opacity-50"
                         >
-                            {isStartingAnyway ? 'Starting…' : 'Start anyway'}
+                            <GradientLabel>{isStartingAnyway ? 'Starting…' : 'Start anyway'}</GradientLabel>
                         </button>
                     )}
                 </div>
@@ -1431,7 +1452,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
             </div>
 
             {/* ── Player ────────────────────────────────────────────────── */}
-            <div ref={playerContainerRef} className="room-player-surface group relative min-h-0 flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl shadow-black/50">
+            <div ref={playerContainerRef} data-screen-sharing={screenShareActive} className="room-player-surface group relative min-h-0 flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl shadow-black/50">
+                <ScreenShareStage />
                 <AnimatePresence mode="wait">
                     {!hasContent ? (
                         <MotionDiv key="empty"
@@ -1507,8 +1529,8 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             }}
                                             className="watchly-action mt-5 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition disabled:opacity-50"
                                         >
-                                            <FolderOpen size={16} />
-                                            {isFingerprinting ? `Checking ${fingerprintProgress}%` : 'Choose matching file'}
+                                            <GradientIcon><FolderOpen size={16} /></GradientIcon>
+                                            <GradientLabel>{isFingerprinting ? `Checking ${fingerprintProgress}%` : 'Choose matching file'}</GradientLabel>
                                         </button>
                                         {localFileError && (
                                             <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
@@ -1557,7 +1579,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                                 setPlayerError(null);
                                                 const switched = localPlaybackSwitchRef.current;
                                                 localPlaybackSwitchRef.current = false;
-                                                markLocalMediaStatus(videoState.localMedia.sessionId, 'READY');
+                                                readinessReporter.report(videoState.localMedia.sessionId, 'READY');
                                                 if (switched && isConnected && playback) applySynchronizedState(nativeVideoRef.current, playback, { force: true });
                                                 return;
                                             }
@@ -1681,11 +1703,11 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         // correction skips during stalls (same as ReactPlayer path).
                                         onWaiting={() => {
                                             updateBuffering(true);
-                                            if (isLocal && !localPlaybackSwitchRef.current) markLocalMediaStatus(videoState.localMedia.sessionId, 'BUFFERING', 'Local player is buffering');
+                                            if (isLocal && !localPlaybackSwitchRef.current) readinessReporter.report(videoState.localMedia.sessionId, 'BUFFERING', 'Local player is buffering');
                                         }}
                                         onPlaying={() => {
                                             updateBuffering(false);
-                                            if (isLocal && !localPlaybackSwitchRef.current) markLocalMediaStatus(videoState.localMedia.sessionId, 'READY');
+                                            if (isLocal && !localPlaybackSwitchRef.current) readinessReporter.report(videoState.localMedia.sessionId, 'READY');
                                         }}
                                         // FIX #9: Update buffer fill progress
                                         onTimeUpdate={() => {
@@ -1773,7 +1795,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                         url={playerUrl}
                                         playing={videoState.isPlaying && (!isPlaylist || playlist.ready)}
                                         controls={canControlPlayback}
-                                        {...(!isYouTube ? { volume: embedVolume / 100, muted: embedMuted } : {})}
+                                        {...(!isYouTube ? { volume: embedVolume / 100, muted: screenShareActive || embedMuted } : {})}
                                         width="100%"
                                         height="100%"
                                         onReady={handleReady}
@@ -1887,8 +1909,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             }}
                                             className="watchly-action mb-4 flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold transition"
                                         >
-                                            <RefreshCw size={14} /> Try Anyway
-                                        </button>
+                                            <GradientIcon><RefreshCw size={14} /></GradientIcon><GradientLabel>Try Anyway</GradientLabel></button>
                                     )}
                                     {/* Retry button */}
                                     {canControlPlayback && rawUrl && (
@@ -1896,8 +1917,7 @@ const VideoPlayer = ({ ambientTargetRef, appearance = 'classic', ambientEnabled 
                                             onClick={() => { setPlayerError(null); loadVideo(rawUrl); }}
                                             className="flex items-center gap-2 px-4 py-2 mb-4 rounded-xl text-sm font-semibold transition-all hover:scale-105"
                                             style={{ background: 'var(--glass-bg-strong)', color: 'var(--text)', border: '1px solid var(--glass-border)' }}>
-                                            <RefreshCw size={14} /> Retry
-                                        </button>
+                                            <GradientIcon><RefreshCw size={14} /></GradientIcon><GradientLabel>Retry</GradientLabel></button>
                                     )}
                                     {isGDriveProxy && (
                                         <div className="border border-blue-500/30 bg-blue-500/10 rounded-xl p-4 text-xs text-blue-200 max-w-sm text-left space-y-1">

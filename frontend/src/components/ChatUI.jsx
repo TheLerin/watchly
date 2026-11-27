@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Send, Check, MessageSquare } from 'lucide-react';
 import { useRoom } from '../context/RoomContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import GradientIcon from './GradientIcon';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -169,6 +170,8 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visib
                     />
                     <MotionButton
                         type="submit"
+                        aria-label="Send message"
+                        title="Send message"
                         whileTap={{ scale: 0.92 }}
                         disabled={!input.trim()}
                         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/40 text-white backdrop-blur-sm transition hover:bg-black/60 disabled:opacity-40"
@@ -176,11 +179,11 @@ const ChatUI = ({ hideHeader = false, variant = 'classic', className = '', visib
                         <AnimatePresence mode="wait">
                             {sent ? (
                                 <MotionSpan key="sent" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                                    <Check size={15} />
+                                    <GradientIcon><Check size={15} /></GradientIcon>
                                 </MotionSpan>
                             ) : (
                                 <MotionSpan key="send" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                                    <Send size={15} />
+                                    <GradientIcon><Send size={15} /></GradientIcon>
                                 </MotionSpan>
                             )}
                         </AnimatePresence>

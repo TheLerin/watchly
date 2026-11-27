@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useRoom } from './RoomContext';
 import { MediaCallProvider } from '../components/RoomMediaCall';
+import { ScreenShareProvider } from './ScreenShareContext';
 
 const RoomSessionContext = createContext(null);
 export const useRoomSession = () => useContext(RoomSessionContext);
@@ -42,5 +43,5 @@ export function RoomSessionProvider({ children }) {
     const value = useMemo(() => ({ localFileRef, localFileUrlRef, localSessionRef, localRemuxSessionRef,
         localFileUrl, localPlaybackUrl, setLocalPlaybackUrl, installLocalFile, releaseLocalFile, aliveRef }),
     [localFileUrl, localPlaybackUrl, installLocalFile, releaseLocalFile]);
-    return <RoomSessionContext.Provider value={value}><MediaCallProvider>{children}</MediaCallProvider></RoomSessionContext.Provider>;
+    return <RoomSessionContext.Provider value={value}><ScreenShareProvider><MediaCallProvider>{children}</MediaCallProvider></ScreenShareProvider></RoomSessionContext.Provider>;
 }

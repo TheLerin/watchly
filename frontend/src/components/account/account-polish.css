@@ -1,0 +1,33 @@
+.auth-page { --bg-base: #030304; --bg: #080809; --text: #f8f8fa; --text-sub: #aaaab3; --text-muted: #aaaab3; background: var(--watchly-page-background); }
+.auth-page .account-header { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(1320px, calc(100% - 32px)); min-height: 60px; padding: 7px 16px; border: 1px solid rgb(255 255 255 / 7%); border-radius: 21px; background: var(--watchly-navbar-background); backdrop-filter: blur(19px); }
+.auth-page .account-brand { font-size: 16px; gap: 10px; }
+.auth-page .account-brand img { width: 38px; height: 38px; }
+.auth-page .account-main { display: flex; align-items: center; justify-content: center; width: min(480px, calc(100% - 32px)); min-height: 100dvh; padding: 116px 0 48px; }
+.auth-card { width: min(100%, 420px); margin: 0 auto; padding: 32px; border-radius: 24px; background: linear-gradient(145deg, rgb(255 255 255 / 4%), rgb(255 255 255 / 1.5%)), #080809; border: 1px solid rgb(255 255 255 / 9%); box-shadow: 0 24px 70px rgb(0 0 0 / 20%); color: #f8f8fa; }
+.auth-card .account-eyebrow { margin: 0 0 14px; color: var(--watchly-mint); letter-spacing: .16em; font-size: 10px; }
+.auth-page .auth-card h1, .account-overlay .auth-card h1 { margin: 0 0 12px; font-size: clamp(25px, 4vw, 29px); letter-spacing: -.035em; line-height: 1.2; }
+.auth-card .account-muted { color: #aaaab3; line-height: 1.65; font-size: 13px; }
+.auth-card .account-muted.small { font-size: 11px; }
+.auth-card > .account-secondary { margin-top: 26px; }
+.auth-card .account-primary, .auth-card > .account-secondary { min-height: 48px; border-radius: 13px; font-size: 13px; }
+.auth-card .account-secondary { background: rgb(255 255 255 / 3%); border-color: rgb(255 255 255 / 11%); color: #f4f4f7; }
+.auth-card .auth-google { gap: 11px; }
+.auth-google > svg { flex: none; }
+.auth-card label { margin-top: 18px; font-size: 12px; color: #d6d6de; }
+.auth-card input { min-height: 48px; border-radius: 12px; background: #050506; border-color: rgb(255 255 255 / 12%); color: #f5f5f8; }
+.auth-card input::placeholder { color: #777780; }
+.auth-card input:focus { border-color: var(--watchly-cyan); box-shadow: 0 0 0 3px rgb(66 204 236 / 8%); }
+.auth-card .account-divider { margin-top: 24px; color: #9696a1; }
+.auth-card .account-divider::before, .auth-card .account-divider::after { background: rgb(255 255 255 / 9%); }
+.auth-card .account-text-action { color: #b8b8c2; }
+.auth-card > .account-text-action { display: flex; width: fit-content; margin: 18px auto -8px; }
+.auth-card .account-muted a { color: #d0d0d9; text-decoration: underline; text-underline-offset: 3px; transition: color 650ms ease; }
+.auth-card .account-muted a:hover { color: var(--watchly-cyan); }
+.auth-card .account-error { color: #fda4af; }
+.account-overlay .account-dialog:has(.auth-card) { border: 1px solid rgb(255 255 255 / 10%); background: #080809; width: min(420px, 100%); }
+.account-overlay .account-dialog .auth-card { padding-top: 44px; border: 0; background: transparent; }
+@media (max-width: 600px) {
+    .auth-page .account-header { top: max(10px, env(safe-area-inset-top)); width: calc(100% - 20px); min-height: 56px; padding: 6px 12px; border-radius: 18px; }
+    .auth-page .account-main { padding-top: 100px; padding-bottom: 32px; }
+    .auth-card { padding: 25px 22px; border-radius: 21px; }
+}

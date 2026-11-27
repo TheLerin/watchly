@@ -1,3 +1,5 @@
+import GradientIcon from './GradientIcon';
+
 const TheaterIconButton = ({ icon, label, active = false, onClick, controls, className = '' }) => (
     <button
         type="button"
@@ -9,7 +11,7 @@ const TheaterIconButton = ({ icon, label, active = false, onClick, controls, cla
         title={label}
         onClick={onClick}
     >
-        {icon}
+        <GradientIcon>{icon}</GradientIcon>
     </button>
 );
 

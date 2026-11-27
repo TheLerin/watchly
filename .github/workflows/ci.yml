@@ -31,6 +31,9 @@ jobs:
           LIVEKIT_ROOM_NAMESPACE: legacy-render
           TURNSTILE_SITE_KEY: ci-placeholder-site-key
           TURNSTILE_SECRET_KEY: ci-placeholder-secret-key
+          LIVEKIT_ROOM_NAMESPACE: legacy-render
+          TURNSTILE_SITE_KEY: ci-placeholder-site-key
+          TURNSTILE_SECRET_KEY: ci-placeholder-secret-key
           LIVEKIT_URL: wss://ci.example.livekit.cloud
           LIVEKIT_API_KEY: ci-placeholder-key
           LIVEKIT_API_SECRET: ci-placeholder-secret

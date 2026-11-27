@@ -1,3 +1,5 @@
+import GradientIcon from '../GradientIcon';
+import GradientLabel from '../GradientLabel';
 import React, { useEffect, useState } from 'react';
 import { Maximize, Minimize, PictureInPicture2, Volume2, VolumeX } from 'lucide-react';
 
@@ -47,11 +49,11 @@ export default function ViewerPlayerControls({ getPlayer, youtube, native, audio
     return <div className="viewer-player-controls absolute inset-x-0 bottom-0 z-10 flex flex-wrap items-center gap-2 bg-black/85 px-3 py-2 text-xs text-zinc-200" data-out-of-sync={outOfSync}>
         <span className="text-[10px] text-zinc-400">{playing ? 'Room playing' : 'Room paused'} · Shared controls are read-only</span>
         <progress aria-label="Read-only room playback progress" value={progress.time} max={progress.duration || 1} className="h-1 min-w-12 flex-1 accent-white" />
-        <button type="button" aria-label={muted ? 'Unmute video locally' : 'Mute video locally'} onClick={toggleMute} className="p-2">{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
+        <button type="button" aria-label={muted ? 'Unmute video locally' : 'Mute video locally'} onClick={toggleMute} className="p-2">{muted ? <GradientIcon><VolumeX size={16} /></GradientIcon> : <GradientIcon><Volume2 size={16} /></GradientIcon>}</button>
         <input type="range" aria-label="Local video volume" min="0" max="100" value={volume} onChange={event => changeVolume(Number(event.target.value))} className="w-16 accent-white" />
-        <button type="button" aria-label="Fullscreen video locally" onClick={onFullscreen} className="p-2">{fullscreen ? <Minimize size={16} /> : <Maximize size={16} />}</button>
-        {native && document.pictureInPictureEnabled && <button type="button" aria-label="Picture-in-picture video locally" onClick={pip} className="p-2"><PictureInPicture2 size={16} /></button>}
-        {outOfSync && <div className="viewer-sync-status flex w-full items-center justify-between gap-2" role="status"><span>Playback is controlled by the Host and Moderators.</span><button type="button" onClick={onSync} className="shrink-0 rounded-lg border border-white/30 px-3 py-2 font-bold">Sync to Room</button></div>}
+        <button type="button" aria-label="Fullscreen video locally" onClick={onFullscreen} className="p-2">{fullscreen ? <GradientIcon><Minimize size={16} /></GradientIcon> : <GradientIcon><Maximize size={16} /></GradientIcon>}</button>
+        {native && document.pictureInPictureEnabled && <button type="button" aria-label="Picture-in-picture video locally" onClick={pip} className="p-2"><GradientIcon><PictureInPicture2 size={16} /></GradientIcon></button>}
+        {outOfSync && <div className="viewer-sync-status flex w-full items-center justify-between gap-2" role="status"><span>Playback is controlled by the Host and Moderators.</span><button type="button" onClick={onSync} className="shrink-0 rounded-lg border border-white/30 px-3 py-2 font-bold"><GradientLabel>Sync to Room</GradientLabel></button></div>}
         {pipError && <span role="status">{pipError}</span>}
     </div>;
 }

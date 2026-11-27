@@ -46,6 +46,7 @@ const audio = page => page.evaluate(async () => {
         const edge=process.env.SECOND_BROWSER_EXECUTABLE||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
         for(const [executablePath,name,color,frequency] of [[chrome,'A',[82,90,240],440],[existsSync(edge)?edge:chrome,'B',[41,240,110],880]]) {
             const browser=await chromium.launch({executablePath,headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',`--use-file-for-fake-video-capture=${cameraFile(`camera-${name}.y4m`,color)}`,`--use-file-for-fake-audio-capture=${tone(`call-${name}.wav`,frequency)}`,'--mute-audio','--disable-background-timer-throttling','--disable-renderer-backgrounding']}); browsers.push(browser);
+            require('./localOnlyBrowser.cjs')(browser);
             const context=await browser.newContext({viewport:{width:1366,height:768},hasTouch:true});const page=await context.newPage();pages.push(page);page.on('pageerror',error=>errors.push(error.message));
             await page.addInitScript(require('./soundEffectsChecks.cjs').instrument);
             await page.addInitScript(()=>{
@@ -68,7 +69,8 @@ const audio = page => page.evaluate(async () => {
         await wait(async()=> (await require('./soundEffectsChecks.cjs').counts(a)).roomJoin===1,'new room member did not play one cue');
         assert.equal((await require('./soundEffectsChecks.cjs').counts(b)).roomJoin,0,'self room join played a cue');
         for(const page of [a,b])assert.equal(await page.evaluate(()=>window.callCaptures.length+window.callTokenRequests),0);
-        const snapshot=()=>a.evaluate(async()=>{const{socket}=await import('/src/socket.js');return new Promise(resolve=>socket.emit('room:snapshot',{},result=>resolve(result.snapshot)));});
+        let lastSnapshot=0;
+        const snapshot=async()=>{await sleep(Math.max(0,400-(Date.now()-lastSnapshot)));lastSnapshot=Date.now();return a.evaluate(async()=>{const{socket}=await import('/src/socket.js');return new Promise((resolve,reject)=>socket.emit('room:snapshot',{},result=>result.ok?resolve(result.snapshot):reject(new Error(result.error?.code||'Snapshot failed'))));});};
         await open(a,'Watch');await a.locator('#room-link-input').fill(`${base}/bg-video.mp4`);await a.getByRole('button',{name:'Play Now',exact:true}).click();
         const movie=page=>page.locator('.room-player-surface video');await movie(a).waitFor();await movie(b).waitFor();
         for(const page of [a,b]){await page.evaluate(async()=>{const url=performance.getEntriesByType('resource').map(entry=>entry.name).find(url=>url.includes('/deps/livekit-client.js'));const{Room,RoomEvent}=await import(url);const emit=Room.prototype.emit;window.callConnectionStates=[];Room.prototype.emit=function(event,...args){window.testCallRoom=this;if(event===RoomEvent.ConnectionStateChanged)window.callConnectionStates.push(args[0]);return emit.call(this,event,...args);};});await open(page,'Call');await page.getByRole('button',{name:'Join Voice',exact:true}).click();await page.getByRole('button',{name:'Mute microphone',exact:true}).waitFor();}
@@ -76,6 +78,17 @@ const audio = page => page.evaluate(async () => {
         assert.equal((await require('./soundEffectsChecks.cjs').counts(a)).voiceJoin,2);assert.equal((await require('./soundEffectsChecks.cjs').counts(b)).voiceJoin,1);
         await a.getByRole('button',{name:'Mute microphone',exact:true}).click();await wait(async()=>(await audio(b)).rms<.003,'A mute did not silence remote audio');
         for(const page of [a,b]){await open(page,'Video');await page.getByRole('button',{name:'Turn camera on',exact:true}).click();await page.locator('.video-call-content:visible[data-camera-on="true"]').waitFor();}
+        await wait(async()=>await a.locator('.call-camera-tile[data-local="true"] video').count()>0,'local camera preview missing');
+        assert.equal(await a.locator('.call-camera-tile[data-local="true"] video').evaluate(element=>getComputedStyle(element).transform),'matrix(-1, 0, 0, 1, 0, 0)');
+        await wait(async()=>await a.locator('.call-camera-tile[data-local="false"] video').count()>0,'remote camera missing');
+        assert.equal(await a.locator('.call-camera-tile[data-local="false"] video').first().evaluate(element=>getComputedStyle(element).transform),'none');
+        assert.ok(await a.locator('.video-call-actions button').evaluateAll(elements=>elements.every(element=>element.getAttribute('aria-label')&&!element.textContent.trim())),'video controls must remain labelled icons');
+        await a.getByRole('button',{name:'Call device settings',exact:true}).click();
+        await a.getByLabel('Mirror my preview',{exact:true}).uncheck();
+        assert.equal(await a.locator('.call-camera-tile[data-local="true"] video').evaluate(element=>getComputedStyle(element).transform),'none');
+        await a.getByLabel('Mirror my preview',{exact:true}).check();
+        await a.getByRole('button',{name:'Call device settings',exact:true}).click();
+        evidence.checks.push('Local preview is mirrored with an editable preference; remote cameras retain orientation and all video actions are labelled icons');
         const tile=(page,name)=>page.locator('.call-camera-tile').filter({hasText:name});
         const decode=async(page,name)=>tile(page,name).locator('video').evaluate(video=>{const canvas=document.createElement('canvas');canvas.width=4;canvas.height=4;const context=canvas.getContext('2d');context.drawImage(video,0,0,4,4);return{time:video.currentTime,ready:video.readyState,pixel:[...context.getImageData(2,2,1,1).data],frames:video.getVideoPlaybackQuality().totalVideoFrames};});
         await wait(async()=>{try{const value=await decode(b,'Camera A');return value.ready>=2&&value.frames>2&&value.pixel[0]>170&&value.pixel[2]<70;}catch{return false;}},'B did not decode A red camera');

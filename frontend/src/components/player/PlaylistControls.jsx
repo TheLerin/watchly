@@ -1,3 +1,5 @@
+import GradientIcon from '../GradientIcon';
+import GradientLabel from '../GradientLabel';
 import React from 'react';
 import { SkipBack, SkipForward, Play, Pause } from 'lucide-react';
 import { useRoom } from '../../context/RoomContext';
@@ -16,9 +18,9 @@ export default function PlaylistControls({ ready }) {
             <div className="mt-1 text-[10px] text-zinc-500" role="status">{state.playlistStatus === 'finished' ? 'Playlist finished' : state.playlistStatus === 'error' ? 'Playlist unavailable' : ready ? `${localReadiness.readyCount}/${localReadiness.totalCount} ready` : 'Loading current item…'}</div>
         </div>
         {canControlPlayback && <>
-            <button type="button" className={button} aria-label="Previous playlist video" disabled={!roomActionsEnabled || !count || state.playlistStatus === 'loading' || (state.playlistIndex === 0 && getExpectedPosition(state) <= 5)} onClick={() => updatePlaylist('PREVIOUS')}><SkipBack size={14}/> Previous</button>
-            <button type="button" className={button} disabled={!roomActionsEnabled || !ready} onClick={() => state.isPlaying ? pauseVideo(getExpectedPosition(state)) : playVideo()}><span>{state.isPlaying ? <Pause size={14}/> : <Play size={14}/>}</span>{state.isPlaying ? 'Pause playlist' : 'Play Now'}</button>
-            <button type="button" className={button} aria-label="Next playlist video" disabled={!roomActionsEnabled || !count || state.playlistStatus !== 'ready' || state.playlistIndex >= count - 1} onClick={() => updatePlaylist('NEXT')}><SkipForward size={14}/> Next</button>
+            <button type="button" className={button} aria-label="Previous playlist video" disabled={!roomActionsEnabled || !count || state.playlistStatus === 'loading' || (state.playlistIndex === 0 && getExpectedPosition(state) <= 5)} onClick={() => updatePlaylist('PREVIOUS')}><GradientIcon><SkipBack size={14}/></GradientIcon><GradientLabel>Previous</GradientLabel></button>
+            <button type="button" className={button} disabled={!roomActionsEnabled || !ready} onClick={() => state.isPlaying ? pauseVideo(getExpectedPosition(state)) : playVideo()}><span>{state.isPlaying ? <GradientIcon><Pause size={14}/></GradientIcon> : <GradientIcon><Play size={14}/></GradientIcon>}</span><GradientLabel>{state.isPlaying ? 'Pause playlist' : 'Play Now'}</GradientLabel></button>
+            <button type="button" className={button} aria-label="Next playlist video" disabled={!roomActionsEnabled || !count || state.playlistStatus !== 'ready' || state.playlistIndex >= count - 1} onClick={() => updatePlaylist('NEXT')}><GradientIcon><SkipForward size={14}/></GradientIcon><GradientLabel>Next</GradientLabel></button>
         </>}
     </div>;
 }
