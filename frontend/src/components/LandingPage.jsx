@@ -134,10 +134,14 @@ const LandingNavbar = ({ onBrand, onCreate, onNavigate, storyActive }) => (
     </button>
 
     <nav className="landing-nav-links" aria-label="Landing page">
-      <button type="button" onClick={() => onNavigate(1)}>Experience</button>
-      <button type="button" onClick={() => onNavigate(2)}>Features</button>
-      <button type="button" onClick={() => onNavigate(3)}>Voice</button>
-      <button type="button" onClick={() => onNavigate(4)}>Trust</button>
+      {['Experience', 'Features', 'Voice', 'Trust'].map((label, index) => (
+        <button type="button" key={label} onClick={() => onNavigate(index + 1)}>
+          <span className="landing-nav-label">
+            <span className="landing-nav-text">{label}</span>
+            <span className="landing-nav-gradient" aria-hidden="true">{label}</span>
+          </span>
+        </button>
+      ))}
     </nav>
 
     <div className="landing-nav-actions">

@@ -21,6 +21,13 @@
   /* Lift the blue stop on filled controls so their text stays readable throughout the cycle. */
   --watchly-action-blue: #298cc2;
   --watchly-spectrum: linear-gradient(135deg, var(--watchly-blue), var(--watchly-cyan), var(--watchly-turquoise), var(--watchly-mint), var(--watchly-lavender), var(--watchly-gold));
+  --watchly-action-gradient:
+    radial-gradient(ellipse, var(--watchly-gold), transparent 76%),
+    radial-gradient(ellipse, #c8b5ef, transparent 78%),
+    radial-gradient(ellipse, var(--watchly-mint), transparent 82%),
+    linear-gradient(135deg, var(--watchly-action-blue), var(--watchly-cyan) 36%, var(--watchly-turquoise));
+  --watchly-action-size: 74% 172%, 90% 164%, 115% 180%, 100% 100%;
+  --watchly-action-origin: 178% -6%, 242% 130%, 186% 80%, center;
   --bg-base: var(--watchly-carbon);
   --glass-bg: rgba(255,255,255,0.05);
   --glass-bg-strong: rgba(255,255,255,0.08);
@@ -124,14 +131,9 @@ body :is(small, .account-muted, .person-name > span, .appearance-choice-descript
 .room-launcher-tabs button.is-active,
 .livekit-voice-actions .livekit-voice-join,
 .room-shell[data-room-appearance="cinematic"] .room-voice-join {
-  --watchly-action-origin: 178% -6%, 242% 130%, 186% 80%, center;
   background-color: var(--watchly-turquoise);
-  background-image:
-    radial-gradient(ellipse, var(--watchly-gold), transparent 76%),
-    radial-gradient(ellipse, #c8b5ef, transparent 78%),
-    radial-gradient(ellipse, var(--watchly-mint), transparent 82%),
-    linear-gradient(135deg, var(--watchly-action-blue), var(--watchly-cyan) 36%, var(--watchly-turquoise));
-  background-size: 74% 172%, 90% 164%, 115% 180%, 100% 100%;
+  background-image: var(--watchly-action-gradient);
+  background-size: var(--watchly-action-size);
   background-position: var(--watchly-action-origin);
   background-repeat: no-repeat;
   color: var(--watchly-ink);

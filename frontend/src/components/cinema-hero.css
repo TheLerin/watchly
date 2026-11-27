@@ -30,9 +30,9 @@
   left: 50%;
   width: min(calc(100% - 32px), 1320px);
   min-height: 60px;
-  padding: 7px 8px 7px 14px;
+  padding: 7px 12px 7px 14px;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 20px;
   color: white;
@@ -82,31 +82,94 @@
 }
 
 .landing-nav-links {
+  justify-self: center;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid rgb(255 255 255 / 6%);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 2%);
+  gap: 4px;
 }
 
 .landing-nav-links button,
 .landing-nav-join {
-  min-height: 36px;
-  padding: 0 13px;
-  border-radius: 999px;
+  min-height: 44px;
+  padding: 0 12px;
   background: transparent;
   color: rgb(255 255 255 / 62%);
   font-size: 0.78rem;
   font-weight: 600;
-  transition: color 180ms ease, background 180ms ease;
+  transition: color 650ms ease;
 }
 
-.landing-nav-links button:hover,
 .landing-nav-join:hover {
   color: white;
-  background: rgb(255 255 255 / 7%);
+}
+
+.landing-nav-label {
+  position: relative;
+  display: inline-block;
+}
+
+.landing-nav-text,
+.landing-nav-gradient {
+  transition: opacity 650ms ease;
+}
+
+.landing-nav-gradient {
+  position: absolute;
+  inset: 0;
+  background-image: var(--watchly-action-gradient);
+  background-size: var(--watchly-action-size);
+  background-position: var(--watchly-action-origin);
+  background-repeat: no-repeat;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  opacity: 0;
+  pointer-events: none;
+  animation: watchly-action-flow 32s ease-in-out infinite;
+}
+
+.landing-nav-links button:is(:hover, :focus-visible) .landing-nav-text { opacity: 0; }
+.landing-nav-links button:is(:hover, :focus-visible) .landing-nav-gradient { opacity: 1; }
+
+@media (forced-colors: active) {
+  .landing-nav-gradient { display: none; }
+  .landing-nav-text { transition: none; }
+  .landing-nav-links button:is(:hover, :focus-visible) .landing-nav-text { opacity: 1; }
+}
+
+.landing-navbar .account-nav-actions {
+  align-items: center;
+  gap: 12px;
+}
+
+.landing-navbar .account-nav-actions > :is(.account-text-action, .account-primary) {
+  height: 44px;
+  min-height: 44px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 13px;
+}
+
+.landing-navbar .account-nav-actions > .account-text-action {
+  padding-inline: 8px;
+  color: rgb(255 255 255 / 70%);
+  transition: color 200ms ease;
+}
+
+.landing-navbar .account-nav-actions > .account-text-action:hover { color: white; }
+
+.landing-navbar .account-nav-actions > .account-primary {
+  padding-inline: 16px;
+  gap: 8px;
+}
+
+.landing-navbar .account-primary svg { flex: none; }
+
+.landing-navbar .account-avatar-button {
+  width: 44px;
+  height: 44px;
+  padding: 4px;
+  border-radius: 50%;
 }
 
 .landing-nav-actions {
@@ -994,6 +1057,14 @@
     height: 33px;
   }
 
+  .landing-navbar .account-nav-actions { gap: 8px; }
+
+  .landing-navbar .account-nav-actions > :is(.account-text-action, .account-primary) { font-size: 12px; }
+
+  .landing-navbar .account-nav-actions > .account-primary { padding-inline: 10px; gap: 6px; }
+
+  .landing-navbar .account-nav-actions > .account-text-action { padding-inline: 4px; }
+
   .landing-nav-join {
     display: none;
   }
@@ -1220,6 +1291,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .landing-nav-gradient { animation: none; }
   .cinematic-experience,
   .cinema-screen-shell,
   .cinema-hero-copy,
