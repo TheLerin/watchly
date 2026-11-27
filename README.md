@@ -30,4 +30,3 @@ The [staging acceptance procedures](docs/STAGING_ACCEPTANCE.md) cover service co
 Tests: `npm test`, `npm --prefix frontend test`, `npm --prefix frontend run lint`, `npm --prefix backend test`, `npm run test:integration`, `npm run test:browser`, `npm run test:browser:harness`. Use `npm run test:runtime` for direct workerd WebSocket/SQLite/KDF/actual idle reconstruction without a TCP listener. The separate `test:integration` needs reachable localhost. Browser/Node simulations do not verify external providers. `test:soak` and `test:presence` record the bounded lifecycle/presence workloads.
 
 Production is not deployed by this repository's default CI. No paid resources are enabled. Staging can be explicitly dispatched through a GitHub environment after verification. See the deployment checklist before retiring any old service.
-<!-- Cloudflare staging deployment -->
