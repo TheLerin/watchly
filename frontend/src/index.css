@@ -85,19 +85,25 @@
 .room-launcher-tabs button.is-active,
 .livekit-voice-actions .livekit-voice-join,
 .room-shell[data-room-appearance="cinematic"] .room-voice-join {
+  --watchly-action-origin: 178% -6%, 242% 130%, 186% 80%, center;
   background-color: var(--watchly-turquoise);
+  background-image:
+    radial-gradient(ellipse, var(--watchly-gold), transparent 76%),
+    radial-gradient(ellipse, #c8b5ef, transparent 78%),
+    radial-gradient(ellipse, var(--watchly-mint), transparent 82%),
+    linear-gradient(135deg, var(--watchly-action-blue), var(--watchly-cyan) 36%, var(--watchly-turquoise));
+  background-size: 74% 172%, 90% 164%, 115% 180%, 100% 100%;
+  background-position: var(--watchly-action-origin);
+  background-repeat: no-repeat;
   color: var(--watchly-ink);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%), 0 4px 12px rgb(0 0 0 / 14%);
-  animation: watchly-action-color 36s linear infinite;
+  animation: watchly-action-flow 32s ease-in-out infinite;
 }
 
-@keyframes watchly-action-color {
-  0%, 100% { background-color: var(--watchly-turquoise); }
-  16% { background-color: var(--watchly-mint); }
-  32% { background-color: var(--watchly-gold); }
-  50% { background-color: var(--watchly-lavender); }
-  68% { background-color: var(--watchly-action-blue); }
-  84% { background-color: var(--watchly-cyan); }
+@keyframes watchly-action-flow {
+  0%, 100% { background-position: var(--watchly-action-origin); }
+  34% { background-position: 69% 4%, 400% 37%, 332% 12%, center; }
+  67% { background-position: -20% 105%, -170% -12%, 25% 140%, center; }
 }
 
 .watchly-action:enabled:hover,

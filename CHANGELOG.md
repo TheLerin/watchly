@@ -3,8 +3,8 @@
 ## V2.1 branding update - 27 November 2026, unreleased
 
 - Replaced the Watchly mark across the landing page, account pages, rooms, favicon and install icons.
-- Added solid primary action fills that gradually shift through blue, cyan, turquoise, mint, lavender and gold. The palette also appears in the startup and mid-playback buffering ring.
-- Kept a static turquoise fill when the device requests reduced motion.
+- Added soft gradients based on the Watchly logo. The colors shift gradually across primary actions and stay still when the device requests reduced motion.
+- Added recovery for missing page bundles after a deployment, with a single automatic reload and a manual retry if it fails again.
 
 ## V2.1 targeted follow-up - 26 November 2026, unreleased
 

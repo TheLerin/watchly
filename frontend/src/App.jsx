@@ -8,6 +8,7 @@ import { AuthProvider } from './context/AuthContext';
 import { SocialProvider } from './context/SocialContext';
 import PwaUpdateNotice from './components/PwaUpdateNotice';
 import { SoundEffectsProvider } from './context/SoundEffectsContext';
+import { cleanDeploymentRetryUrl, deploymentRetryUrl, isAssetLoadError } from './utils/deploymentRecovery';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const RoomLayout = lazy(loadRoomLayout);
@@ -30,10 +31,26 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('Watchly caught an error:', error, info);
+    if (navigator.onLine && isAssetLoadError(error)) {
+      const url = deploymentRetryUrl(window.location.href);
+      if (url) window.location.replace(url);
+    }
   }
 
   render() {
     if (this.state.hasError) {
+      if (isAssetLoadError(this.state.error)) {
+        return <div className="flex min-h-screen items-center justify-center bg-black p-6 text-center text-white">
+          <div><h1 className="text-2xl font-bold">Watchly couldn’t load</h1>
+            <p className="mt-2 text-zinc-400">Check your connection and reload to get the latest page.</p>
+            <button className="watchly-action mt-5 rounded-xl px-5 py-3 font-bold" onClick={() => {
+              const url = deploymentRetryUrl(window.location.href);
+              if (url) window.location.replace(url);
+              else window.location.reload();
+            }}>Reload Watchly</button>
+          </div>
+        </div>;
+      }
       return (
         <div style={{
           minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -61,6 +78,14 @@ class ErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+function ClearDeploymentRetry() {
+  useEffect(() => {
+    const url = cleanDeploymentRetryUrl(window.location.href);
+    if (url) window.history.replaceState(window.history.state, '', url);
+  }, []);
+  return null;
 }
 
 // ISSUE-32: Handles the 'watchly:kicked' custom event fired by RoomContext,
@@ -106,7 +131,7 @@ function App() {
               <Route path="/my-watchly" element={<MyWatchly />} />
               <Route path="/terms" element={<LegalPage kind="terms" />} />
               <Route path="/privacy" element={<LegalPage kind="privacy" />} />
-            </Routes></Suspense></ProtocolGuard>
+            </Routes><ClearDeploymentRetry /></Suspense></ProtocolGuard>
             {/* ISSUE-26: Toaster must be inside the tree so toasts render */}
             <PwaUpdateNotice />
             <Toaster

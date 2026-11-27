@@ -8,9 +8,9 @@ const { chromium } = require('../../frontend/node_modules/playwright');
 async function run() {
   const assets = path.resolve('frontend/dist');
   const worker = await readFile(path.join(assets, 'sw.js'), 'utf8');
-  let version = 1, activated = 0;
+  let version = 1, activated = 0, recoveryRequests = 0;
   const server = createServer(async (request, response) => {
-    const pathname = new URL(request.url, 'http://localhost').pathname;
+    const { pathname, searchParams } = new URL(request.url, 'http://localhost');
     const resource = path.resolve(assets, `.${pathname}`);
     response.setHeader('Cache-Control', 'no-store');
     if (!resource.startsWith(assets + path.sep) && pathname !== '/') return response.writeHead(404).end();
@@ -19,7 +19,10 @@ async function run() {
       activated = Number(pathname.at(-1));
       return response.writeHead(204).end();
     }
-    if (pathname === '/') return response.writeHead(200, { 'Content-Type': 'text/html' }).end('<!doctype html><title>Watchly update fixture</title>');
+    if (pathname === '/') {
+      if (searchParams.get('__watchly_reload') === '1') recoveryRequests++;
+      return response.writeHead(200, { 'Content-Type': 'text/html' }).end('<!doctype html><title>Watchly update fixture</title>');
+    }
     try {
       const body = await readFile(resource);
       if (pathname.endsWith('.js')) response.setHeader('Content-Type', 'application/javascript');
@@ -46,6 +49,12 @@ async function run() {
     await active.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update().then(() => {}));
     await active.waitForFunction(async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
     for (const page of [active, second]) assert.equal(await page.evaluate(() => navigator.serviceWorker.controller === window.initialController), true);
+    const recovery = await context.newPage();
+    await recovery.goto(`${base}/?__watchly_reload=1`);
+    assert.equal(await recovery.title(), 'Watchly update fixture');
+    assert.equal(recoveryRequests, 1);
+    assert.equal(await active.evaluate(() => navigator.serviceWorker.controller === window.initialController), true);
+    await recovery.close();
     await second.close();
     assert.equal(await active.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting), true);
     // Keep the same browser context alive while the old registration loses its last tab.
@@ -59,7 +68,7 @@ async function run() {
       const registration = await navigator.serviceWorker.getRegistration();
       return registration?.active?.state === 'activated' && !registration.waiting;
     });
-    console.log('PASS Chromium Workbox update waits for both old tabs before activating.');
+    console.log('PASS Chromium Workbox recovery fetches fresh HTML while the active worker still waits for its open tabs.');
   } finally {
     await browser?.close();
     server.closeAllConnections();

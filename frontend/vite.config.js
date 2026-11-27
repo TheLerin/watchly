@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
+import { deploymentRetryNavigation } from './src/utils/deploymentRecovery.js'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -27,7 +28,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      workbox: { skipWaiting: false, clientsClaim: false, globIgnores: ['**/bg-video*.mp4', '**/bg-video*.webm'], navigateFallbackDenylist: [/^\/api\//, /^\/ws\//, /^\/auth\/callback(?:\/|\?|$)/] },
+      workbox: { skipWaiting: false, clientsClaim: false, globIgnores: ['**/bg-video*.mp4', '**/bg-video*.webm'], navigateFallbackDenylist: [/^\/api\//, /^\/ws\//, /^\/auth\/callback(?:\/|\?|$)/, deploymentRetryNavigation] },
       includeAssets: ['logo.png', 'logo-512.png', 'bg-video-poster.jpg', 'assets/sofa-couple-mobile.webp'],
       manifest: {
         name: 'Watchly',
