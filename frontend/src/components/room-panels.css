@@ -71,7 +71,7 @@ body:has(.room-shell[data-room-appearance="classic"][data-ui-theme="glass-light"
     .mobile-classic-room .room-queue-item > :is(span:first-child, svg) { margin-top: 3px; }
     .mobile-classic-room .room-queue-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.6; color: var(--panel-copy); }
     .mobile-classic-room .room-queue-actions { grid-column: 3; justify-self: end; gap: 6px; }
-    .mobile-classic-room .room-queue-actions button { min-width: 44px; min-height: 44px; border: 1px solid var(--panel-line); border-radius: 11px; background: rgb(255 255 255 / 2%); }
+    .room-shell .mobile-classic-room .room-queue-actions button { min-width: 44px; min-height: 44px; border: 1px solid var(--panel-line); border-radius: 11px; background: rgb(255 255 255 / 2%); }
     .mobile-classic-room .room-queue-actions svg { width: 15px; height: 15px; }
     .room-mobile-tabs-slot { display: contents; }
     .room-mobile-workspace :is(.classic-player-heading, .cinematic-sofa, .video-ambient-light) { display: none; }
