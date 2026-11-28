@@ -1,6 +1,10 @@
-import { readdir, stat, readFile, writeFile } from 'node:fs/promises';
+import { readdir, stat, readFile, writeFile, rm, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 const root = path.resolve('frontend/dist');
+// Workers already routes room HTML in workers/src/index.mjs. Its asset API
+// rejects the Pages-only index.html rewrite as an infinite redirect loop.
+if (process.argv.includes('--pages')) await copyFile('frontend/public/_redirects', path.join(root, '_redirects'));
+else await rm(path.join(root, '_redirects'), { force: true });
 async function check(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);

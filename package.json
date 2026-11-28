@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-cloudflare.mjs && node scripts/prepare-assets.mjs",
+    "build:pages": "node scripts/build-cloudflare.mjs && node scripts/prepare-assets.mjs --pages",
     "dev": "wrangler dev",
     "test": "node --test workers/test/*.test.mjs",
     "test:integration": "node workers/test/integration.mjs",

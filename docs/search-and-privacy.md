@@ -1,5 +1,7 @@
 # Search and privacy setup
 
+Build for Workers with `npm run build`; this excludes the Pages-only `_redirects` file because the Worker already handles room routes. Cloudflare's Workers upload API rejects that rewrite as an infinite loop. For a separate Pages upload, use `npm run build:pages` to retain the room rewrite. Both commands generate the same application assets and metadata.
+
 The public canonical site is https://wchly.pages.dev. `VITE_SITE_ORIGIN` changes build metadata and generated sitemap URLs; when changing the canonical host, also set the Worker's public `SITE_ORIGIN` variable. Preview and staging Worker HTML is noindex. Room metadata uses the room's own deployment origin and never includes invite or authentication query values.
 
 The homepage, privacy, terms and cookie pages have distinct HTML and client-navigation metadata. Account pages and rooms use noindex; unknown pages return HTTP 404 through the Worker. The build also produces `404.html` and static public/account route shells for Cloudflare Pages. `_redirects` retains dynamic room routing on Pages.
